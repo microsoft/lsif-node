@@ -894,15 +894,4 @@ A TypeScript file using interfaces to define the emitted JSON structures is [her
 
 ## Open Questions
 
-1. Should the LSIF only support non-deprecated LSP data types. For example, only `MarkupContent` (#)
-1. Should we make declarations and definitions an array type only. In LSP, they are defined as `Location | Location[]` (#)
-1. Should we support lazy results for declarations and definitions? (#)
-1. What kind of output formats should we support. Currently 'line' and 'json' is supported. Do we need a compressed or binary format to make the dumps smaller. Or is a zip enough? (#)
-1. Should some of the edges be modeled as a back reference to save space? For example, the `contains` edge between a `document` and `range` vertex could be modeled as a `belongsTo` property on the `range`. (#)
-1. Should the indexer be part of a language server or a standalone tool? (#)
-1. What command line arguments need to be standardized for an indexer? (#)
-1. The indexer dumps for external libraries only referenced symbols. Should we dump folding, document symbol, diagnostic, and document link information for the whole content. Should we support this via a flag? (#)
-1. Allow optimizing the text content of libraries. The current approach is to embed these into the document#contents property. But they might be the same for most projects. Should we support reusing them? (#)
-1. Do we need to add version information to the monikers? (#)
-1. Do we need to define the basic structure of the monikers. The current monikers use `:` as a separation character which could be a valid file name character (at least under Linux and macOS). So we need to spec this and escape in a file name. (#)
-1. How do we handle languages where the contents of a source file depends on the path from which it is imported. C/C++ is an example, where the content of a header file can vary if imported from two different `.c` files depending on defines. (#)
+While implementing this for TypeScript and npm we collected a list of [open questions](https://github.com/Microsoft/language-server-index-format/labels/discussion) in form of GitHub issues we are already aware of.
