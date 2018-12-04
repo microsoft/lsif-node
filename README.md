@@ -21,7 +21,7 @@ Please note that the tools are work in progress and that we have not done any ex
 
 ## LSIF extension
 
-There is also an extension for VS Code that can server the content of a LSIF JSON file. Consider you have dumped the content of a workspace into an LSIF JSON file then you can use the extension to serve the supported LSP requests. This works as follows:
+There is also an [extension for VS Code](https://github.com/Microsoft/vscode-lsif-extension) that can serve the content of a LSIF JSON file. Consider you have dumped the content of a workspace into an LSIF JSON file then you can use the extension to serve the supported LSP requests. This works as follows:
 
 - follow the steps in 'How to Run the tools` above.
 - clone the example you want to produce a index for into a sibling directory. For example https://github.com/Microsoft/vscode-uri.git.
