@@ -6,19 +6,10 @@
 
 import * as lsp from 'vscode-languageserver-protocol';
 
-import * as Is from './is';
-
 /**
  * An `Id` to identify a vertex or an edge.
  */
 export type Id = number | string;
-
-export namespace Id {
-	export function is(value: any): value is Id {
-		let candidate: Id = value;
-		return candidate !== undefined && candidate !== null && (Is.string(value) || Is.number(value));
-	}
-}
 
 /**
  * An element in the graph.
