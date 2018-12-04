@@ -52,7 +52,7 @@ We came to the conclusion that the most flexible way to emit this is a graph, wh
 
 Assume there is a file `/Users/dirkb/sample.ts` and we want to store the folding range information with it then the indexer emits two vertices: one representing the document with its URI `file:///Users/dirkb/sample.ts`, the other representing the folding result. In addition, an edge would be emitted representing the `textDocument/foldingRange` request.
 
-```json
+```typescript
 { id: 1, type: "vertex", label: "document", uri: "file:///Users/dirkb/sample.ts", languageId: "typescript" }
 { id: 2, type: "vertex", label: "foldingRangeResult", result: [ { ... }, { ... }, ... ] }
 { id: 3, type: "edge", label: "textDocument/foldingRange", outV: 1, inV: 2 }
@@ -73,19 +73,19 @@ function bar() {
 
 A hover request for a position denoting the `b` in `bar` will return the same result as a position denoting the `a` or `r`. To make the dump more compact, it will use ranges to capture this instead of single positions. The following vertices will be emitted in this case. Note that line, character are zero based as in the LSP:
 
-```json
+```typescript
 { id: 4, type: "vertex", label: "range", start: { line: 0, character: 9}, end: { line: 0, character: 12 } }
 ```
 
 To bind the range to a document, we use a special edge labeled `contains` which points from a document to a range.
 
-```json
+```typescript
 { id: 5, type: "edge", label: "contains", outV: 1, inV: 4}
 ```
 
 To bind the hover result to the range, we use the same pattern as we used for the folding ranges. We emit a vertex representing the hover result and an edge representing the `textDocument/hover` request.
 
-```json
+```typescript
 {
   id: 6,
   type: "vertex",
@@ -128,7 +128,7 @@ export interface ResultSet {
 
 The corresponding output of the above example with a hover using a result set looks like this:
 
-```json
+```typescript
 { id: 1, type: "vertex", label: "document", uri: "file:///Users/dirkb/sample.ts", languageId: "typescript" }
 { id: 2, type: "vertex", label: "resultSet" }
 { id: 3, type: "vertex", label: "range", start: { line: 0, character: 9}, end: { line: 0, character: 12 } }
@@ -845,7 +845,7 @@ Consider that the following `package.json` file exists:
 
 The export result with that information can then be transformed to:
 
-```json
+```typescript
 { id: 53, type: "vertex", label: "exportResult", result: [
   { moniker: "npm:lsif-ts-sample:func", rangeIds: [8] },
   { moniker: "npm:lsif-ts-sample:Emitter", rangeIds: [19] },
