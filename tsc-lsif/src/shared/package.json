@@ -1,0 +1,11 @@
+{
+  "name": "shared",
+  "version": "0.1.0",
+  "description": "Files shared between tsc and npm",
+  "main": "index.js",
+  "author": "MS",
+  "license": "MIT",
+  "dependencies": {
+    "vscode-languageserver-protocol": "^3.13.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"target": "ES6",
+		"module": "commonjs",
+		"checkJs": true,
+		"allowSyntheticDefaultImports": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"allowJs": true
+	},
+	"include": [
+		"./use.js"
+	]
+}

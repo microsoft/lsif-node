@@ -1,0 +1,6 @@
+{
+	"typescript.tsserver.trace": "off",
+	"npm.enableScriptExplorer": false,
+	"npm.autoDetect": "off",
+	"editor.folding": false
+}
