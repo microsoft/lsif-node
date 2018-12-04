@@ -3,6 +3,6 @@ lib
 node_modules
 npm-debug.log
 *.tgz
-tsc/src/shared
-npm/src/shared
+tsc-lsif/src/shared
+npm-lsif/src/shared
 lsif.json
