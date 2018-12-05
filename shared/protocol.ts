@@ -783,9 +783,9 @@ export type textDocument_documentSymbol = E<Document, DocumentSymbolResult, 'tex
 export type textDocument_foldingRange = E<Document, FoldingRangeResult, 'textDocument/foldingRange'>;
 
 /**
- * An edge representing a `textDocument/foldingRange` relationship. The relationship exists between:
+ * An edge representing a `textDocument/documentLink` relationship. The relationship exists between:
  *
- * - `Document` -> `FoldingRangeResult`
+ * - `Document` -> `DocumentLinkResult`
  */
 export type textDocument_documentLink = E<Document, DocumentLinkResult, 'textDocument/documentLink'>;
 
