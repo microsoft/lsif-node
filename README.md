@@ -14,10 +14,10 @@ A first draft specification can be found [here](./spec/specification.md).
 
 Please note that the tools are work in progress and that we have not done any extensive testing so far. Known issues are:
 
-- Go to Declaration for function overloads doesn't honor the signature
-- Go to Type Declaration is not fully implement
-- Document link support is completely  missing
-- Reference results are not always inlined when possible
+1. Go to Declaration for function overloads doesn't honor the signature
+1. Go to Type Declaration is not fully implement
+1. Document link support is completely  missing
+1. Reference results are not always inlined when possible
 
 ## LSIF extension
 
