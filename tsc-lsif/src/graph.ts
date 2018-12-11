@@ -185,17 +185,17 @@ export class VertexBuilder {
 		};
 	}
 
-	public hoverResult(contents: lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[], range: '${startRange}'): HoverResult;
 	public hoverResult(value: lsp.Hover): HoverResult;
-	public hoverResult(value: lsp.Hover | lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[], range?: '${startRange}'): HoverResult {
-		if (range !== undefined) {
+	public hoverResult(contents: lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[]): HoverResult;
+	public hoverResult(value: lsp.Hover | lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[]): HoverResult {
+		if (lsp.Hover.is(value)) {
 			return {
 				id: this.nextId(),
 				type: 'vertex',
 				label: 'hoverResult',
 				result: {
-					contents: value as (lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[]),
-					range: range
+					contents: value.contents,
+					range: value.range
 				}
 			};
 		} else {
@@ -204,8 +204,7 @@ export class VertexBuilder {
 				type: 'vertex',
 				label: 'hoverResult',
 				result: {
-					contents: (value  as lsp.Hover).contents,
-					range: (value  as lsp.Hover).range
+					contents: value as (lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[])
 				}
 			};
 		}

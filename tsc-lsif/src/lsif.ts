@@ -1421,7 +1421,7 @@ class Visitor implements SymbolItemContext {
 			return undefined;
 		}
 		let lspHover = Converter.asHover(sourceFile, quickInfo);
-		return this.vertex.hoverResult(lspHover.contents, '${startRange}');
+		return this.vertex.hoverResult(lspHover.contents);
 	}
 
 	private get program(): ts.Program {
