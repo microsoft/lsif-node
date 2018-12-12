@@ -511,11 +511,24 @@ export interface DocumentLinkResult extends V {
 	result: lsp.DocumentLink[];
 }
 
+/**
+ * The LSP defines the result of a `textDocument/definition` request as
+ * `Location | Location[]. In the SIP we allow to use range ids as well.
+ */
+export type DeclarationResultTypeSingle = RangeId | lsp.Location;
+export type DeclarationResultTypeMany = (RangeId | lsp.Location)[];
+export type DeclarationResultType = DeclarationResultTypeSingle | DeclarationResultTypeMany;
+
 export interface DeclarationResult extends V {
 	/**
 	 * The label property.
 	 */
 	label: 'declarationResult';
+
+	/**
+	 * The actual result.
+	 */
+	result: DeclarationResultType;
 }
 
 /**
