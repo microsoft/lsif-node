@@ -153,7 +153,7 @@ function main(this: void, args: string[]) {
 	let languageService = ts.createLanguageService(host);
 	const program = languageService.getProgram();
 	if (program === undefined) {
-		console.error('Couldn\'t create langauge service with underlying program.');
+		console.error('Couldn\'t create language service with underlying program.');
 		process.exitCode = -1;
 		return;
 	}
