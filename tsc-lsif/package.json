@@ -7,7 +7,7 @@
 		"prepublishOnly": "npm run clean && npm run compile",
 		"compile": "node ../build/bin/tsc -p ./tsconfig.json",
 		"watch": "node ../build/bin/tsc -w -p ./tsconfig.json",
-		"clean": "../node_modules/.bin/rimraf lib"
+		"clean": "node ../node_modules/rimraf/bin.js lib"
 	},
 	"repository": {
 		"type": "git",
