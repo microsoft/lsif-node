@@ -300,7 +300,7 @@ function main(): void {
 
 	const exportLinker: ExportLinker = new ExportLinker(packageJson);
 	const importLinker: ImportLinker = new ImportLinker();
-	let input: NodeJS.ReadStream | fs.ReadStream= process.stdin;
+	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.file !== undefined && fs.existsSync(options.file)) {
 		input = fs.createReadStream(options.file, { encoding: 'utf8'});
 	}

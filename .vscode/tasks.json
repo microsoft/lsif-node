@@ -9,9 +9,7 @@
 				"compile:tsc-lsif",
 				"compile:npm-lsif"
 			],
-			"group": {
-				"kind": "build"
-			},
+			"group": "build",
 			"problemMatcher": []
 		},
 		{
@@ -56,6 +54,7 @@
 			"label": "watch:tsc-lsif",
 			"type": "shell",
 			"command": "npm run watch:tsc-lsif",
+			"isBackground": true,
 			"group": "build",
 			"presentation": {
 				"panel": "dedicated",
@@ -69,6 +68,7 @@
 			"label": "watch:npm-lsif",
 			"type": "shell",
 			"command": "npm run watch:npm-lsif",
+			"isBackground": true,
 			"group": "build",
 			"presentation": {
 				"panel": "dedicated",

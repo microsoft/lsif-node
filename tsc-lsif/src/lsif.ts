@@ -16,7 +16,7 @@ import * as lsp from 'vscode-languageserver-protocol';
 import * as tss from './typescripts';
 
 import {
-	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTag, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
+	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
 	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ExportItem, inline, ProjectData, ExternalImportResult, DocumentData,
 } from './shared/protocol'
 
@@ -128,7 +128,7 @@ namespace Converter {
 		if (value.displayParts !== undefined) {
 			content.push({ language: 'typescript', value: displayPartsToString(value.displayParts)});
 		}
-		if (value.documentation !== undefined) {
+		if (value.documentation && value.documentation.length > 0) {
 			content.push(displayPartsToString(value.documentation));
 		}
 		return {
@@ -388,7 +388,7 @@ abstract class SymbolItem {
 			if (range !== undefined && rangeNode !== undefined && text !== undefined) {
 				let { document, externalImportResult } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
 				let definition = this.context.vertex.range(Converter.rangeFromNode(sourceFile, rangeNode), {
-					type: RangeTag.definition,
+					type: RangeTagTypes.definition,
 					text: text,
 					kind: Converter.asSymbolKind(declaration),
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
@@ -966,7 +966,7 @@ class Visitor implements SymbolItemContext {
 	constructor(private languageService: ts.LanguageService, private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: false
+			emitSource: true
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
@@ -1358,7 +1358,7 @@ class Visitor implements SymbolItemContext {
 		}
 
 		let sourceFile = this.currentSourceFile!;
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTag.reference, text: node.getText() });
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.emit(reference);
 		this.emit(this.edge.contains(this.currentDocument, reference));
 		symbolInfo.addReference(reference);

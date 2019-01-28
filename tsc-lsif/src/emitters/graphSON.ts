@@ -5,7 +5,7 @@
 import * as os from 'os';
 
 import { Emitter, Create } from './emitter';
-import { Vertex, Edge, Id, EdgeLiterals } from '../shared/protocol';
+import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from '../shared/protocol';
 
 const __out = process.stdout;
 const __eol = os.EOL;
@@ -48,26 +48,26 @@ interface GraphSonVertex {
 
 export const create: Create = (idGenerator: () => Id): Emitter => {
 	let vertices: Map<Id, GraphSonVertex>;
-	const labelMap: Map<EdgeLiterals, string> = new Map<EdgeLiterals, string>([
-		['item', 'item'],
-		['contains', 'contains'],
-		['refersTo', 'refersTo'],
-		['textDocument/documentSymbol', 'textDocument.documentSymbol'],
-		['textDocument/foldingRange', 'textDocument.foldingRange'],
-		['textDocument/diagnostic', 'textDocument.diagnostic'],
-		['textDocument/documentLink', 'textDocument.documentLink'],
-		['textDocument/definition', 'textDocument.definition'],
-		['textDocument/typeDefinition', 'textDocument.typeDefinition'],
-		['textDocument/hover', 'textDocument.hover'],
-		['textDocument/references', 'textDocument.references'],
-		['textDocument/implementation', 'textDocument.implementation'],
+	const labelMap: Map<EdgeLabels, string> = new Map<EdgeLabels, string>([
+		[EdgeLabels.item, 'item'],
+		[EdgeLabels.contains, 'contains'],
+		[EdgeLabels.refersTo, 'refersTo'],
+		[EdgeLabels.textDocument_documentSymbol, 'textDocument.documentSymbol'],
+		[EdgeLabels.textDocument_foldingRange, 'textDocument.foldingRange'],
+		[EdgeLabels.textDocument_diagnostic, 'textDocument.diagnostic'],
+		[EdgeLabels.textDocument_documentLink, 'textDocument.documentLink'],
+		[EdgeLabels.textDocument_definition, 'textDocument.definition'],
+		[EdgeLabels.textDocument_typeDefinition, 'textDocument.typeDefinition'],
+		[EdgeLabels.textDocument_hover, 'textDocument.hover'],
+		[EdgeLabels.textDocument_references, 'textDocument.references'],
+		[EdgeLabels.textDocument_implementation, 'textDocument.implementation'],
 	]);
 	return {
 		start: () => {
 			vertices = new Map();
 		},
 		emit: (element: Vertex | Edge) => {
-			if (element.type === 'vertex') {
+			if (element.type === ElementTypes.vertex) {
 				let gs: GraphSonVertex;
 				let values: GraphSonProperty[];
 				switch (element.label) {

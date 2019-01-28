@@ -29,7 +29,7 @@
 			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
-				 "--outputFormat", "json"
+				 "--outputFormat", "line"
 			],
 			"preLaunchTask": "watch:tsc-lsif",
 			"sourceMaps": true,

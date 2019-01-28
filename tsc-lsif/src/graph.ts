@@ -9,13 +9,13 @@ import URI from 'vscode-uri';
 import * as lsp from 'vscode-languageserver-protocol';
 
 import {
-	Id, Vertex, EdgeLiterals, E,
+	Id, Vertex, E,
 	Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult, Range, RangeTag, RangeId,
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	ExportResult, ExportItem, ExternalImportItem, ExternalImportResult, $exports, $imports, Location
+	ExportResult, ExportItem, ExternalImportItem, ExternalImportResult, $exports, $imports, Location, ElementTypes, VertexLabels, EdgeLabels
 } from './shared/protocol';
 
 export interface BuilderOptions {
@@ -27,7 +27,6 @@ export interface ResolvedBuilderOptions {
 	idGenerator: () => Id;
 	emitSource: boolean;
 }
-
 
 export class VertexBuilder {
 
@@ -45,17 +44,17 @@ export class VertexBuilder {
 	public metaData(version: string): MetaData {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'metaData',
+			type: ElementTypes.vertex,
+			label: VertexLabels.metaData,
 			version,
-		};
+		}
 	}
 
 	public project(contents?: string): Project {
 		let result: Project = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'project',
+			type: ElementTypes.vertex,
+			label: VertexLabels.project,
 			kind: 'typescript'
 		}
 		if (contents) {
@@ -67,8 +66,8 @@ export class VertexBuilder {
 	public document(path: string, contents?: string): Document {
 		let result: Document = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'document',
+			type: ElementTypes.vertex,
+			label: VertexLabels.document,
 			uri: URI.file(path).toString(true),
 			languageId: 'typescript'
 		}
@@ -81,8 +80,8 @@ export class VertexBuilder {
 	public externalImportItem(moniker: string, rangeIds: RangeId[]): ExternalImportItem {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'externalImportItem',
+			type: ElementTypes.vertex,
+			label: VertexLabels.externalImportItem,
 			moniker,
 			rangeIds
 		};
@@ -91,8 +90,8 @@ export class VertexBuilder {
 	public externalImportResult(items?: ExternalImportItem[]): ExternalImportResult {
 		let result: ExternalImportResult = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'externalImportResult'
+			type: ElementTypes.vertex,
+			label: VertexLabels.externalImportResult
 		};
 		if (items !== undefined) {
 			result.result = items;
@@ -103,8 +102,8 @@ export class VertexBuilder {
 	public exportItem(moniker: string, rangeIds: RangeId[]): ExportItem {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'exportItem',
+			type: ElementTypes.vertex,
+			label: VertexLabels.exportItem,
 			moniker,
 			rangeIds
 		};
@@ -113,8 +112,8 @@ export class VertexBuilder {
 	public exportResult(items?: ExportItem[]): ExportResult {
 		let result: ExportResult = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'exportResult'
+			type: ElementTypes.vertex,
+			label: VertexLabels.exportResult
 		};
 		if (items !== undefined) {
 			result.result = items;
@@ -125,8 +124,8 @@ export class VertexBuilder {
 	public resultSet(): ResultSet {
 		let result: ResultSet = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'resultSet'
+			type: ElementTypes.vertex,
+			label: VertexLabels.resultSet
 		}
 		return result;
 	}
@@ -138,8 +137,8 @@ export class VertexBuilder {
 	public range(range: lsp.Range, tag?: RangeTag): Range {
 		let result: Range = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'range',
+			type: ElementTypes.vertex,
+			label: VertexLabels.range,
 			start: range.start,
 			end: range.end,
 		}
@@ -152,8 +151,8 @@ export class VertexBuilder {
 	public location(range: lsp.Range): Location {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'location',
+			type: ElementTypes.vertex,
+			label: VertexLabels.location,
 			range: range
 		}
 	}
@@ -161,8 +160,8 @@ export class VertexBuilder {
 	public documentSymbolResult(values: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]): DocumentSymbolResult {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'documentSymbolResult',
+			type: ElementTypes.vertex,
+			label: VertexLabels.documentSymbolResult,
 			result: values
 		}
 	}
@@ -170,8 +169,8 @@ export class VertexBuilder {
 	public diagnosticResult(values: lsp.Diagnostic[]): DiagnosticResult {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'diagnosticResult',
+			type: ElementTypes.vertex,
+			label: VertexLabels.diagnosticResult,
 			result: values
 		};
 	}
@@ -179,8 +178,8 @@ export class VertexBuilder {
 	public foldingRangeResult(values: lsp.FoldingRange[]): FoldingRangeResult {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'foldingRangeResult',
+			type: ElementTypes.vertex,
+			label: VertexLabels.foldingRangeResult,
 			result: values
 		};
 	}
@@ -191,8 +190,8 @@ export class VertexBuilder {
 		if (lsp.Hover.is(value)) {
 			return {
 				id: this.nextId(),
-				type: 'vertex',
-				label: 'hoverResult',
+				type: ElementTypes.vertex,
+				label: VertexLabels.hoverResult,
 				result: {
 					contents: value.contents,
 					range: value.range
@@ -201,8 +200,8 @@ export class VertexBuilder {
 		} else {
 			return {
 				id: this.nextId(),
-				type: 'vertex',
-				label: 'hoverResult',
+				type: ElementTypes.vertex,
+				label: VertexLabels.hoverResult,
 				result: {
 					contents: value as (lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[])
 				}
@@ -213,8 +212,8 @@ export class VertexBuilder {
 	public definitionResult(values: DefinitionResultType): DefinitionResult {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'definitionResult',
+			type: ElementTypes.vertex,
+			label: VertexLabels.definitionResult,
 			result: values
 		};
 	}
@@ -222,8 +221,8 @@ export class VertexBuilder {
 	public typeDefinitionResult(values: TypeDefinitionResultType): TypeDefinitionResult {
 		return {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'typeDefinitionResult',
+			type: ElementTypes.vertex,
+			label: VertexLabels.typeDefinitionResult,
 			result: values
 		};
 	}
@@ -234,8 +233,8 @@ export class VertexBuilder {
 	public referencesResult(arg0?: any, arg1?: any, arg2?: any) {
 		let result: ReferenceResult = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'referenceResult'
+			type: ElementTypes.vertex,
+			label: VertexLabels.referenceResult
 		};
 		if (arg2 !== undefined) {
 			result.declarations = arg0;
@@ -252,8 +251,8 @@ export class VertexBuilder {
 	public implementationResult(arg0?: ImplementationResultId[]): ImplementationResult {
 		let result: ImplementationResult = {
 			id: this.nextId(),
-			type: 'vertex',
-			label: 'implementationResult'
+			type: ElementTypes.vertex,
+			label: VertexLabels.implementationResult
 		};
 		if (arg0 !== undefined) {
 			result.implementationResults = arg0;
@@ -280,10 +279,10 @@ export class EdgeBuilder {
 		return this._options.idGenerator();
 	}
 
-	public raw(kind: EdgeLiterals, from: Id, to: Id): E<Vertex, Vertex, EdgeLiterals> {
+	public raw(kind: EdgeLabels, from: Id, to: Id): E<Vertex, Vertex, EdgeLabels> {
 		return {
 			id: this.nextId(),
-			type: 'edge',
+			type: ElementTypes.edge,
 			label: kind,
 			outV: from,
 			inV: to
@@ -295,8 +294,8 @@ export class EdgeBuilder {
 	public contains(from: Vertex, to: Vertex): contains {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'contains',
+			type: ElementTypes.edge,
+			label: EdgeLabels.contains,
 			outV: from.id,
 			inV: to.id
 		};
@@ -305,8 +304,8 @@ export class EdgeBuilder {
 	public refersTo(from: Range, to: ResultSet): refersTo {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'refersTo',
+			type: ElementTypes.edge,
+			label: EdgeLabels.refersTo,
 			outV: from.id,
 			inV: to.id
 		};
@@ -315,8 +314,8 @@ export class EdgeBuilder {
 	public $exports(from: Document, to: ExportResult): $exports {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'exports',
+			type: ElementTypes.edge,
+			label: EdgeLabels.exports,
 			outV: from.id,
 			inV: to.id
 		};
@@ -325,8 +324,8 @@ export class EdgeBuilder {
 	public $imports(from: Document, to: ExternalImportResult): $imports {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'imports',
+			type: ElementTypes.edge,
+			label: EdgeLabels.imports,
 			outV: from.id,
 			inV: to.id
 		};
@@ -335,8 +334,8 @@ export class EdgeBuilder {
 	public documentSymbols(from: Document, to: DocumentSymbolResult): textDocument_documentSymbol {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/documentSymbol',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_documentSymbol,
 			outV: from.id,
 			inV: to.id
 		};
@@ -345,8 +344,8 @@ export class EdgeBuilder {
 	public foldingRange(from: Document, to: FoldingRangeResult): textDocument_foldingRange {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/foldingRange',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_foldingRange,
 			outV: from.id,
 			inV: to.id
 		};
@@ -355,8 +354,8 @@ export class EdgeBuilder {
 	public diagnostic(from: Document, to: DiagnosticResult): textDocument_diagnostic {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/diagnostic',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_diagnostic,
 			outV: from.id,
 			inV: to.id
 		};
@@ -365,8 +364,8 @@ export class EdgeBuilder {
 	public hover(from: Range | ResultSet, to: HoverResult): textDocument_hover {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/hover',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_hover,
 			outV: from.id,
 			inV: to.id
 		};
@@ -375,8 +374,8 @@ export class EdgeBuilder {
 	public definition(from: Range | ResultSet, to: DefinitionResult): textDocument_definition {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/definition',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_definition,
 			outV: from.id,
 			inV: to.id
 		}
@@ -385,8 +384,8 @@ export class EdgeBuilder {
 	public typeDefinition(from: Range | ResultSet, to: TypeDefinitionResult): textDocument_typeDefinition {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/typeDefinition',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_typeDefinition,
 			outV: from.id,
 			inV: to.id
 		}
@@ -395,8 +394,8 @@ export class EdgeBuilder {
 	public references(from: Range | ResultSet, to: ReferenceResult): textDocument_references {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/references',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_references,
 			outV: from.id,
 			inV: to.id
 		}
@@ -405,8 +404,8 @@ export class EdgeBuilder {
 	public implementation(from: Range | ResultSet, to: ImplementationResult): textDocument_implementation {
 		return {
 			id: this.nextId(),
-			type: 'edge',
-			label: 'textDocument/implementation',
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_implementation,
 			outV: from.id,
 			inV: to.id
 		}
@@ -422,8 +421,8 @@ export class EdgeBuilder {
 			case 'exportResult':
 				return {
 					id: this.nextId(),
-					type: 'edge',
-					label: 'item',
+					type: ElementTypes.edge,
+					label: EdgeLabels.item,
 					outV: from.id,
 					inV: to.id
 				};
@@ -432,8 +431,8 @@ export class EdgeBuilder {
 					case 'range':
 						return {
 							id: this.nextId(),
-							type: 'edge',
-							label: 'item',
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
 							property,
 							outV: from.id,
 							inV: to.id
@@ -441,8 +440,8 @@ export class EdgeBuilder {
 					case 'referenceResult': {
 						return {
 							id: this.nextId(),
-							type: 'edge',
-							label: 'item',
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
 							property: 'referenceResults',
 							outV: from.id,
 							inV: to.id
