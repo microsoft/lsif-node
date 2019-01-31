@@ -966,7 +966,7 @@ class Visitor implements SymbolItemContext {
 	constructor(private languageService: ts.LanguageService, private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: true
+			emitSource: false
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
