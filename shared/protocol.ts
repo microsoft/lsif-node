@@ -743,7 +743,7 @@ export enum EdgeLabels {
 	textDocument_typeDefinition = 'textDocument/typeDefinition',
 	textDocument_hover = 'textDocument/hover',
 	textDocument_references = 'textDocument/references',
-	textDocument_implementation = 'textDocument/implementatio',
+	textDocument_implementation = 'textDocument/implementation',
 }
 
 /**
