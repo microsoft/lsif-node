@@ -18,6 +18,7 @@ import * as tss from './typescripts';
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
 	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ExportItem, inline, ProjectData, ExternalImportResult, DocumentData,
+	ImplementationResult,
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -362,6 +363,7 @@ abstract class SymbolItem {
 	public resultSet: ResultSet;
 	public definitionResult: DefinitionResult;
 	public referenceResult:  ReferenceResult;
+	public implementationResult: ImplementationResult;
 
 	protected constructor(public id: string, protected context: SymbolItemContext, public tsSymbol: ts.Symbol) {
 	}
@@ -371,6 +373,7 @@ abstract class SymbolItem {
 		let declarations: ts.Declaration[] | undefined = this.tsSymbol.getDeclarations();
 		if (declarations !== undefined && declarations.length > 0) {
 			this.ensureReferenceResult();
+			this.ensureImplementationResult();
 			this.initializeDeclarations(declarations);
 		} else {
 			this.initializeNoDeclarartions();
@@ -540,6 +543,41 @@ abstract class SymbolItem {
 	protected emitReferenceResult(result: ReferenceResult): void {
 		this.context.emit(result);
 		this.context.emit(this.context.edge.references(this.resultSet, result));
+	}
+
+	private ensureImplementationResult(): void {
+		if (this.implementationResult !== undefined) {
+			return;
+		}
+		this.resolveImplementationResult();
+	}
+
+	private resolveImplementationResult(): void {
+		let declarations = this.tsSymbol.getDeclarations();
+		if (declarations === undefined || declarations.length === 0) {
+			this.implementationResult = this.createImplementationResult();
+		}
+		this.implementationResult = this.doResolveImplementationResult(this.resolveEmittingNode());
+	}
+
+	protected doResolveImplementationResult(emittingNode: ts.Node | undefined): ImplementationResult {
+		if (emittingNode === undefined) {
+			return this.createImplementationResult();
+		}
+		return this.createImplementationResult(emittingNode);
+	}
+
+	protected createImplementationResult(): ImplementationResult;
+	protected createImplementationResult(emittingNode: ts.Node): ImplementationResult;
+	protected createImplementationResult(arg0?: any): ImplementationResult {
+		let implementationResult: ImplementationResult = this.context.vertex.implementationResult([]);
+		implementationResult.result = [];
+
+		if (tss.isNode(arg0)) {
+			this.context.emitOnEndVisit(arg0, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult)]);
+		}
+
+		return implementationResult;
 	}
 
 	protected resolveDefinitionRange(sourceFile: ts.SourceFile, declaration: ts.Declaration): [lsp.Range, ts.Node, string] | [undefined, undefined, undefined] {
@@ -868,6 +906,39 @@ class MethodSymbolItem extends SymbolItem {
 		return referenceResult;
 	}
 
+	protected propagateImplementationResult(definition: DefinitionRange): void {
+		if (SymbolItem.isPrivate(this.tsSymbol) || SymbolItem.isStatic(this.tsSymbol)) {
+			// No base method -> nothing else to do
+			return;
+		}
+
+		// Look for a super class
+		let classSymbol = this.getMemberContainer();
+		if (classSymbol === undefined) {
+			return;
+		}
+
+		// Look for possible base methods
+		let methodName = this.tsSymbol.getName();
+		let baseMethods = classSymbol.findBaseMembers(methodName);
+		if (baseMethods === undefined || baseMethods.length === 0) {
+			return;
+		}
+
+		// For each base method, add definition to implementation result
+		baseMethods.forEach(baseMethod => {
+			if (baseMethod !== undefined && baseMethod.implementationResult !== undefined && baseMethod.implementationResult.result !== undefined) {
+				baseMethod.implementationResult.result.push(definition.id);
+				this.context.emit(this.context.edge.item(baseMethod.implementationResult, definition, 'implementation'));
+
+				// Recursively add to parent
+				if (baseMethod instanceof MethodSymbolItem) {
+					baseMethod.propagateImplementationResult(definition);
+				}
+			}
+		});
+	}
+
 	private getMemberContainer(): MemberContainerItem | undefined {
 		let tsSymbol = this.tsSymbol;
 		let symbolParent = tss.getSymbolParent(tsSymbol);
@@ -888,6 +959,13 @@ class MethodSymbolItem extends SymbolItem {
 				this.context.emit(this.context.edge.item(result, definition, 'definition'))
 			});
 			return;
+		}
+
+		if(this.implementationResult !== undefined && this.implementationResult.result !== undefined) {
+			this.implementationResult.result.push(definition.id);
+			this.context.emit(this.context.edge.item(this.implementationResult, definition, 'implementation'));
+
+			this.propagateImplementationResult(definition);
 		}
 	}
 

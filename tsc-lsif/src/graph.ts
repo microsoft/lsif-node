@@ -415,7 +415,9 @@ export class EdgeBuilder {
 	public item(from: ExternalImportResult, to: ExternalImportItem): item;
 	public item(from: ReferenceResult, to: ReferenceResult): item;
 	public item(from: ReferenceResult, to: Range, property: 'declaration' | 'definition' | 'reference'): item;
-	public item(from: ExternalImportResult | ExportResult | ReferenceResult, to: ExternalImportItem | ExportItem | Range | ReferenceResult, property?: 'declaration' | 'definition' | 'reference'): item {
+	public item(from: ImplementationResult, to: ImplementationResult): item;
+	public item(from: ImplementationResult, to: Range, property: 'declaration' | 'definition' | 'reference' | 'implementation'): item;
+	public item(from: ExternalImportResult | ExportResult | ReferenceResult | ImplementationResult, to: ExternalImportItem | ExportItem | Range | ReferenceResult | ImplementationResult, property?: 'declaration' | 'definition' | 'reference' | 'implementation'): item {
 		switch (from.label) {
 			case 'externalImportResult':
 			case 'exportResult':
@@ -443,6 +445,28 @@ export class EdgeBuilder {
 							type: ElementTypes.edge,
 							label: EdgeLabels.item,
 							property: 'referenceResults',
+							outV: from.id,
+							inV: to.id
+						}
+					}
+				}
+			case 'implementationResult':
+				switch(to.label) {
+					case 'range':
+						return {
+							id: this.nextId(),
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
+							property,
+							outV: from.id,
+							inV: to.id
+						}
+					case 'implementationResult': {
+						return {
+							id: this.nextId(),
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
+							property: 'implementationResults',
 							outV: from.id,
 							inV: to.id
 						}
