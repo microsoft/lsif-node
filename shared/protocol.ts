@@ -677,6 +677,13 @@ export interface ReferenceResult extends V {
 	referenceResults?: ReferenceResultId[];
 }
 
+export namespace ReferenceResult {
+	export function isStatic(result: ReferenceResult): boolean {
+		return (result.declarations !== undefined && result.definitions !== undefined && result.references !== undefined)
+			|| result.referenceResults !== undefined;
+	}
+}
+
 
 /**
  * The id type of an implementation result is a normal id.
