@@ -570,11 +570,16 @@ abstract class SymbolItem {
 	protected createImplementationResult(): ImplementationResult;
 	protected createImplementationResult(emittingNode: ts.Node): ImplementationResult;
 	protected createImplementationResult(arg0?: any): ImplementationResult {
-		let implementationResult: ImplementationResult = this.context.vertex.implementationResult([]);
-		implementationResult.result = [];
+		let implementationResult: ImplementationResult;
 
 		if (tss.isNode(arg0)) {
+			implementationResult = this.context.vertex.implementationResult();
+			implementationResult.result = [];
 			this.context.emitOnEndVisit(arg0, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult)]);
+		}
+		else {
+			implementationResult = this.context.vertex.implementationResult();
+			this.context.emit(implementationResult);
 		}
 
 		return implementationResult;
@@ -858,6 +863,19 @@ class MethodSymbolItem extends SymbolItem {
 		super(id, context, tsSymbol);
 	}
 
+	private findBaseMethods(): MethodSymbolItem[] {
+		let classSymbol = this.getMemberContainer();
+		if (classSymbol === undefined) {
+			return [];
+		}
+		let methodName = this.tsSymbol.getName();
+		let baseMethods = classSymbol.findBaseMembers(methodName);
+		if (baseMethods === undefined) {
+			return [];
+		}
+		return baseMethods;
+	}
+
 	protected doResolveReferenceResult(emittingNode: ts.Node): ReferenceResult {
 		if (SymbolItem.isPrivate(this.tsSymbol)) {
 			return super.doResolveReferenceResult(emittingNode);
@@ -867,14 +885,8 @@ class MethodSymbolItem extends SymbolItem {
 		}
 		// We have a method that could be overridden. So try to find
 		// a base method with the same name.
-		let classSymbol = this.getMemberContainer();
-		if (classSymbol === undefined) {
-			return this.createReferenceResult();
-		}
-		let methodName = this.tsSymbol.getName();
-		let baseMethods = classSymbol.findBaseMembers(methodName);
-		// No base Methods
-		if (baseMethods === undefined || baseMethods.length === 0) {
+		let baseMethods = this.findBaseMethods();
+		if (baseMethods.length === 0) {
 			return this.createReferenceResult();
 		}
 		// We do have base methods. Easy case only one. Then reuse what the
@@ -906,37 +918,30 @@ class MethodSymbolItem extends SymbolItem {
 		return referenceResult;
 	}
 
-	protected propagateImplementationResult(definition: DefinitionRange): void {
-		if (SymbolItem.isPrivate(this.tsSymbol) || SymbolItem.isStatic(this.tsSymbol)) {
-			// No base method -> nothing else to do
-			return;
+	protected doResolveImplementationResult(emittingNode: ts.Node): ImplementationResult {
+		// Implementation is the same as declaration
+		if (SymbolItem.isPrivate(this.tsSymbol)) {
+			return super.doResolveImplementationResult(emittingNode);
+		}
+		if (SymbolItem.isStatic(this.tsSymbol)) {
+			return super.doResolveImplementationResult(emittingNode);
 		}
 
-		// Look for a super class
-		let classSymbol = this.getMemberContainer();
-		if (classSymbol === undefined) {
-			return;
+		// We could be implementing another method
+		// Look for base method
+		let baseMethods = this.findBaseMethods();
+		if (baseMethods.length === 0) {
+			return super.doResolveImplementationResult(emittingNode);
 		}
 
-		// Look for possible base methods
-		let methodName = this.tsSymbol.getName();
-		let baseMethods = classSymbol.findBaseMembers(methodName);
-		if (baseMethods === undefined || baseMethods.length === 0) {
-			return;
-		}
-
-		// For each base method, add definition to implementation result
+		// We implement some base method
+		// In this case, point all base methods to our results as well
+		let implementationResult = this.createImplementationResult(emittingNode);
 		baseMethods.forEach(baseMethod => {
-			if (baseMethod !== undefined && baseMethod.implementationResult !== undefined && baseMethod.implementationResult.result !== undefined) {
-				baseMethod.implementationResult.result.push(definition.id);
-				this.context.emit(this.context.edge.item(baseMethod.implementationResult, definition, 'implementation'));
-
-				// Recursively add to parent
-				if (baseMethod instanceof MethodSymbolItem) {
-					baseMethod.propagateImplementationResult(definition);
-				}
-			}
+			this.context.emit(this.context.edge.item(baseMethod.implementationResult, implementationResult));
 		});
+
+		return implementationResult;
 	}
 
 	private getMemberContainer(): MemberContainerItem | undefined {
@@ -958,14 +963,13 @@ class MethodSymbolItem extends SymbolItem {
 			this.baseReferenceResults.forEach(result =>  {
 				this.context.emit(this.context.edge.item(result, definition, 'definition'))
 			});
-			return;
 		}
 
-		if(this.implementationResult !== undefined && this.implementationResult.result !== undefined) {
+		if(this.implementationResult.result === undefined) {
+			this.context.emit(this.context.edge.item(this.implementationResult, definition));
+		}
+		else {
 			this.implementationResult.result.push(definition.id);
-			this.context.emit(this.context.edge.item(this.implementationResult, definition, 'implementation'));
-
-			this.propagateImplementationResult(definition);
 		}
 	}
 

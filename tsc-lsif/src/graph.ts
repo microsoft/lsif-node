@@ -416,8 +416,8 @@ export class EdgeBuilder {
 	public item(from: ReferenceResult, to: ReferenceResult): item;
 	public item(from: ReferenceResult, to: Range, property: 'declaration' | 'definition' | 'reference'): item;
 	public item(from: ImplementationResult, to: ImplementationResult): item;
-	public item(from: ImplementationResult, to: Range, property: 'declaration' | 'definition' | 'reference' | 'implementation'): item;
-	public item(from: ExternalImportResult | ExportResult | ReferenceResult | ImplementationResult, to: ExternalImportItem | ExportItem | Range | ReferenceResult | ImplementationResult, property?: 'declaration' | 'definition' | 'reference' | 'implementation'): item {
+	public item(from: ImplementationResult, to: Range): item;
+	public item(from: ExternalImportResult | ExportResult | ReferenceResult | ImplementationResult, to: ExternalImportItem | ExportItem | Range | ReferenceResult | ImplementationResult, property?: 'declaration' | 'definition' | 'reference'): item {
 		switch (from.label) {
 			case 'externalImportResult':
 			case 'exportResult':
@@ -457,7 +457,7 @@ export class EdgeBuilder {
 							id: this.nextId(),
 							type: ElementTypes.edge,
 							label: EdgeLabels.item,
-							property,
+							property: 'result',
 							outV: from.id,
 							inV: to.id
 						}
