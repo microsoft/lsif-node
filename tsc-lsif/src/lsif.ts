@@ -935,11 +935,16 @@ class MethodSymbolItem extends SymbolItem {
 		}
 
 		// We implement some base method
+		let implementationResult = this.context.vertex.implementationResult();
+		implementationResult.result = [];
+
 		// In this case, point all base methods to our results as well
-		let implementationResult = this.createImplementationResult(emittingNode);
+		let toEmit: Edge[] = [];
 		baseMethods.forEach(baseMethod => {
-			this.context.emit(this.context.edge.item(baseMethod.implementationResult, implementationResult));
+			toEmit.push(this.context.edge.item(baseMethod.implementationResult, implementationResult));
 		});
+
+		this.context.emitOnEndVisit(emittingNode, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult), ...toEmit]);
 
 		return implementationResult;
 	}
