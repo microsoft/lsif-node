@@ -254,51 +254,6 @@ export interface Location extends V {
 	range: lsp.Range;
 }
 
-export interface CompressorPropertyDescription {
-	/**
-	 * The name of the property.
-	 */
-	name: string;
-
-	/**
-	 * It's index in the array.
-	 */
-	index: number;
-
-	/**
-	 * Short form if the value is a string.
-	 */
-	shortForm?: [string, string | number][];
-
-	/**
-	 * Whether the value is raw in case it was an object literal.
-	 */
-	raw?: boolean;
-}
-
-export interface CompressorData {
-	vertexCompressor: number;
-	edgeCompressor: number;
-	all: CompressorDescription[];
-}
-
-export interface CompressorDescription {
-	/**
-	 * The compressor id.
-	 */
-	id: number;
-
-	/**
-	 * The parent compressor or undefined.
-	 */
-	parent: number | undefined;
-
-	/**
-	 * The compressed propeties.
-	 */
-	properties: CompressorPropertyDescription[];
-}
-
 /**
  * The meta data vertex.
  */
@@ -314,12 +269,7 @@ export interface MetaData extends V {
 	 */
 	version: string;
 
-	/**
-	 * A description of the compressor used.
-	 */
-	compressors?: CompressorData;
 }
-
 
 export type AdditionDataValueType = string | number | boolean | string[] | number[] | boolean[];
 export interface AdditionalData {
