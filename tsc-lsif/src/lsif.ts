@@ -970,11 +970,15 @@ class MethodSymbolItem extends SymbolItem {
 			});
 		}
 
-		if(this.implementationResult.result === undefined) {
-			this.context.emit(this.context.edge.item(this.implementationResult, definition));
-		}
-		else {
-			this.implementationResult.result.push(definition.id);
+		// This line ensures that definitions that come as "property" (no implementation)
+		// are not treated as implementation results
+		if (definition.tag.kind == lsp.SymbolKind.Method) {
+			if(this.implementationResult.result === undefined) {
+				this.context.emit(this.context.edge.item(this.implementationResult, definition));
+			}
+			else {
+				this.implementationResult.result.push(definition.id);
+			}
 		}
 	}
 
