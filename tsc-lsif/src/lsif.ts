@@ -157,8 +157,8 @@ interface SymbolItemContext {
 	typeChecker: ts.TypeChecker;
 	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
-	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined;
-	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined;
+	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
+	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 
 	emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void;
 	getEmittingNode(toEmit: Vertex | Edge): ts.Node | undefined;
@@ -1385,11 +1385,11 @@ class Visitor implements SymbolItemContext {
 		symbolInfo.addReference(reference);
 	}
 
-	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined {
+	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
 		return this.languageService.getDefinitionAtPosition(sourceFile.fileName, node.getStart(sourceFile));
 	}
 
-	public getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined {
+	public getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
 		return this.languageService.getTypeDefinitionAtPosition(sourceFile.fileName, node.getStart(sourceFile));
 	}
 

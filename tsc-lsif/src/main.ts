@@ -120,6 +120,9 @@ function main(this: void, args: string[]) {
 		getCompilationSettings: () => {
 			return config.options;
 		},
+		getProjectReferences: () => {
+			return config.projectReferences;
+		},
 		getScriptVersion: (fileName: string): string => {
 			// The files are immutable.
 			return "0";
