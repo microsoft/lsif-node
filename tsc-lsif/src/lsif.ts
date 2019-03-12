@@ -683,6 +683,19 @@ abstract class SymbolItem {
 		} else {
 			this.referenceResult.declarations.push(definition.id);
 		}
+
+		// If this is not an interface, each declaration is an implementation result
+		if (!MemberContainerItem.isInterface(this.tsSymbol) &&
+			// If this is a method and the symbol kind is NOT method, then it is not an implementation
+			!(MemberContainerItem.isMethodSymbol(this.tsSymbol) && definition.tag.kind !== lsp.SymbolKind.Method)
+		) {
+			if(this.implementationResult.result === undefined) {
+				this.context.emit(this.context.edge.item(this.implementationResult, definition));
+			}
+			else {
+				this.implementationResult.result.push(definition.id);
+			}
+		}
 	}
 
 	protected recordReference(reference: ReferenceRange): void {
@@ -746,35 +759,18 @@ abstract class MemberContainerItem extends SymbolItem {
 		this.baseSymbols = baseSymbols;
 	}
 
-	protected doResolveImplementationResult(emittingNode: ts.Node): ImplementationResult {
-		if (this.baseSymbols.length > 0) {
-			let implementationResult = this.context.vertex.implementationResult();
-			implementationResult.result = [];
-
-			let toEmit: Edge[] = [];
-			this.baseSymbols.forEach(baseSymbol => {
-				toEmit.push(this.context.edge.item(baseSymbol.implementationResult, implementationResult));
-			});
-
-			this.context.emitOnEndVisit(emittingNode, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult), ...toEmit]);
-
-			return implementationResult;
-		}
-
-		return super.doResolveImplementationResult(emittingNode);
-	}
-
 	protected recordDeclaration(definition: DefinitionRange): void {
 		super.recordDeclaration(definition);
 
-		if (!MemberContainerItem.isInterface(this.tsSymbol)) {
-			if(this.implementationResult.result === undefined) {
+		// If we have base symbols, add our declaration to their implementation results
+		this.baseSymbols.forEach(baseSymbol => {
+			if(baseSymbol.implementationResult.result === undefined) {
 				this.context.emit(this.context.edge.item(this.implementationResult, definition));
 			}
 			else {
-				this.implementationResult.result.push(definition.id);
+				baseSymbol.implementationResult.result.push(definition.id);
 			}
-		}
+		});
 	}
 
 	protected abstract getBaseSymbols(): ts.Symbol[]  | undefined;
@@ -999,17 +995,6 @@ class MethodSymbolItem extends SymbolItem {
 			this.baseReferenceResults.forEach(result =>  {
 				this.context.emit(this.context.edge.item(result, definition, 'definition'))
 			});
-		}
-
-		// This line ensures that definitions that come as "property" (no implementation)
-		// are not treated as implementation results
-		if (definition.tag.kind == lsp.SymbolKind.Method) {
-			if(this.implementationResult.result === undefined) {
-				this.context.emit(this.context.edge.item(this.implementationResult, definition));
-			}
-			else {
-				this.implementationResult.result.push(definition.id);
-			}
 		}
 	}
 
