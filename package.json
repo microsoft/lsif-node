@@ -27,6 +27,7 @@
 		"watch:npm-lsif": "tsc -w -p ./npm-lsif/tsconfig.json",
 		"clean": "cd tsc-lsif && npm run clean && cd ../npm-lsif && npm run clean && cd ..",
 		"lsif-ts": "cd samples/typescript && node ../../tsc-lsif/lib/main.js -p ./tsconfig.json  --outputFormat=line",
+		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc-lsif/lib/main.js -p ./client/tsconfig.json  --outputFormat=json",
 		"lsif-ts-all": "cd samples/typescript && node ../../tsc-lsif/lib/main.js -p ./tsconfig.json  --outputFormat=line | node ../../npm-lsif/lib/main.js ./package.json",
 		"lsif-js": "cd samples/javascript && node ../../tsc-lsif/lib/main.js -p ./jsconfig.json  --outputFormat=line"
 	}

@@ -15,7 +15,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	ExportResult, ExportItem, ExternalImportItem, ExternalImportResult, $exports, $imports, Location, ElementTypes, VertexLabels, EdgeLabels
+	ExportResult, ExportItem, ExternalImportItem, ExternalImportResult, $exports, $imports, Location, ElementTypes, VertexLabels, EdgeLabels, Moniker
 } from './shared/protocol';
 
 export interface BuilderOptions {
@@ -77,7 +77,7 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public externalImportItem(moniker: string, rangeIds: RangeId[]): ExternalImportItem {
+	public externalImportItem(moniker: Moniker, rangeIds: RangeId[]): ExternalImportItem {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -99,7 +99,7 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public exportItem(moniker: string, rangeIds: RangeId[]): ExportItem {
+	public exportItem(moniker: Moniker, rangeIds: RangeId[]): ExportItem {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,

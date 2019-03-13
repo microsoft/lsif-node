@@ -17,7 +17,7 @@ import * as tss from './typescripts';
 
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ExportItem, inline, ProjectData, ExternalImportResult, DocumentData,
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ExportItem, inline, ProjectData, ExternalImportResult, DocumentData, ExternalImportItem,
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -290,6 +290,10 @@ abstract class SymbolItem {
 				return undefined;
 			}
 		}
+		// No monikers for source files.
+		if (ts.isSourceFile(node)) {
+			return undefined;
+		}
 		let buffer: string[] = [];
 		do {
 			if (SymbolItem.stopKinds.has(node.kind)) {
@@ -379,15 +383,22 @@ abstract class SymbolItem {
 	}
 
 	protected initializeDeclarations(declarations: ts.Declaration[]): void {
+		interface MonikerKey {
+			p?: string;
+			n: string;
+		}
+		const createStringKey = (key: MonikerKey): string => {
+			return JSON.stringify(key);
+		}
 		let definitionResultValues: DefinitionResultTypeMany | undefined = this.getDefinitionResultValues();
 		let hover: boolean = false;
 		const moniker = SymbolItem.computeMoniker(declarations);
-		let externalImports: Map<ExternalImportResult, RangeId[]> = new Map();
+		let externalImports: Map<ExternalImportResult, Map<string, ExternalImportItem>> = new Map();
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
 			let [range, rangeNode, text] = this.resolveDefinitionRange(sourceFile, declaration);
 			if (range !== undefined && rangeNode !== undefined && text !== undefined) {
-				let { document, externalImportResult } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
+				let { document, externalImportResult, monikerPath } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
 				let definition = this.context.vertex.range(Converter.rangeFromNode(sourceFile, rangeNode), {
 					type: RangeTagTypes.definition,
 					text: text,
@@ -405,12 +416,22 @@ abstract class SymbolItem {
 					hover = this.handleHover(sourceFile, declaration.name);
 				}
 				if (externalImportResult !== undefined && moniker !== undefined) {
-					let value = externalImports.get(externalImportResult);
-					if (value === undefined) {
-						value = [];
-						externalImports.set(externalImportResult, value);
+					const monikerKey: MonikerKey = { n: moniker };
+					if (monikerPath !== undefined) {
+						monikerKey.p = monikerPath;
 					}
-					value.push(definition.id);
+					const stringKey = createStringKey(monikerKey);
+					let monikerMap = externalImports.get(externalImportResult);
+					if (monikerMap === undefined) {
+						monikerMap = new Map();
+						externalImports.set(externalImportResult, monikerMap);
+					}
+					let exportItem = monikerMap.get(stringKey);
+					if (exportItem === undefined) {
+						exportItem = this.context.vertex.externalImportItem( monikerPath !== undefined ? { path: monikerPath, value: moniker } : { value: moniker }, []);
+						monikerMap.set(stringKey, exportItem);
+					}
+					exportItem.rangeIds.push(definition.id);
 				}
 			} else {
 				// We should log this somewhere to improve the tool.
@@ -421,11 +442,12 @@ abstract class SymbolItem {
 			this.context.emit(this.definitionResult);
 			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
 		}
-		if (moniker !== undefined && externalImports.size > 0) {
-			externalImports.forEach((value, key) => {
-				let item = this.context.vertex.externalImportItem(moniker, value)
-				this.context.emit(item);
-				this.context.emit(this.context.edge.item(key, item));
+		if (externalImports.size > 0) {
+			externalImports.forEach((monikerMap, exportResult) => {
+				monikerMap.forEach(item => {
+					this.context.emit(item);
+					this.context.emit(this.context.edge.item(exportResult, item));
+				});
 			});
 		}
 		if (SymbolItem.isBlockScopedVariable(this.tsSymbol) && declarations.length === 1) {
@@ -958,12 +980,21 @@ class AliasSymbolItem extends SymbolItem  {
 interface DocumentInformation {
 	document: Document;
 	externalImportResult?: ExternalImportResult;
+	monikerPath?: string;
+}
+
+export interface ProjectInfo {
+	rootDir: string;
+	outDir: string;
 }
 
 class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
 	private project: Project;
+	private rootDir: string;
+	private outDir: string;
+	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocument: Document | undefined;
 	private _currentExports: Set<ts.Symbol> | undefined;
@@ -973,7 +1004,7 @@ class Visitor implements SymbolItemContext {
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
-	constructor(private languageService: ts.LanguageService, private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private languageService: ts.LanguageService, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
 			emitSource: false
@@ -983,16 +1014,25 @@ class Visitor implements SymbolItemContext {
 		this.documents = new Map();
 		this.externalLibraryImports = new Map();
 		this._emitOnEndVisit = new Map();
+		this.dependentOutDirs = [];
+		for (let info of dependsOn) {
+			this.dependentOutDirs.push(info.outDir);
+		}
+		this.dependentOutDirs.sort((a, b) => {
+			return b.length - a.length;
+		})
 		this.emit(this.vertex.metaData(Version));
 		this.project = this.vertex.project();
 		const root = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		let tag: ProjectData = {};
 		if (compilerOptions.outDir !== undefined) {
-			tag.outDir = URI.file(tss.makeAbsolute(compilerOptions.outDir, root)).toString(true);
+			this.outDir = tss.makeAbsolute(compilerOptions.outDir, root);
+			tag.outDir = URI.file(this.outDir).toString(true);
 		}
 		if (compilerOptions.rootDir !== undefined) {
-			tag.rootDir = URI.file(tss.makeAbsolute(compilerOptions.rootDir, root)).toString(true);
+			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, root);
+			tag.rootDir = URI.file(this.rootDir).toString(true);
 		} else {
 			// Try to compute the root directories.
 		}
@@ -1000,7 +1040,7 @@ class Visitor implements SymbolItemContext {
 		this.emit(this.project);
 	}
 
-	public visitProgram(): void {
+	public visitProgram(): ProjectInfo {
 		// Make a first pass to collect all know external libray imports
 		for (let sourceFile of this.program.getSourceFiles()) {
 			let resolvedModules = tss.getResolvedModules(sourceFile);
@@ -1024,6 +1064,10 @@ class Visitor implements SymbolItemContext {
 			// let end = Date.now();
 			// console.log(`Processing ${sourceFile.fileName} took ${end-start} ms`);
 		}
+		return {
+			rootDir: this.rootDir,
+			outDir: this.outDir
+		};
 	}
 
 	public emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void {
@@ -1133,12 +1177,14 @@ class Visitor implements SymbolItemContext {
 			return;
 		}
 
+		let path = tss.computeMonikerPath(this.rootDir, sourceFile.fileName);
+
 		// Exported symbols.
 		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);
 		if (symbol !== undefined) {
 			if (symbol.exports !== undefined && symbol.exports.size > 0) {
 				let exportItems: ExportItem[] = [];
-				symbol.exports.forEach(item => this.collectExportItems(exportItems, item, undefined));
+				symbol.exports.forEach(item => this.collectExportItems(exportItems, path, item, undefined));
 				if (exportItems.length > 0) {
 					let exportResult = this.vertex.exportResult(exportItems);
 					this.emit(exportResult);
@@ -1195,11 +1241,11 @@ class Visitor implements SymbolItemContext {
 		}
 	}
 
-	private collectExportItems(items: inline.ExportItem[], symbol: ts.Symbol, prefix: string | undefined): void {
+	private collectExportItems(items: inline.ExportItem[], path: string | undefined, symbol: ts.Symbol, prefix: string | undefined): void {
 		const name  = symbol.getName();
 		let symbolItem = this.getSymbolInfo(symbol);
 		if (symbolItem !== undefined) {
-			let moniker = prefix !== undefined ? `${prefix}.${name}` : name;
+			let moniker = { value: prefix !== undefined ? `${prefix}.${name}` : name, path };
 			let declarations = symbolItem.declarations;
 			if (declarations !== undefined) {
 				if (Array.isArray(declarations)) {
@@ -1210,12 +1256,12 @@ class Visitor implements SymbolItemContext {
 			}
 		}
 		if (symbol.exports !== undefined && symbol.exports.size > 0) {
-			symbol.exports.forEach(item => this.collectExportItems(items, item, name));
+			symbol.exports.forEach(item => this.collectExportItems(items, path, item, name));
 		}
 		if (symbol.members !== undefined && symbol.members.size > 0) {
 			symbol.members.forEach(item => {
 				if (!SymbolItem.isPrivate(item)) {
-					this.collectExportItems(items, item, name);
+					this.collectExportItems(items, path, item, name);
 				}
 			});
 		}
@@ -1394,6 +1440,19 @@ class Visitor implements SymbolItemContext {
 	}
 
 	public getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation {
+		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
+			if (!sourceFile.isDeclarationFile) {
+				return undefined;
+			}
+			let fileName = sourceFile.fileName;
+			for (let outDir of this.dependentOutDirs) {
+				if (fileName.startsWith(outDir)) {
+					return tss.computeMonikerPath(outDir, fileName);
+				}
+			}
+			return undefined;
+		}
+
 		let result: DocumentInformation | undefined = this.documents.get(file.fileName);
 		if (result !== undefined) {
 			return result;
@@ -1421,7 +1480,11 @@ class Visitor implements SymbolItemContext {
 
 		result = { document };
 		this.emit(document);
-		if (isExternal) {
+		const monikerPath = computeMonikerPath(file);
+		if (monikerPath !== undefined) {
+			result.monikerPath = monikerPath;
+		}
+		if (isExternal || monikerPath !== undefined) {
 			result.externalImportResult = this.vertex.externalImportResult();
 			this.emit(result.externalImportResult);
 			this.emit(this.edge.$imports(document, result.externalImportResult));
@@ -1482,8 +1545,6 @@ class Visitor implements SymbolItemContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
-	emitter.start();
-	new Visitor(languageService, emitter, idGenerator, tsConfigFile).visitProgram();
-	emitter.end();
+export function lsif(languageService: ts.LanguageService, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
+	return new Visitor(languageService, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
 }

@@ -356,13 +356,36 @@ export interface Document extends V {
 	contents?: string;
 }
 
+export interface Moniker {
+	/**
+	 * The actual moniker value.
+	 */
+	value: string;
+
+	/**
+	 * The path of the moniker. Usually this is a relative file path
+	 * inside the project.
+	 */
+	path?: string
+
+	/**
+	 * The package manager through which this moniker is accessible
+	 */
+	packageManager?: string;
+
+	/**
+	 * A version indentifier
+	 */
+	version?: string;
+}
+
 export namespace inline {
 
 	export interface ExternalImportItem {
 		/**
 		 * A position independent handle to identify a range in a document.
 		 */
-		moniker: string;
+		moniker: Moniker;
 
 		/**
 		 * The range ids this moniker refers to.
@@ -374,7 +397,7 @@ export namespace inline {
 		/**
 		 * A position independent handle to identify a range in a document.
 		 */
-		moniker: string;
+		moniker: Moniker;
 
 		/**
 		 * The range ids this moniker refers to.

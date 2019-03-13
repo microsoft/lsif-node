@@ -12,7 +12,7 @@ import * as tss from './typescripts';
 
 import { Id } from './shared/protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
-import { lsif } from './lsif';
+import { lsif, ProjectInfo } from './lsif';
 
 interface Options {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
@@ -80,15 +80,7 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function main(this: void, args: string[]) {
-
-	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
-		string: [
-			'outputFormat', 'id'
-		]
-	}));
-
-	let config: ts.ParsedCommandLine = ts.parseCommandLine(args);
+function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -158,12 +150,39 @@ function main(this: void, args: string[]) {
 	if (program === undefined) {
 		console.error('Couldn\'t create language service with underlying program.');
 		process.exitCode = -1;
-		return;
+		return undefined;
 	}
-	program.getTypeChecker();
+	let dependsOn: ProjectInfo[] = [];
+	const references = program.getResolvedProjectReferences();
+	if (references) {
+		for (let reference of references) {
+			if (reference) {
+				const projectInfo = processProject(reference.commandLine, emitter, idGenerator);
+				if (projectInfo !== undefined) {
+					dependsOn.push(projectInfo);
+				}
+			}
+		}
+	}
 
+	program.getTypeChecker();
+	return lsif(languageService, dependsOn, emitter, idGenerator, tsconfigFileName);
+}
+
+function main(this: void, args: string[]) {
+
+	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
+		string: [
+			'outputFormat', 'id'
+		]
+	}));
+
+	let config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
-	lsif(languageService, createEmitter(options, idGenerator), idGenerator, tsconfigFileName);
+	const emitter = createEmitter(options, idGenerator);
+	emitter.start();
+	processProject(config, emitter, idGenerator);
+	emitter.end();
 }
 
 if (require.main === module) {

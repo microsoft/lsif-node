@@ -46,6 +46,22 @@ export function makeAbsolute(p: string, root?: string): string {
 	}
 }
 
+export function computeMonikerPath(from: string, to: string): string {
+	let result = path.posix.relative(from, to);
+	if (result.endsWith('.d.ts')) {
+		return result.substring(0, result.length - 5);
+	} else if (result.endsWith('.ts') || result.endsWith('.js')) {
+		return result.substring(0, result.length - 3);
+	} else {
+		return result;
+	}
+}
+
+
+export function makeRelative(from: string, to: string): string {
+	return path.posix.relative(from, to);
+}
+
 // Copies or interface which are internal
 
 export function flattenDiagnosticMessageText(messageText: string | ts.DiagnosticMessageChain | undefined, newLine: string): string {

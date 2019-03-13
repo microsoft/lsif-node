@@ -99,7 +99,7 @@ class ExportLinker extends Linker {
 
 	private droppedResults: Set<Id>;
 
-	constructor(private packageJson: PackageJson) {
+	constructor(packageJson: PackageJson) {
 		super();
 		this.documents = new Map();
 		this.results = new Map();
@@ -174,9 +174,16 @@ class ExportLinker extends Linker {
 	private transformExportItem<T extends inline.ExportItem | ExportItem>(item: T, path?: string): T {
 		let result = Object.assign(Object.create(null), item) as T;
 		if (path !== undefined) {
-			result.moniker = `npm:${this.packageJson.name}:${path}:${item.moniker}`;
+			result.moniker =  {
+				packageManager: 'npm',
+				path: path,
+				value: item.moniker.value
+			};
 		} else {
-			result.moniker = `npm:${this.packageJson.name}:${item.moniker}`;
+			result.moniker = {
+				packageManager: 'npm',
+				value: item.moniker.value
+			};
 		}
 		return result;
 	}
@@ -276,7 +283,10 @@ class ImportLinker extends Linker {
 
 	private transformImportItem<T extends inline.ExternalImportItem | ExternalImportItem>(item: T, packageId: PackageId): T {
 		let result = Object.assign(Object.create(null), item) as T;
-		result.moniker = `npm:${packageId.name}:${item.moniker}`;
+		result.moniker = {
+			packageManager: 'npm',
+			value: item.moniker.value
+		};
 		return result;
 	}
 }
