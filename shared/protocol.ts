@@ -358,9 +358,9 @@ export interface Document extends V {
 
 export interface Moniker {
 	/**
-	 * The actual moniker value.
+	 * The actual moniker name.
 	 */
-	value: string;
+	name: string;
 
 	/**
 	 * The path of the moniker. Usually this is a relative file path
@@ -372,6 +372,11 @@ export interface Moniker {
 	 * The package manager through which this moniker is accessible
 	 */
 	packageManager?: string;
+
+	/**
+	 * The name of the package that provides the symbol.
+	 */
+	package?: string;
 
 	/**
 	 * A version indentifier

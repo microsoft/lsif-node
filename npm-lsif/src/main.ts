@@ -177,12 +177,12 @@ class ExportLinker extends Linker {
 			result.moniker =  {
 				packageManager: 'npm',
 				path: path,
-				value: item.moniker.value
+				name: item.moniker.name
 			};
 		} else {
 			result.moniker = {
 				packageManager: 'npm',
-				value: item.moniker.value
+				name: item.moniker.name
 			};
 		}
 		return result;
@@ -285,7 +285,7 @@ class ImportLinker extends Linker {
 		let result = Object.assign(Object.create(null), item) as T;
 		result.moniker = {
 			packageManager: 'npm',
-			value: item.moniker.value
+			name: item.moniker.name
 		};
 		return result;
 	}

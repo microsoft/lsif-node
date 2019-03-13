@@ -428,7 +428,7 @@ abstract class SymbolItem {
 					}
 					let exportItem = monikerMap.get(stringKey);
 					if (exportItem === undefined) {
-						exportItem = this.context.vertex.externalImportItem( monikerPath !== undefined ? { path: monikerPath, value: moniker } : { value: moniker }, []);
+						exportItem = this.context.vertex.externalImportItem( monikerPath !== undefined ? { path: monikerPath, name: moniker } : { name: moniker }, []);
 						monikerMap.set(stringKey, exportItem);
 					}
 					exportItem.rangeIds.push(definition.id);
@@ -1245,7 +1245,7 @@ class Visitor implements SymbolItemContext {
 		const name  = symbol.getName();
 		let symbolItem = this.getSymbolInfo(symbol);
 		if (symbolItem !== undefined) {
-			let moniker = { value: prefix !== undefined ? `${prefix}.${name}` : name, path };
+			let moniker = { name: prefix !== undefined ? `${prefix}.${name}` : name, path };
 			let declarations = symbolItem.declarations;
 			if (declarations !== undefined) {
 				if (Array.isArray(declarations)) {
