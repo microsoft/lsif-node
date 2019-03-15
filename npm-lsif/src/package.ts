@@ -6,6 +6,8 @@
 import * as fs from 'fs';
 
 import * as Is from './shared/is';
+import * as paths from './shared/paths';
+
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {
@@ -37,8 +39,16 @@ class PackageJson {
 		this.name = json.name;
 		this.version = json.version;
 		this.repository = json.repository;
-		this.main = json.main || 'index.js';
-		this.typings = json.typings || 'index.d.ts';
+		if (Is.string(json.main)) {
+			this.main = paths.normalizeSeparator(paths.removeExtension(json.main));
+		} else {
+			json.main= 'index';
+		}
+		if (Is.string(json.typings)) {
+			this.typings = paths.normalizeSeparator(paths.removeExtension(json.typings));
+		} else {
+			this.typings = 'index';
+		}
 	}
 
 	public hasVersion(): this is PackageJson & { version: string } {
@@ -47,10 +57,6 @@ class PackageJson {
 
 	public hasRepository(): this is PackageJson & { repository: { type: string; url: string } } {
 		return this.repository !== undefined && Is.string(this.repository.url) && Is.string(this.repository.url);
-	}
-
-	public hasMain(): this is PackageJson & { main: string } {
-		return Is.string(this.main);
 	}
 }
 

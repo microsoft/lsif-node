@@ -7,6 +7,7 @@ const Version: string = "0.1.0";
 import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
+import * as fs from 'fs';
 import * as crypto from 'crypto';
 
 import URI from 'vscode-uri';
@@ -17,7 +18,7 @@ import * as tss from './typescripts';
 
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, DocumentData, Moniker, MonikerKind, PackageInformation
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, Moniker, MonikerKind, PackageInformation
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -1161,7 +1162,7 @@ class Visitor implements SymbolItemContext {
 			return;
 		}
 
-		let path = tss.computeMonikerPath(this.rootDir, sourceFile.fileName);
+		let path = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir));
 
 		// Exported symbols.
 		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);
@@ -1454,6 +1455,14 @@ class Visitor implements SymbolItemContext {
 				if (packageInfo === undefined) {
 					packageInfo = this.vertex.packageInformation(packageId.name, 'npm');
 					packageInfo.version = packageId.version;
+					let modulePart = `node_modules/${packageId.name}`;
+					let index = file.fileName.lastIndexOf(modulePart);
+					if (index !== -1) {
+						let packageFile = path.join(file.fileName.substring(0, index + modulePart.length), 'package.json');
+						if (fs.existsSync(packageFile)) {
+							packageInfo.uri = URI.file(packageFile).toString(true);
+						}
+					}
 					this.emit(packageInfo);
 					this.packageInfos.set(key, packageInfo);
 				}

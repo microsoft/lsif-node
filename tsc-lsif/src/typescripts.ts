@@ -46,6 +46,13 @@ export function makeAbsolute(p: string, root?: string): string {
 	}
 }
 
+export function toOutLocation(path: string, rootDir: string, outDir: string): string {
+	if (!path.startsWith(rootDir)) {
+		return path;
+	}
+	return `${outDir}${path.substr(rootDir.length)}`;
+}
+
 export function computeMonikerPath(from: string, to: string): string {
 	let result = path.posix.relative(from, to);
 	if (result.endsWith('.d.ts')) {

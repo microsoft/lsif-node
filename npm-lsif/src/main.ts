@@ -13,7 +13,8 @@ import URI from 'vscode-uri';
 
 import PackageJson from './package';
 import * as Is from './shared/is';
-import { Edge, Vertex, DocumentId, Document, DocumentData, Id, item, Moniker, PackageInformation, packageInformation, moniker } from './shared/protocol';
+import { Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, moniker, EdgeLabels, ElementTypes, VertexLabels, MonikerKind } from './shared/protocol';
+import { TscMoniker, NpmMoniker } from './shared/moniker'
 
 const __out = process.stdout;
 const __eol = os.EOL;
@@ -85,143 +86,133 @@ class Linker {
 
 }
 
-class ExportLinker extends Linker {
+// class ExportLinker extends Linker {
 
-	private outDir: string;
-	private rootDir: string;
+// 	private outDir: string;
+// 	private rootDir: string;
 
-	private main: string;
-	private typing: string;
+// 	private main: string;
+// 	private typing: string;
 
-	private packageInfos: Map<Id, PackageInformation>;
-	private monikers: Map<Id, Moniker>;
+// 	private packageInfos: Map<Id, PackageInformation>;
+// 	private monikers: Map<Id, Moniker>;
 
-	private droppedResults: Set<Id>;
+// 	private droppedResults: Set<Id>;
 
-	constructor(packageJson: PackageJson) {
-		super();
-		this.monikers = new Map();
-		this.packageInfos = new Map();
-		this.droppedResults = new Set();
+// 	constructor(packageJson: PackageJson) {
+// 		super();
+// 		this.monikers = new Map();
+// 		this.packageInfos = new Map();
+// 		this.droppedResults = new Set();
 
-		let dirname = path.dirname(packageJson.$location);
+// 		let dirname = path.dirname(packageJson.$location);
 
-		this.main = URI.file(makeAbsolute(packageJson.main, dirname).replace(/\.js$/, '')).toString(true);
-		this.typing = URI.file(makeAbsolute(packageJson.typings, dirname).replace(/\.d\.ts$/, '')).toString(true);
-	}
+// 		this.main = URI.file(makeAbsolute(packageJson.main, dirname).replace(/\.js$/, '')).toString(true);
+// 		this.typing = URI.file(makeAbsolute(packageJson.typings, dirname).replace(/\.d\.ts$/, '')).toString(true);
+// 	}
 
-	public addOutAndRoot(outDir: string, rootDir: string): void {
-		this.outDir = outDir.charAt(outDir.length - 1) !== '/' ? outDir + '/' : outDir;
-		this.rootDir = rootDir.charAt(outDir.length - 1) !== '/' ? rootDir + '/' : rootDir;
-	}
+// 	public addOutAndRoot(outDir: string, rootDir: string): void {
+// 		this.outDir = outDir.charAt(outDir.length - 1) !== '/' ? outDir + '/' : outDir;
+// 		this.rootDir = rootDir.charAt(outDir.length - 1) !== '/' ? rootDir + '/' : rootDir;
+// 	}
 
-	public addPackageInformation(packageInfo: PackageInformation): void {
-		this.packageInfos.set(packageInfo.id, packageInfo);
-	}
+// 	public addPackageInformation(packageInfo: PackageInformation): void {
+// 		this.packageInfos.set(packageInfo.id, packageInfo);
+// 	}
 
-	public addMoniker(moniker: Moniker): void {
-		this.monikers.set(moniker.id, moniker);
-	}
+// 	public addMoniker(moniker: Moniker): void {
+// 		this.monikers.set(moniker.id, moniker);
+// 	}
 
-	public packageInformation(edge: packageInformation): void {
+// 	public packageInformation(edge: packageInformation): void {
 
-	}
-	public exports(edge: $exports): void {
-		let document = this.documents.get(edge.outV)!;
-		let exportResult = this.results.get(edge.inV)!;
-		let outUri = this.mapToOut(document.uri);
-		if (Linker.isSame(outUri, this.main) || Linker.isSame(outUri, this.typing)) {
-			if (exportResult.result !== undefined) {
-				for (let i = 0; i < exportResult.result.length; i++) {
-					exportResult.result[i] = this.transformExportItem(exportResult.result[i]);
-				}
-			}
-			emit(exportResult);
-			emit(edge);
-		} else if (this.isPackaged(outUri)) {
-			if (exportResult.result !== undefined) {
-				let path = outUri.substr(this.outDir.length).replace(/(\.d)?\.ts$/, '');
-				for (let i = 0; i < exportResult.result.length; i++) {
-					exportResult.result[i] = this.transformExportItem(exportResult.result[i], path);
-				}
-				emit(exportResult);
-				emit(edge);
-			}
-		} else {
-			// drop the export result;
-			this.droppedResults.add(exportResult.id);
-		}
-	}
+// 	}
+// 	public exports(edge: $exports): void {
+// 		let document = this.documents.get(edge.outV)!;
+// 		let exportResult = this.results.get(edge.inV)!;
+// 		let outUri = this.mapToOut(document.uri);
+// 		if (Linker.isSame(outUri, this.main) || Linker.isSame(outUri, this.typing)) {
+// 			if (exportResult.result !== undefined) {
+// 				for (let i = 0; i < exportResult.result.length; i++) {
+// 					exportResult.result[i] = this.transformExportItem(exportResult.result[i]);
+// 				}
+// 			}
+// 			emit(exportResult);
+// 			emit(edge);
+// 		} else if (this.isPackaged(outUri)) {
+// 			if (exportResult.result !== undefined) {
+// 				let path = outUri.substr(this.outDir.length).replace(/(\.d)?\.ts$/, '');
+// 				for (let i = 0; i < exportResult.result.length; i++) {
+// 					exportResult.result[i] = this.transformExportItem(exportResult.result[i], path);
+// 				}
+// 				emit(exportResult);
+// 				emit(edge);
+// 			}
+// 		} else {
+// 			// drop the export result;
+// 			this.droppedResults.add(exportResult.id);
+// 		}
+// 	}
 
-	public handles(edge: item) {
-		return this.results.has(edge.outV) && this.items.has(edge.inV);
-	}
+// 	public handles(edge: item) {
+// 		return this.results.has(edge.outV) && this.items.has(edge.inV);
+// 	}
 
-	public item(edge: item): void {
-		if (this.droppedResults.has(edge.outV)) {
-			// We have dropped the result. Drop the item as well.
-			// So not emit the item nor the edge.
-			return;
-		}
-		let exportItem: ExportItem = this.items.get(edge.inV)!;
-		emit(this.transformExportItem(exportItem));
-		emit(edge);
-	}
+// 	public item(edge: item): void {
+// 		if (this.droppedResults.has(edge.outV)) {
+// 			// We have dropped the result. Drop the item as well.
+// 			// So not emit the item nor the edge.
+// 			return;
+// 		}
+// 		let exportItem: ExportItem = this.items.get(edge.inV)!;
+// 		emit(this.transformExportItem(exportItem));
+// 		emit(edge);
+// 	}
 
-	private transformExportItem<T extends inline.ExportItem | ExportItem>(item: T, path?: string): T {
-		let result = Object.assign(Object.create(null), item) as T;
-		if (path !== undefined) {
-			result.moniker =  {
-				packageManager: 'npm',
-				path: path,
-				name: item.moniker.name
-			};
-		} else {
-			result.moniker = {
-				packageManager: 'npm',
-				name: item.moniker.name
-			};
-		}
-		return result;
-	}
+// 	private transformExportItem<T extends inline.ExportItem | ExportItem>(item: T, path?: string): T {
+// 		let result = Object.assign(Object.create(null), item) as T;
+// 		if (path !== undefined) {
+// 			result.moniker =  {
+// 				packageManager: 'npm',
+// 				path: path,
+// 				name: item.moniker.name
+// 			};
+// 		} else {
+// 			result.moniker = {
+// 				packageManager: 'npm',
+// 				name: item.moniker.name
+// 			};
+// 		}
+// 		return result;
+// 	}
 
-	private mapToOut(uri: string): string {
-		if (uri.startsWith(this.rootDir)) {
-			return this.outDir + uri.substr(this.rootDir.length);
-		} else {
-			return uri;
-		}
-	}
+// 	private mapToOut(uri: string): string {
+// 		if (uri.startsWith(this.rootDir)) {
+// 			return this.outDir + uri.substr(this.rootDir.length);
+// 		} else {
+// 			return uri;
+// 		}
+// 	}
 
-	private isPackaged(uri: string): boolean {
-		// This needs to consult the .npmignore file and checks if the
-		// document is actually published via npm. For now we return
-		// true for all documents.
-		return true;
-	}
-}
-
-interface PackageId {
-	name: string;
-	subModuleName: string;
-	version: string;
-}
+// 	private isPackaged(uri: string): boolean {
+// 		// This needs to consult the .npmignore file and checks if the
+// 		// document is actually published via npm. For now we return
+// 		// true for all documents.
+// 		return true;
+// 	}
+// }
 
 class ImportLinker extends Linker {
 
+	private packageJsons: Map<Id, PackageJson | null>;
 	private packageInfos: Map<Id, PackageInformation>;
 	private monikers: Map<Id, Moniker>;
 
-	private resultToDocument: Map<Id, Document>;
-	private droppedResults: Set<Id>;
-
 	constructor() {
 		super();
+		this.packageJsons = new Map();
 		this.monikers = new Map();
 		this.packageInfos = new Map();
-
-		this.resultToDocument = new Map();
-		this.droppedResults = new Set();
 	}
 
 	public addPackageInformation(packageInfo: PackageInformation): void {
@@ -235,13 +226,29 @@ class ImportLinker extends Linker {
 
 	public packageInformation(edge: packageInformation): void {
 		let moniker = this.monikers.get(edge.outV);
-		let packageInfo = this.packageInfos.get(edge.inV);
+		const packageInfo = this.packageInfos.get(edge.inV);
+		// do not delete package info from the cache since it is reused by many monikers
+
+		// we do remove the moniker since it should only be rewritten once.
 		this.monikers.delete(edge.outV);
-		this.packageInfos.delete(edge.inV);
 
 		if (moniker !== undefined) {
-			if (packageInfo !== undefined) {
-
+			if (moniker.kind === MonikerKind.import && packageInfo !== undefined && packageInfo.manager === 'npm') {
+				const tscMoniker = TscMoniker.parse(moniker.identifier);
+				if (TscMoniker.hasPath(tscMoniker)) {
+					const packageJson = this.getPackageJson(packageInfo);
+					if (packageJson !== undefined) {
+						const modulePart = `node_modules/${packageInfo.name}`;
+						const index = tscMoniker.path.lastIndexOf(modulePart);
+						const relativePath = tscMoniker.path.substr(index + modulePart.length + 1);
+						if (relativePath === packageJson.main || relativePath === packageJson.typings) {
+							moniker.identifier = NpmMoniker.create(packageInfo.name, undefined, tscMoniker.name);
+						} else {
+							moniker.identifier = NpmMoniker.create(packageInfo.name, relativePath, tscMoniker.name);
+						}
+						moniker.schema = 'npm';
+					}
+				}
 			}
 			emit(moniker);
 		}
@@ -249,7 +256,7 @@ class ImportLinker extends Linker {
 	}
 
 	public moniker(edge: moniker): void {
-		let vertex = this.monikers.get(edge.inV);
+		const vertex = this.monikers.get(edge.inV);
 		// we see a moniker edge before the moniker got converted. So no
 		// package information available. Simply re-emit.
 		if (vertex !== undefined) {
@@ -259,47 +266,24 @@ class ImportLinker extends Linker {
 		emit(edge);
 	}
 
-	public imports(edge: $imports): void {
-		let document = this.documents.get(edge.outV)!;
-		let importResult = this.results.get(edge.inV)!;
-		if (document.data === undefined) {
-			this.droppedResults.add(importResult.id);
-			return;
+	private getPackageJson(packageInfo: PackageInformation): PackageJson | undefined {
+		let result: PackageJson | undefined | null = this.packageJsons.get(packageInfo.id);
+		if (result === null) {
+			return undefined;
 		}
-		let packageId: PackageId = document.data.package as unknown as PackageId;
-		if (packageId === undefined) {
-			this.droppedResults.add(importResult.id);
-			return;
-		}
-		this.resultToDocument.set(importResult.id, document);
-		if (importResult.result !== undefined) {
-			for (let i = 0; i < importResult.result.length; i++) {
-				importResult.result[i] = this.transformImportItem(importResult.result[i], packageId);
+		if (result === undefined) {
+			if (packageInfo.uri === undefined) {
+				this.packageJsons.set(packageInfo.id, null);
+				return undefined;
+			}
+			const filePath = URI.parse(packageInfo.uri).fsPath;
+			result = PackageJson.read(filePath);
+			if (result === undefined) {
+				this.packageJsons.set(packageInfo.id, null);
+			} else {
+				this.packageJsons.set(packageInfo.id, result);
 			}
 		}
-		emit(importResult);
-		emit(edge);
-	}
-
-	public item(edge: item): void {
-		if (this.droppedResults.has(edge.outV)) {
-			// We have dropped the result. Drop the item as well.
-			// So not emit the item nor the edge.
-			return;
-		}
-		let importResult: ExternalImportResult = this.results.get(edge.outV)!;
-		let importItem: ExternalImportItem = this.items.get(edge.inV)!;
-		let document: Document = this.resultToDocument.get(importResult.id)!;
-		emit(this.transformImportItem(importItem, document.data!.package! as unknown as PackageId));
-		emit(edge);
-	}
-
-	private transformImportItem<T extends inline.ExternalImportItem | ExternalImportItem>(item: T, packageId: PackageId): T {
-		let result = Object.assign(Object.create(null), item) as T;
-		result.moniker = {
-			packageManager: 'npm',
-			name: item.moniker.name
-		};
 		return result;
 	}
 }
@@ -315,13 +299,12 @@ function main(): void {
 		packageFile = 'package.json'
 	}
 	const packageJson: PackageJson | undefined = PackageJson.read(makeAbsolute(packageFile, process.cwd()));
+
 	if (packageJson === undefined) {
-		console.error(`No package.json file found. Tried ${packageFile}`);
-		process.exitCode = -1;
-		return;
+		console.warn(`No package.json file found. Will not rewrite export monikers.`);
 	}
 
-	const exportLinker: ExportLinker = new ExportLinker(packageJson);
+	//const exportLinker: undefined; //ExportLinker = new ExportLinker(packageJson);
 	const importLinker: ImportLinker = new ImportLinker();
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.file !== undefined && fs.existsSync(options.file)) {
@@ -331,52 +314,28 @@ function main(): void {
 	const rd = readline.createInterface(input);
 	rd.on('line', (line) => {
 		let element: Edge | Vertex = JSON.parse(line);
-		if (element.type === 'edge') {
+		if (element.type === ElementTypes.edge) {
 			switch(element.label) {
-				case 'exports':
-					exportLinker.exports(element);
+				case EdgeLabels.moniker:
+					importLinker.moniker(element);
 					break;
-				case 'imports':
-					importLinker.imports(element);
-					break;
-				case 'item':
-					if (exportLinker.handles(element)) {
-						exportLinker.item(element);
-					} else if (importLinker.handles(element)) {
-						importLinker.item(element);
-					} else {
-						emit(element);
-					}
+				case EdgeLabels.packageInformation:
+					importLinker.packageInformation(element);
 					break;
 				default:
 					emit(line);
 			}
-		} else {
+		} else if (element.type === ElementTypes.vertex) {
 			switch (element.label) {
-				case 'project':
-					exportLinker.addOutAndRoot(element.data!.outDir as string, element.data!.rootDir as string);
+				case VertexLabels.project:
+					//exportLinker.addOutAndRoot(element.data!.outDir as string, element.data!.rootDir as string);
 					emit(line);
 					break;
-				case 'document':
-					let tag: DocumentData | undefined = element.data;
-					if (tag !== undefined && tag.kind === 'external') {
-						importLinker.addDocument(element);
-					} else {
-						exportLinker.addDocument(element);
-					}
-					emit(line);
+				case VertexLabels.moniker:
+					importLinker.addMoniker(element);
 					break;
-				case 'exportResult':
-					exportLinker.addResult(element);
-					break;
-				case 'exportItem':
-					exportLinker.addResultItem(element);
-					break;
-				case 'externalImportResult':
-					importLinker.addResult(element);
-					break;
-				case 'externalImportItem':
-					importLinker.addResultItem(element);
+				case VertexLabels.packageInformation:
+					importLinker.addPackageInformation(element)
 					break;
 				default:
 					emit(line);

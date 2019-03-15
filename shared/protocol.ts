@@ -405,6 +405,16 @@ export interface PackageInformation extends V {
 	manager: string;
 
 	/**
+	 * A uri pointing to the location of the file describing the package.
+	 */
+	uri?: string;
+
+	/**
+	 * Optional the content of the document, `based64` encoded
+	 */
+	contents?: string;
+
+	/**
 	 * The package version if available
 	 */
 	version?: string;
