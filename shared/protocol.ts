@@ -33,10 +33,8 @@ export enum VertexLabels {
 	range = 'range',
 	location = 'location',
 	document = 'document',
-	externalImportItem = 'externalImportItem',
-	externalImportResult = 'externalImportResult',
-	exportItem = 'exportItem',
-	exportResult = 'exportResult',
+	moniker = 'moniker',
+	packageInformation = 'packageInformation',
 	resultSet = 'resultSet',
 	documentSymbolResult = 'documentSymbolResult',
 	foldingRangeResult = 'foldingRangeResult',
@@ -356,107 +354,80 @@ export interface Document extends V {
 	contents?: string;
 }
 
-export interface Moniker {
+/**
+ * The moniker kind.
+ */
+export enum MonikerKind {
 	/**
-	 * The actual moniker name.
+	 * The moniker represent a symbol that is imported into a project
+	 */
+	import = 'import',
+
+	/**
+	 * The moniker represents a symbol that is exported from a project
+	 */
+	export = 'export'
+}
+
+export interface Moniker extends V {
+
+	label: VertexLabels.moniker;
+
+	/**
+	 * The moniker kind.
+	 */
+	kind: MonikerKind;
+
+	/**
+	 * The schema of the moniker. For example tsc or .Net
+	 */
+	schema: string;
+
+	/**
+	 * The identifier of the moniker. The value is opaque in LSIF however
+	 * schema owners are allowed to define the structure if they want.
+	 */
+	identifier: string;
+}
+
+export interface PackageInformation extends V {
+
+	label: VertexLabels.packageInformation;
+
+	/**
+	 * The package name
 	 */
 	name: string;
 
 	/**
-	 * The path of the moniker. Usually this is a relative file path
-	 * inside the project.
+	 * The package manager
 	 */
-	path?: string
+	manager: string;
 
 	/**
-	 * The package manager through which this moniker is accessible
-	 */
-	packageManager?: string;
-
-	/**
-	 * The name of the package that provides the symbol.
-	 */
-	package?: string;
-
-	/**
-	 * A version indentifier
+	 * The package version if available
 	 */
 	version?: string;
-}
-
-export namespace inline {
-
-	export interface ExternalImportItem {
-		/**
-		 * A position independent handle to identify a range in a document.
-		 */
-		moniker: Moniker;
-
-		/**
-		 * The range ids this moniker refers to.
-		 */
-		rangeIds: RangeId[];
-	}
-
-	export interface ExportItem {
-		/**
-		 * A position independent handle to identify a range in a document.
-		 */
-		moniker: Moniker;
-
-		/**
-		 * The range ids this moniker refers to.
-		 */
-		rangeIds: RangeId[];
-	}
-}
-
-/**
- * An item in the external export result.
- */
-export interface ExternalImportItem extends inline.ExternalImportItem, V {
-
-	label: VertexLabels.externalImportItem;
-}
-
-export type ExternalImportResultId = Id;
-
-/**
- * The imported items of a document. The imported items can either
- * be inlined or added to the import result using an item edge.
- */
-export interface ExternalImportResult extends V {
-
-	label: VertexLabels.externalImportResult;
 
 	/**
-	 * The result when inlined.
+	 * Otional information about the repository containing the source of the package
 	 */
-	result?: inline.ExternalImportItem[];
-}
+	repository?: {
+		/**
+		 * The repository type. For example GIT
+		 */
+		type: string;
 
-/**
- * An item in a export result.
- */
-export interface ExportItem extends inline.ExportItem, V {
+		/**
+		 * The URL to the repository
+		 */
+		url: string;
 
-	label: VertexLabels.exportItem;
-}
-
-export type ExportResultId = Id;
-
-/**
- * The exported items of a document. The export items can either
- * be inlined or added to the export result using an item edge.
- */
-export interface ExportResult extends V {
-
-	label: VertexLabels.exportResult;
-
-	/**
-	 * The result when inlined.
-	 */
-	result?: inline.ExportItem[];
+		/**
+		 * A commitId if available.
+		 */
+		commitId?: string;
+	}
 }
 
 /**
@@ -696,10 +667,8 @@ export type Vertex =
 	MetaData |
 	Project |
 	Document |
-	ExternalImportItem |
-	ExternalImportResult |
-	ExportItem |
-	ExportResult |
+	Moniker |
+	PackageInformation |
 	ResultSet |
 	Range |
 	DocumentSymbolResult |
@@ -717,8 +686,8 @@ export enum EdgeLabels {
 	contains = 'contains',
 	item = 'item',
 	refersTo = 'refersTo',
-	exports = 'exports',
-	imports = 'imports',
+	moniker = 'moniker',
+	packageInformation = 'packageInformation',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
 	textDocument_foldingRange = 'textDocument/foldingRange',
 	textDocument_documentLink = 'textDocument/documentLink',
@@ -775,20 +744,6 @@ export type contains = E<Project, Document, EdgeLabels.contains> | E<Document, R
 export type refersTo = E<Range, ResultSet, EdgeLabels.refersTo>;
 
 /**
- * An edge associating a export result with a document. The relationship exists between:
- *
- * - `Document` -> `ExportResult`
- */
-export type $exports = E<Document, ExportResult, EdgeLabels.exports>;
-
-/**
- * An edge associating a external import result with a document. The relationship exists between:
- *
- * - `Document` -> `ExternalImportResult`
- */
-export type $imports = E<Document, ExternalImportResult, EdgeLabels.imports>;
-
-/**
  * An edge representing a item in a result set. The relationship exists between:
  *
  * - `ReferenceResult` -> `Range`
@@ -796,7 +751,23 @@ export type $imports = E<Document, ExternalImportResult, EdgeLabels.imports>;
  * - `ExportResult` -> `ExportResultItem`
  * - `ExternalImportResult` -> `ExternalImportItem`
  */
-export type item = ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> | ItemEdge<ExportResult, ExportItem> | ItemEdge<ExternalImportResult, ExternalImportItem>;
+export type item = ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult>;
+
+/**
+ * An edge associating a range with a moniker. The relationship exists between:
+ *
+ * - `Range` -> `Moniker`
+ */
+export type moniker = E<Range, Moniker, EdgeLabels.moniker>;
+
+
+/**
+ * An edge associating a moniker with a package information. The relationship exists between:
+ *
+ * - `Moniker` -> `PackageInformation`
+ */
+export type packageInformation = E<Moniker, PackageInformation, EdgeLabels.packageInformation>;
+
 
 /**
  * An edge representing a `textDocument/documentSymbol` relationship. The relationship exists between:
@@ -883,8 +854,8 @@ export type Edge =
 	contains |
 	item |
 	refersTo |
-	$exports |
-	$imports |
+	moniker |
+	packageInformation |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
 	textDocument_documentLink |

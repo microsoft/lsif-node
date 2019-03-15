@@ -31,7 +31,7 @@ export function getDefaultCompilerOptions(configFileName?: string) {
 }
 
 const isWindows = process.platform === 'win32';
-function normalizePath(value: string): string {
+export function normalizePath(value: string): string {
 	return path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
 }
 
@@ -55,6 +55,13 @@ export function computeMonikerPath(from: string, to: string): string {
 	} else {
 		return result;
 	}
+}
+
+export function createMonikerIdentifier(path: string | undefined, symbol: string): string {
+	if (path === undefined) {
+		return symbol;
+	}
+	return `${path.replace(/\:/g, '::')}:${symbol}`;
 }
 
 

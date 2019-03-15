@@ -13,7 +13,7 @@ import URI from 'vscode-uri';
 
 import PackageJson from './package';
 import * as Is from './shared/is';
-import { Edge, Vertex, DocumentId, Document, DocumentData, ExportResult, ExportItem, ExternalImportResult, ExternalImportItem, $exports, Id, item, inline, $imports } from './shared/protocol';
+import { Edge, Vertex, DocumentId, Document, DocumentData, Id, item, Moniker, PackageInformation, packageInformation, moniker } from './shared/protocol';
 
 const __out = process.stdout;
 const __eol = os.EOL;
@@ -93,17 +93,15 @@ class ExportLinker extends Linker {
 	private main: string;
 	private typing: string;
 
-	private documents: Map<DocumentId, Document>;
-	private results: Map<Id, ExportResult>;
-	private items: Map<Id, ExportItem>;
+	private packageInfos: Map<Id, PackageInformation>;
+	private monikers: Map<Id, Moniker>;
 
 	private droppedResults: Set<Id>;
 
 	constructor(packageJson: PackageJson) {
 		super();
-		this.documents = new Map();
-		this.results = new Map();
-		this.items = new Map();
+		this.monikers = new Map();
+		this.packageInfos = new Map();
 		this.droppedResults = new Set();
 
 		let dirname = path.dirname(packageJson.$location);
@@ -117,18 +115,17 @@ class ExportLinker extends Linker {
 		this.rootDir = rootDir.charAt(outDir.length - 1) !== '/' ? rootDir + '/' : rootDir;
 	}
 
-	public addDocument(document: Document): void {
-		this.documents.set(document.id, document);
+	public addPackageInformation(packageInfo: PackageInformation): void {
+		this.packageInfos.set(packageInfo.id, packageInfo);
 	}
 
-	public addResult(result: ExportResult): void {
-		this.results.set(result.id, result);
+	public addMoniker(moniker: Moniker): void {
+		this.monikers.set(moniker.id, moniker);
 	}
 
-	public addResultItem(item: ExportItem): void {
-		this.items.set(item.id, item);
-	}
+	public packageInformation(edge: packageInformation): void {
 
+	}
 	public exports(edge: $exports): void {
 		let document = this.documents.get(edge.outV)!;
 		let exportResult = this.results.get(edge.inV)!;
@@ -212,34 +209,54 @@ interface PackageId {
 
 class ImportLinker extends Linker {
 
-	private documents: Map<DocumentId, Document>;
-	private results: Map<Id, ExternalImportResult>;
-	private items: Map<Id, ExternalImportItem>;
+	private packageInfos: Map<Id, PackageInformation>;
+	private monikers: Map<Id, Moniker>;
 
 	private resultToDocument: Map<Id, Document>;
 	private droppedResults: Set<Id>;
 
 	constructor() {
 		super();
-		this.documents = new Map();
-		this.results = new Map();
-		this.items = new Map();
+		this.monikers = new Map();
+		this.packageInfos = new Map();
 
 		this.resultToDocument = new Map();
 		this.droppedResults = new Set();
 	}
 
-	public addDocument(document: Document): void {
-		this.documents.set(document.id, document);
-
+	public addPackageInformation(packageInfo: PackageInformation): void {
+		this.packageInfos.set(packageInfo.id, packageInfo);
+		emit(packageInfo);
 	}
 
-	public addResult(result: ExternalImportResult): void {
-		this.results.set(result.id, result);
+	public addMoniker(moniker: Moniker): void {
+		this.monikers.set(moniker.id, moniker);
 	}
 
-	public addResultItem(item: ExternalImportItem): void {
-		this.items.set(item.id, item);
+	public packageInformation(edge: packageInformation): void {
+		let moniker = this.monikers.get(edge.outV);
+		let packageInfo = this.packageInfos.get(edge.inV);
+		this.monikers.delete(edge.outV);
+		this.packageInfos.delete(edge.inV);
+
+		if (moniker !== undefined) {
+			if (packageInfo !== undefined) {
+
+			}
+			emit(moniker);
+		}
+		emit(edge);
+	}
+
+	public moniker(edge: moniker): void {
+		let vertex = this.monikers.get(edge.inV);
+		// we see a moniker edge before the moniker got converted. So no
+		// package information available. Simply re-emit.
+		if (vertex !== undefined) {
+			this.monikers.delete(edge.inV);
+			emit(vertex);
+		}
+		emit(edge);
 	}
 
 	public imports(edge: $imports): void {
@@ -262,10 +279,6 @@ class ImportLinker extends Linker {
 		}
 		emit(importResult);
 		emit(edge);
-	}
-
-	public handles(edge: item) {
-		return this.results.has(edge.outV) && this.items.has(edge.inV);
 	}
 
 	public item(edge: item): void {

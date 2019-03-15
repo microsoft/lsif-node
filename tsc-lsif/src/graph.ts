@@ -15,7 +15,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	ExportResult, ExportItem, ExternalImportItem, ExternalImportResult, $exports, $imports, Location, ElementTypes, VertexLabels, EdgeLabels, Moniker
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind
 } from './shared/protocol';
 
 export interface BuilderOptions {
@@ -77,48 +77,25 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public externalImportItem(moniker: Moniker, rangeIds: RangeId[]): ExternalImportItem {
+	public moniker(kind: MonikerKind, schema: string, identifier: string): Moniker {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
-			label: VertexLabels.externalImportItem,
-			moniker,
-			rangeIds
+			label: VertexLabels.moniker,
+			kind,
+			schema,
+			identifier
 		};
 	}
 
-	public externalImportResult(items?: ExternalImportItem[]): ExternalImportResult {
-		let result: ExternalImportResult = {
-			id: this.nextId(),
-			type: ElementTypes.vertex,
-			label: VertexLabels.externalImportResult
-		};
-		if (items !== undefined) {
-			result.result = items;
-		}
-		return result;
-	}
-
-	public exportItem(moniker: Moniker, rangeIds: RangeId[]): ExportItem {
+	public packageInformation(name: string, manager: string): PackageInformation {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
-			label: VertexLabels.exportItem,
-			moniker,
-			rangeIds
+			label: VertexLabels.packageInformation,
+			name,
+			manager
 		};
-	}
-
-	public exportResult(items?: ExportItem[]): ExportResult {
-		let result: ExportResult = {
-			id: this.nextId(),
-			type: ElementTypes.vertex,
-			label: VertexLabels.exportResult
-		};
-		if (items !== undefined) {
-			result.result = items;
-		}
-		return result;
 	}
 
 	public resultSet(): ResultSet {
@@ -311,21 +288,21 @@ export class EdgeBuilder {
 		};
 	}
 
-	public $exports(from: Document, to: ExportResult): $exports {
+	public moniker(from: Range, to: Moniker): moniker {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
-			label: EdgeLabels.exports,
+			label: EdgeLabels.moniker,
 			outV: from.id,
 			inV: to.id
 		};
 	}
 
-	public $imports(from: Document, to: ExternalImportResult): $imports {
+	public packageInformation(from: Moniker, to: PackageInformation): packageInformation {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
-			label: EdgeLabels.imports,
+			label: EdgeLabels.packageInformation,
 			outV: from.id,
 			inV: to.id
 		};
@@ -411,21 +388,10 @@ export class EdgeBuilder {
 		}
 	}
 
-	public item(from: ExportResult, to: ExportItem): item;
-	public item(from: ExternalImportResult, to: ExternalImportItem): item;
 	public item(from: ReferenceResult, to: ReferenceResult): item;
 	public item(from: ReferenceResult, to: Range, property: 'declaration' | 'definition' | 'reference'): item;
-	public item(from: ExternalImportResult | ExportResult | ReferenceResult, to: ExternalImportItem | ExportItem | Range | ReferenceResult, property?: 'declaration' | 'definition' | 'reference'): item {
+	public item(from: ReferenceResult, to: Range | ReferenceResult, property?: 'declaration' | 'definition' | 'reference'): item {
 		switch (from.label) {
-			case 'externalImportResult':
-			case 'exportResult':
-				return {
-					id: this.nextId(),
-					type: ElementTypes.edge,
-					label: EdgeLabels.item,
-					outV: from.id,
-					inV: to.id
-				};
 			case 'referenceResult':
 				switch (to.label) {
 					case 'range':

@@ -17,7 +17,7 @@ import * as tss from './typescripts';
 
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ExportItem, inline, ProjectData, ExternalImportResult, DocumentData, ExternalImportItem,
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, DocumentData, Moniker, MonikerKind, PackageInformation
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -383,22 +383,15 @@ abstract class SymbolItem {
 	}
 
 	protected initializeDeclarations(declarations: ts.Declaration[]): void {
-		interface MonikerKey {
-			p?: string;
-			n: string;
-		}
-		const createStringKey = (key: MonikerKey): string => {
-			return JSON.stringify(key);
-		}
 		let definitionResultValues: DefinitionResultTypeMany | undefined = this.getDefinitionResultValues();
 		let hover: boolean = false;
-		const moniker = SymbolItem.computeMoniker(declarations);
-		let externalImports: Map<ExternalImportResult, Map<string, ExternalImportItem>> = new Map();
+		const monikerName = SymbolItem.computeMoniker(declarations);
+		let monikers: Map<string, Moniker> = new Map();
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
 			let [range, rangeNode, text] = this.resolveDefinitionRange(sourceFile, declaration);
 			if (range !== undefined && rangeNode !== undefined && text !== undefined) {
-				let { document, externalImportResult, monikerPath } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
+				let { document, monikerPath, monikerKind, packageInfo } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
 				let definition = this.context.vertex.range(Converter.rangeFromNode(sourceFile, rangeNode), {
 					type: RangeTagTypes.definition,
 					text: text,
@@ -407,6 +400,18 @@ abstract class SymbolItem {
 				});
 				this.context.emit(definition);
 				this.context.emit(this.context.edge.contains(document, definition));
+				let moniker = monikers.get(sourceFile.fileName);
+				if (moniker === undefined && monikerName !== undefined && monikerPath !== undefined && monikerKind !== undefined) {
+					moniker = this.context.vertex.moniker(monikerKind, 'tsc', tss.createMonikerIdentifier(monikerPath, monikerName));
+					monikers.set(sourceFile.fileName, moniker);
+					this.context.emit(moniker);
+					if (packageInfo !== undefined) {
+						this.context.emit(this.context.edge.packageInformation(moniker, packageInfo));
+					}
+				}
+				if (moniker !== undefined) {
+					this.context.emit(this.context.edge.moniker(definition, moniker));
+				}
 				this.recordDeclaration(definition);
 				this.storeDefinitionAndRange(definition, rangeNode);
 				if (definitionResultValues !== undefined) {
@@ -414,24 +419,6 @@ abstract class SymbolItem {
 				}
 				if (!hover && tss.isNamedDeclaration(declaration)) {
 					hover = this.handleHover(sourceFile, declaration.name);
-				}
-				if (externalImportResult !== undefined && moniker !== undefined) {
-					const monikerKey: MonikerKey = { n: moniker };
-					if (monikerPath !== undefined) {
-						monikerKey.p = monikerPath;
-					}
-					const stringKey = createStringKey(monikerKey);
-					let monikerMap = externalImports.get(externalImportResult);
-					if (monikerMap === undefined) {
-						monikerMap = new Map();
-						externalImports.set(externalImportResult, monikerMap);
-					}
-					let exportItem = monikerMap.get(stringKey);
-					if (exportItem === undefined) {
-						exportItem = this.context.vertex.externalImportItem( monikerPath !== undefined ? { path: monikerPath, name: moniker } : { name: moniker }, []);
-						monikerMap.set(stringKey, exportItem);
-					}
-					exportItem.rangeIds.push(definition.id);
 				}
 			} else {
 				// We should log this somewhere to improve the tool.
@@ -441,14 +428,6 @@ abstract class SymbolItem {
 			this.definitionResult = this.context.vertex.definitionResult(definitionResultValues.length === 1 ? definitionResultValues[0] : definitionResultValues);
 			this.context.emit(this.definitionResult);
 			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
-		}
-		if (externalImports.size > 0) {
-			externalImports.forEach((monikerMap, exportResult) => {
-				monikerMap.forEach(item => {
-					this.context.emit(item);
-					this.context.emit(this.context.edge.item(exportResult, item));
-				});
-			});
 		}
 		if (SymbolItem.isBlockScopedVariable(this.tsSymbol) && declarations.length === 1) {
 			let type = this.context.typeChecker.getTypeOfSymbolAtLocation(this.tsSymbol, declarations[0]);
@@ -979,7 +958,8 @@ class AliasSymbolItem extends SymbolItem  {
 
 interface DocumentInformation {
 	document: Document;
-	externalImportResult?: ExternalImportResult;
+	packageInfo?: PackageInformation;
+	monikerKind?: MonikerKind;
 	monikerPath?: string;
 }
 
@@ -992,6 +972,7 @@ class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
 	private project: Project;
+	private projectRoot: string;
 	private rootDir: string;
 	private outDir: string;
 	private dependentOutDirs: string[];
@@ -1001,6 +982,7 @@ class Visitor implements SymbolItemContext {
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private documents: Map<string, DocumentInformation>;
+	private packageInfos: Map<string, PackageInformation>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
@@ -1013,6 +995,7 @@ class Visitor implements SymbolItemContext {
 		this.recordDocumentSymbol = [];
 		this.documents = new Map();
 		this.externalLibraryImports = new Map();
+		this.packageInfos = new Map();
 		this._emitOnEndVisit = new Map();
 		this.dependentOutDirs = [];
 		for (let info of dependsOn) {
@@ -1024,6 +1007,7 @@ class Visitor implements SymbolItemContext {
 		this.emit(this.vertex.metaData(Version));
 		this.project = this.vertex.project();
 		const root = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
+		this.projectRoot = tss.normalizePath(root !== undefined ? root : process.cwd());
 		let compilerOptions = this.program.getCompilerOptions();
 		let tag: ProjectData = {};
 		if (compilerOptions.outDir !== undefined) {
@@ -1183,13 +1167,7 @@ class Visitor implements SymbolItemContext {
 		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);
 		if (symbol !== undefined) {
 			if (symbol.exports !== undefined && symbol.exports.size > 0) {
-				let exportItems: ExportItem[] = [];
-				symbol.exports.forEach(item => this.collectExportItems(exportItems, path, item, undefined));
-				if (exportItems.length > 0) {
-					let exportResult = this.vertex.exportResult(exportItems);
-					this.emit(exportResult);
-					this.emit(this.edge.$exports(this.currentDocument, exportResult));
-				}
+				symbol.exports.forEach(item => this.emitExportMonikers(path, undefined, item));
 			}
 		}
 		this._currentExports = undefined;
@@ -1241,30 +1219,35 @@ class Visitor implements SymbolItemContext {
 		}
 	}
 
-	private collectExportItems(items: inline.ExportItem[], path: string | undefined, symbol: ts.Symbol, prefix: string | undefined): void {
+	private emitExportMonikers(path: string | undefined, prefix: string | undefined, symbol: ts.Symbol): void  {
 		const name  = symbol.getName();
 		let symbolItem = this.getSymbolInfo(symbol);
 		if (symbolItem !== undefined) {
-			let moniker = { name: prefix !== undefined ? `${prefix}.${name}` : name, path };
+			let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
+			let moniker = this.vertex.moniker(MonikerKind.export, 'tsc', tss.createMonikerIdentifier(path, fullName));
+			this.emit(moniker);
 			let declarations = symbolItem.declarations;
 			if (declarations !== undefined) {
 				if (Array.isArray(declarations)) {
-					items.push( { moniker, rangeIds: declarations.map(d => d.id) });
+					for (let declaration of declarations) {
+						this.emit(this.edge.moniker(declaration, moniker));
+					}
 				} else {
-					items.push( { moniker, rangeIds: [declarations.id] });
+					this.emit(this.edge.moniker(declarations, moniker));
 				}
 			}
 		}
 		if (symbol.exports !== undefined && symbol.exports.size > 0) {
-			symbol.exports.forEach(item => this.collectExportItems(items, path, item, name));
+			symbol.exports.forEach(item => this.emitExportMonikers(path, name, item));
 		}
 		if (symbol.members !== undefined && symbol.members.size > 0) {
 			symbol.members.forEach(item => {
 				if (!SymbolItem.isPrivate(item)) {
-					this.collectExportItems(items, path, item, name);
+					this.emitExportMonikers(path, name, item);
 				}
 			});
 		}
+
 	}
 
 	public isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
@@ -1460,34 +1443,34 @@ class Visitor implements SymbolItemContext {
 
 		let document = this.vertex.document(file.fileName, file.text)
 
-		let isExternal: boolean = false;
 		let resolvedModule = this.externalLibraryImports.get(file.fileName);
+		let monikerPath: string | undefined;
+		let packageInfo: PackageInformation | undefined;
 		if (resolvedModule !== undefined) {
-			isExternal = true;
-			let data: DocumentData = {
-				kind: 'external'
-			};
 			if (resolvedModule.packageId !== undefined) {
 				let packageId = resolvedModule.packageId;
-				data.package = {
-					name: packageId.name,
-					subModuleName: packageId.subModuleName,
-					version: packageId.version
+				let key: string = JSON.stringify([packageId.name, 'npm', packageId.version]);
+				packageInfo = this.packageInfos.get(key);
+				if (packageInfo === undefined) {
+					packageInfo = this.vertex.packageInformation(packageId.name, 'npm');
+					packageInfo.version = packageId.version;
+					this.emit(packageInfo);
+					this.packageInfos.set(key, packageInfo);
 				}
 			}
-			document.data = data;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, file.fileName);
+		} else {
+			monikerPath = computeMonikerPath(file);
 		}
 
 		result = { document };
 		this.emit(document);
-		const monikerPath = computeMonikerPath(file);
 		if (monikerPath !== undefined) {
 			result.monikerPath = monikerPath;
+			result.monikerKind = MonikerKind.import;
 		}
-		if (isExternal || monikerPath !== undefined) {
-			result.externalImportResult = this.vertex.externalImportResult();
-			this.emit(result.externalImportResult);
-			this.emit(this.edge.$imports(document, result.externalImportResult));
+		if (packageInfo != undefined) {
+			result.packageInfo = packageInfo;
 		}
 		if (this.project) {
 			this.emit(this.edge.contains(this.project, result.document));
