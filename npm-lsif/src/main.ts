@@ -20,14 +20,15 @@ const __out = process.stdout;
 const __eol = os.EOL;
 
 interface Options extends minimist.ParsedArgs {
-
 	file?: string;
+	projectRoot?: string;
 }
 
 export namespace Options {
 	export const defaults: Options = {
 		_: [],
-		file: undefined
+		file: undefined,
+		projectRoot: undefined
 	};
 }
 
@@ -41,9 +42,8 @@ function emit(value: string | Edge | Vertex): void {
 	}
 }
 
-const isWindows = process.platform === 'win32';
 function normalizePath(value: string): string {
-	return path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
+	return path.posix.normalize(value.replace(/\\/g, '/'));
 }
 
 function makeAbsolute(p: string, root?: string): string {
@@ -57,175 +57,59 @@ function makeAbsolute(p: string, root?: string): string {
 	}
 }
 
-class Linker {
+class ExportLinker {
 
-	protected static isSame(p1: string, p2: string): boolean {
-		let e1 = this.getEnd(p1);
-		let e2 = this.getEnd(p2);
-		if (e1 !== e2) {
-			return false;
+	constructor(private projectRoot: string, private packageInfo: PackageJson) {
+	}
+
+	public handleMoniker(moniker: Moniker): void {
+		if (moniker.schema !== TscMoniker.schema) {
+			emit(moniker);
+			return;
 		}
-		for (let i = 0; i < e1; i++) {
-			if (p1.charCodeAt(i) !== p2.charCodeAt(i)) {
-				return false;
+		let tscMoniker: TscMoniker = TscMoniker.parse(moniker.identifier);
+		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(this.projectRoot, tscMoniker.path))) {
+			if (this.packageInfo.main === tscMoniker.path || this.packageInfo.typings === tscMoniker.path) {
+				moniker.identifier = NpmMoniker.create(this.packageInfo.name, undefined, tscMoniker.name);
+			} else {
+				moniker.identifier = NpmMoniker.create(this.packageInfo.name, tscMoniker.path, tscMoniker.name);
 			}
+			moniker.schema = NpmMoniker.schema;
 		}
+		emit(moniker);
+	}
+
+	private isPackaged(uri: string): boolean {
+		// This needs to consult the .npmignore file and checks if the
+		// document is actually published via npm. For now we return
+		// true for all documents.
 		return true;
 	}
-
-	protected static getEnd(uri: string): number {
-		if (uri.endsWith('.d.ts')) {
-			return uri.length - 5;
-		} else if (uri.endsWith('.ts')) {
-			return uri.length - 3;
-		} else if (uri.endsWith('.js')) {
-			return uri.length - 3;
-		}
-		return uri.length;
-	}
-
 }
 
-// class ExportLinker extends Linker {
-
-// 	private outDir: string;
-// 	private rootDir: string;
-
-// 	private main: string;
-// 	private typing: string;
-
-// 	private packageInfos: Map<Id, PackageInformation>;
-// 	private monikers: Map<Id, Moniker>;
-
-// 	private droppedResults: Set<Id>;
-
-// 	constructor(packageJson: PackageJson) {
-// 		super();
-// 		this.monikers = new Map();
-// 		this.packageInfos = new Map();
-// 		this.droppedResults = new Set();
-
-// 		let dirname = path.dirname(packageJson.$location);
-
-// 		this.main = URI.file(makeAbsolute(packageJson.main, dirname).replace(/\.js$/, '')).toString(true);
-// 		this.typing = URI.file(makeAbsolute(packageJson.typings, dirname).replace(/\.d\.ts$/, '')).toString(true);
-// 	}
-
-// 	public addOutAndRoot(outDir: string, rootDir: string): void {
-// 		this.outDir = outDir.charAt(outDir.length - 1) !== '/' ? outDir + '/' : outDir;
-// 		this.rootDir = rootDir.charAt(outDir.length - 1) !== '/' ? rootDir + '/' : rootDir;
-// 	}
-
-// 	public addPackageInformation(packageInfo: PackageInformation): void {
-// 		this.packageInfos.set(packageInfo.id, packageInfo);
-// 	}
-
-// 	public addMoniker(moniker: Moniker): void {
-// 		this.monikers.set(moniker.id, moniker);
-// 	}
-
-// 	public packageInformation(edge: packageInformation): void {
-
-// 	}
-// 	public exports(edge: $exports): void {
-// 		let document = this.documents.get(edge.outV)!;
-// 		let exportResult = this.results.get(edge.inV)!;
-// 		let outUri = this.mapToOut(document.uri);
-// 		if (Linker.isSame(outUri, this.main) || Linker.isSame(outUri, this.typing)) {
-// 			if (exportResult.result !== undefined) {
-// 				for (let i = 0; i < exportResult.result.length; i++) {
-// 					exportResult.result[i] = this.transformExportItem(exportResult.result[i]);
-// 				}
-// 			}
-// 			emit(exportResult);
-// 			emit(edge);
-// 		} else if (this.isPackaged(outUri)) {
-// 			if (exportResult.result !== undefined) {
-// 				let path = outUri.substr(this.outDir.length).replace(/(\.d)?\.ts$/, '');
-// 				for (let i = 0; i < exportResult.result.length; i++) {
-// 					exportResult.result[i] = this.transformExportItem(exportResult.result[i], path);
-// 				}
-// 				emit(exportResult);
-// 				emit(edge);
-// 			}
-// 		} else {
-// 			// drop the export result;
-// 			this.droppedResults.add(exportResult.id);
-// 		}
-// 	}
-
-// 	public handles(edge: item) {
-// 		return this.results.has(edge.outV) && this.items.has(edge.inV);
-// 	}
-
-// 	public item(edge: item): void {
-// 		if (this.droppedResults.has(edge.outV)) {
-// 			// We have dropped the result. Drop the item as well.
-// 			// So not emit the item nor the edge.
-// 			return;
-// 		}
-// 		let exportItem: ExportItem = this.items.get(edge.inV)!;
-// 		emit(this.transformExportItem(exportItem));
-// 		emit(edge);
-// 	}
-
-// 	private transformExportItem<T extends inline.ExportItem | ExportItem>(item: T, path?: string): T {
-// 		let result = Object.assign(Object.create(null), item) as T;
-// 		if (path !== undefined) {
-// 			result.moniker =  {
-// 				packageManager: 'npm',
-// 				path: path,
-// 				name: item.moniker.name
-// 			};
-// 		} else {
-// 			result.moniker = {
-// 				packageManager: 'npm',
-// 				name: item.moniker.name
-// 			};
-// 		}
-// 		return result;
-// 	}
-
-// 	private mapToOut(uri: string): string {
-// 		if (uri.startsWith(this.rootDir)) {
-// 			return this.outDir + uri.substr(this.rootDir.length);
-// 		} else {
-// 			return uri;
-// 		}
-// 	}
-
-// 	private isPackaged(uri: string): boolean {
-// 		// This needs to consult the .npmignore file and checks if the
-// 		// document is actually published via npm. For now we return
-// 		// true for all documents.
-// 		return true;
-// 	}
-// }
-
-class ImportLinker extends Linker {
+class ImportLinker {
 
 	private packageJsons: Map<Id, PackageJson | null>;
 	private packageInfos: Map<Id, PackageInformation>;
 	private monikers: Map<Id, Moniker>;
 
 	constructor() {
-		super();
 		this.packageJsons = new Map();
 		this.monikers = new Map();
 		this.packageInfos = new Map();
 	}
 
-	public addPackageInformation(packageInfo: PackageInformation): void {
+	public handlePackageInformation(packageInfo: PackageInformation): void {
 		this.packageInfos.set(packageInfo.id, packageInfo);
 		emit(packageInfo);
 	}
 
-	public addMoniker(moniker: Moniker): void {
+	public handleMoniker(moniker: Moniker): void {
 		this.monikers.set(moniker.id, moniker);
 	}
 
-	public packageInformation(edge: packageInformation): void {
-		let moniker = this.monikers.get(edge.outV);
+	public handlePackageInformationEdge(edge: packageInformation): void {
+		const moniker = this.monikers.get(edge.outV);
 		const packageInfo = this.packageInfos.get(edge.inV);
 		// do not delete package info from the cache since it is reused by many monikers
 
@@ -233,7 +117,7 @@ class ImportLinker extends Linker {
 		this.monikers.delete(edge.outV);
 
 		if (moniker !== undefined) {
-			if (moniker.kind === MonikerKind.import && packageInfo !== undefined && packageInfo.manager === NpmMoniker.schema) {
+			if (moniker.kind === MonikerKind.import && moniker.schema === TscMoniker.schema && packageInfo !== undefined && packageInfo.manager === NpmMoniker.schema) {
 				const tscMoniker = TscMoniker.parse(moniker.identifier);
 				if (TscMoniker.hasPath(tscMoniker)) {
 					const packageJson = this.getPackageJson(packageInfo);
@@ -255,7 +139,7 @@ class ImportLinker extends Linker {
 		emit(edge);
 	}
 
-	public moniker(edge: moniker): void {
+	public handleMonikerEdge(edge: moniker): void {
 		const vertex = this.monikers.get(edge.inV);
 		// we see a moniker edge before the moniker got converted. So no
 		// package information available. Simply re-emit.
@@ -291,17 +175,28 @@ class ImportLinker extends Linker {
 function main(): void {
 	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
-			'file'
+			'file', 'projectRoot'
 		]
 	}));
 	let packageFile: string | undefined = options._[0];
 	if (packageFile === undefined) {
 		packageFile = 'package.json'
 	}
-	const packageJson: PackageJson | undefined = PackageJson.read(makeAbsolute(packageFile, process.cwd()));
+	packageFile = makeAbsolute(packageFile);
+	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
 
+	let exportLinker: ExportLinker | undefined;
 	if (packageJson === undefined) {
 		console.warn(`No package.json file found. Will not rewrite export monikers.`);
+	} else {
+		let projectRoot = options.projectRoot;
+		if (projectRoot === undefined) {
+			projectRoot = path.posix.dirname(packageFile)
+		}
+		if (!path.isAbsolute(projectRoot)) {
+			projectRoot = makeAbsolute(projectRoot);
+		}
+		exportLinker = new ExportLinker(projectRoot, packageJson);
 	}
 
 	//const exportLinker: undefined; //ExportLinker = new ExportLinker(packageJson);
@@ -317,25 +212,30 @@ function main(): void {
 		if (element.type === ElementTypes.edge) {
 			switch(element.label) {
 				case EdgeLabels.moniker:
-					importLinker.moniker(element);
+					importLinker.handleMonikerEdge(element);
 					break;
 				case EdgeLabels.packageInformation:
-					importLinker.packageInformation(element);
+					importLinker.handlePackageInformationEdge(element);
 					break;
 				default:
 					emit(line);
 			}
 		} else if (element.type === ElementTypes.vertex) {
 			switch (element.label) {
-				case VertexLabels.project:
-					//exportLinker.addOutAndRoot(element.data!.outDir as string, element.data!.rootDir as string);
-					emit(line);
-					break;
 				case VertexLabels.moniker:
-					importLinker.addMoniker(element);
+					switch (element.kind) {
+						case MonikerKind.import:
+							importLinker.handleMoniker(element);
+							break;
+						case MonikerKind.export:
+							exportLinker && exportLinker.handleMoniker(element);
+							break;
+						default:
+							emit(line);
+					}
 					break;
 				case VertexLabels.packageInformation:
-					importLinker.addPackageInformation(element)
+					importLinker.handlePackageInformation(element)
 					break;
 				default:
 					emit(line);
