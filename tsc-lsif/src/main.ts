@@ -17,7 +17,7 @@ import { lsif, ProjectInfo } from './lsif';
 interface Options {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
-	name?: string;
+	projectRoot?: string;
 }
 
 export namespace Options {
@@ -80,7 +80,7 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
+function processProject(config: ts.ParsedCommandLine, projectRoot: string | undefined, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -92,7 +92,7 @@ function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenera
 		if (!ts.sys.fileExists(tsconfigFileName)) {
 			console.error(`Project configuration file ${tsconfigFileName} does not exist`);
 			process.exitCode = 1;
-			return;
+			return undefined;
 		}
 		config = loadConfigFile(tsconfigFileName);
 	}
@@ -100,12 +100,17 @@ function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenera
 	if (config.fileNames.length === 0) {
 		console.error(`No input files specified.`);
 		process.exitCode = 1;
-		return;
+		return undefined;
 	}
+
+	if (projectRoot === undefined) {
+		projectRoot = tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd();
+	}
+	projectRoot = tss.normalizePath(projectRoot);
 
 	// Bind all symbols
 
-	let host: ts.LanguageServiceHost = {
+	const host: ts.LanguageServiceHost = {
 		getScriptFileNames: () => {
 			return config.fileNames;
 		},
@@ -145,19 +150,19 @@ function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenera
 		readFile: ts.sys.readFile,
 		readDirectory: ts.sys.readDirectory
 	}
-	let languageService = ts.createLanguageService(host);
+	const languageService = ts.createLanguageService(host);
 	const program = languageService.getProgram();
 	if (program === undefined) {
 		console.error('Couldn\'t create language service with underlying program.');
 		process.exitCode = -1;
 		return undefined;
 	}
-	let dependsOn: ProjectInfo[] = [];
+	const dependsOn: ProjectInfo[] = [];
 	const references = program.getResolvedProjectReferences();
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = processProject(reference.commandLine, emitter, idGenerator);
+				const projectInfo = processProject(reference.commandLine, projectRoot, emitter, idGenerator);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -166,22 +171,26 @@ function processProject(config: ts.ParsedCommandLine, emitter: Emitter, idGenera
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, dependsOn, emitter, idGenerator, tsconfigFileName);
+	return lsif(languageService, projectRoot, dependsOn, emitter, idGenerator, tsconfigFileName);
 }
 
 function main(this: void, args: string[]) {
 
-	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
+	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
-			'outputFormat', 'id'
+			'outputFormat', 'id', 'projectRoot'
 		]
 	}));
 
-	let config: ts.ParsedCommandLine = ts.parseCommandLine(args);
+	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, idGenerator);
+	let projectRoot = options.projectRoot;
+	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
+		projectRoot = path.join(process.cwd(), projectRoot);
+	}
 	emitter.start();
-	processProject(config, emitter, idGenerator);
+	processProject(config, projectRoot, emitter, idGenerator);
 	emitter.end();
 }
 

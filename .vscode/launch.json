@@ -46,6 +46,7 @@
 			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
 			"args": [
 				 "-p", "client/tsconfig.json",
+				 "--projectRoot", ".",
 				 "--outputFormat", "line"
 			],
 			"preLaunchTask": "watch:tsc-lsif",

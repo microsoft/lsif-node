@@ -233,7 +233,7 @@ class ImportLinker extends Linker {
 		this.monikers.delete(edge.outV);
 
 		if (moniker !== undefined) {
-			if (moniker.kind === MonikerKind.import && packageInfo !== undefined && packageInfo.manager === 'npm') {
+			if (moniker.kind === MonikerKind.import && packageInfo !== undefined && packageInfo.manager === NpmMoniker.schema) {
 				const tscMoniker = TscMoniker.parse(moniker.identifier);
 				if (TscMoniker.hasPath(tscMoniker)) {
 					const packageJson = this.getPackageJson(packageInfo);
@@ -246,7 +246,7 @@ class ImportLinker extends Linker {
 						} else {
 							moniker.identifier = NpmMoniker.create(packageInfo.name, relativePath, tscMoniker.name);
 						}
-						moniker.schema = 'npm';
+						moniker.schema = NpmMoniker.schema;
 					}
 				}
 			}

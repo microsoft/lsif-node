@@ -987,7 +987,7 @@ class Visitor implements SymbolItemContext {
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
-	constructor(private languageService: ts.LanguageService, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private languageService: ts.LanguageService, projectRoot: string, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
 			emitSource: false
@@ -1007,16 +1007,16 @@ class Visitor implements SymbolItemContext {
 		})
 		this.emit(this.vertex.metaData(Version));
 		this.project = this.vertex.project();
-		const root = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
-		this.projectRoot = tss.normalizePath(root !== undefined ? root : process.cwd());
+		this.projectRoot = projectRoot;
+		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		let tag: ProjectData = {};
 		if (compilerOptions.outDir !== undefined) {
-			this.outDir = tss.makeAbsolute(compilerOptions.outDir, root);
+			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
 			tag.outDir = URI.file(this.outDir).toString(true);
 		}
 		if (compilerOptions.rootDir !== undefined) {
-			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, root);
+			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
 			tag.rootDir = URI.file(this.rootDir).toString(true);
 		} else {
 			// Try to compute the root directories.
@@ -1431,7 +1431,7 @@ class Visitor implements SymbolItemContext {
 			let fileName = sourceFile.fileName;
 			for (let outDir of this.dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
-					return tss.computeMonikerPath(outDir, fileName);
+					return tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
 				}
 			}
 			return undefined;
@@ -1537,6 +1537,6 @@ class Visitor implements SymbolItemContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
-	return new Visitor(languageService, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
+export function lsif(languageService: ts.LanguageService, projectRoot: string, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
+	return new Visitor(languageService, projectRoot, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
 }

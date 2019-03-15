@@ -43,8 +43,11 @@ export namespace TscMoniker {
 }
 
 export namespace NpmMoniker {
+
+	export const schema: string = 'npm';
+
 	export function create(module: string, path: string | undefined, name: string): string {
-		return `npm${separator}${module}${separator}${path !== undefined ? escape(path) : ''}${separator}${name}`;
+		return `${module}${separator}${path !== undefined ? escape(path) : ''}${separator}${name}`;
 	}
 }
 
