@@ -15,7 +15,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
 } from './shared/protocol';
 
 export interface BuilderOptions {
@@ -389,8 +389,8 @@ export class EdgeBuilder {
 	}
 
 	public item(from: ReferenceResult, to: ReferenceResult): item;
-	public item(from: ReferenceResult, to: Range, property: 'declaration' | 'definition' | 'reference'): item;
-	public item(from: ReferenceResult, to: Range | ReferenceResult, property?: 'declaration' | 'definition' | 'reference'): item {
+	public item(from: ReferenceResult, to: Range, property: ItemEdgeProperties.declaration | ItemEdgeProperties.definition | ItemEdgeProperties.reference): item;
+	public item(from: ReferenceResult, to: Range | ReferenceResult, property?: ItemEdgeProperties.declaration | ItemEdgeProperties.definition | ItemEdgeProperties.reference): item {
 		switch (from.label) {
 			case 'referenceResult':
 				switch (to.label) {
@@ -408,7 +408,7 @@ export class EdgeBuilder {
 							id: this.nextId(),
 							type: ElementTypes.edge,
 							label: EdgeLabels.item,
-							property: 'referenceResults',
+							property: ItemEdgeProperties.referenceResults,
 							outV: from.id,
 							inV: to.id
 						}

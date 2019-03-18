@@ -733,8 +733,15 @@ export interface E<S extends V, T extends V, K extends EdgeLabels> extends Eleme
 	inV: Id;
 }
 
+export enum ItemEdgeProperties {
+	declaration = 'declaration',
+	definition = 'definition',
+	reference =  'reference',
+	referenceResults = 'referenceResults'
+}
+
 export interface ItemEdge<S extends V, T extends V> extends E<S, T, EdgeLabels.item> {
-	property?: string;
+	property?: ItemEdgeProperties;
 }
 
 /**

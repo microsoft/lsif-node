@@ -18,7 +18,7 @@ import * as tss from './typescripts';
 
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, Moniker, MonikerKind, PackageInformation
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -652,7 +652,7 @@ abstract class SymbolItem {
 		}
 		// We have a lazy reference result
 		if (this.referenceResult.declarations === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, definition, 'definition'));
+			this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.definition));
 		} else {
 			this.referenceResult.declarations.push(definition.id);
 		}
@@ -664,7 +664,7 @@ abstract class SymbolItem {
 			return;
 		}
 		if (this.referenceResult.references === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, reference, 'reference'));
+			this.context.emit(this.context.edge.item(this.referenceResult, reference, ItemEdgeProperties.reference));
 		} else {
 			this.referenceResult.references.push(reference.id);
 		}
@@ -901,7 +901,7 @@ class MethodSymbolItem extends SymbolItem {
 		super.recordDeclaration(definition);
 		if (this.baseReferenceResults !== undefined) {
 			this.baseReferenceResults.forEach(result =>  {
-				this.context.emit(this.context.edge.item(result, definition, 'definition'))
+				this.context.emit(this.context.edge.item(result, definition, ItemEdgeProperties.definition))
 			});
 			return;
 		}
@@ -911,7 +911,7 @@ class MethodSymbolItem extends SymbolItem {
 		super.recordReference(reference);
 		if (this.baseReferenceResults !== undefined) {
 			this.baseReferenceResults.forEach(result => {
-				this.context.emit(this.context.edge.item(result, reference, 'reference'));
+				this.context.emit(this.context.edge.item(result, reference, ItemEdgeProperties.reference));
 			});
 			return;
 		}
@@ -954,7 +954,7 @@ class AliasSymbolItem extends SymbolItem  {
 		}
 		// Alias declarations are recorded as references on the aliased set.
 		if (this.referenceResult.references === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, definition, 'reference'));
+			this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.reference));
 		} else {
 			this.referenceResult.references.push(definition.id);
 		}
