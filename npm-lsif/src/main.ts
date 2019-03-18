@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 
 import * as minimist from 'minimist';
+import * as uuid from 'uuid';
 
 import URI from 'vscode-uri';
 
@@ -59,6 +60,9 @@ function makeAbsolute(p: string, root?: string): string {
 
 class ExportLinker {
 
+	private packageInformation: PackageInformation;
+	private idGenerator: () => Id;
+
 	constructor(private projectRoot: string, private packageInfo: PackageJson) {
 	}
 
@@ -75,8 +79,12 @@ class ExportLinker {
 				moniker.identifier = NpmMoniker.create(this.packageInfo.name, tscMoniker.path, tscMoniker.name);
 			}
 			moniker.schema = NpmMoniker.schema;
+			this.emitPackageInformation(moniker);
 		}
 		emit(moniker);
+		if (this.packageInformation !== undefined) {
+			emit({ type: ElementTypes.edge, label: EdgeLabels.packageInformation, id: this.idGenerator(), outV: moniker.id, inV: this.packageInformation.id });
+		}
 	}
 
 	private isPackaged(uri: string): boolean {
@@ -84,6 +92,40 @@ class ExportLinker {
 		// document is actually published via npm. For now we return
 		// true for all documents.
 		return true;
+	}
+
+	private emitPackageInformation(moniker: Moniker): void {
+		if (this.packageInformation === undefined) {
+			this.ensureIdGenerator(moniker.id);
+			this.packageInformation = {
+				type: ElementTypes.vertex,
+				label: VertexLabels.packageInformation,
+				id: this.idGenerator(),
+				name: this.packageInfo.name,
+				manager: 'npm',
+				version: this.packageInfo.version
+			}
+			if (this.packageInfo.hasRepository()) {
+				this.packageInformation.repository = this.packageInfo.repository;
+			}
+			emit(this.packageInformation);
+		}
+	}
+
+	private ensureIdGenerator(id: Id): void {
+		if (this.idGenerator !== undefined) {
+			return;
+		}
+		if (typeof id === 'number') {
+			let counter = Number.MAX_SAFE_INTEGER;
+			this.idGenerator = () => {
+				return counter--;
+			}
+		} else {
+			this.idGenerator = () => {
+				return uuid.v4();
+			}
+		}
 	}
 }
 
