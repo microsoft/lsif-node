@@ -545,6 +545,19 @@ abstract class SymbolItem {
 		this.context.emit(this.context.edge.references(this.resultSet, result));
 	}
 
+	protected emitEdgeToForeignReferenceResult(from: ResultSet, to: ReferenceResult): void {
+		let emittingNode: ts.Node | undefined;
+		let edge = this.context.edge.references(from, to);
+		if (ReferenceResult.isStatic(to)) {
+			emittingNode = this.context.getEmittingNode(to);
+		}
+		if (emittingNode !== undefined) {
+			this.context.emitOnEndVisit(emittingNode, [edge]);
+		} else {
+			this.context.emit(edge);
+		}
+	}
+
 	protected resolveDefinitionRange(sourceFile: ts.SourceFile, declaration: ts.Declaration): [lsp.Range, ts.Node, string] | [undefined, undefined, undefined] {
 		if (tss.isNamedDeclaration(declaration)) {
 			let name = declaration.name;
@@ -848,7 +861,7 @@ class MethodSymbolItem extends SymbolItem {
 			let baseMethod = baseMethods[0];
 			let referenceResult = baseMethod.referenceResult;
 			this.baseReferenceResults = baseMethod.baseReferenceResults;
-			this.context.emit(this.context.edge.references(this.resultSet, referenceResult));
+			this.emitEdgeToForeignReferenceResult(this.resultSet, referenceResult);
 			return referenceResult;
 		}
 
@@ -919,16 +932,7 @@ class AliasSymbolItem extends SymbolItem  {
 		if (this.definitionResult !== undefined) {
 			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
 		}
-		let emittingNode: ts.Node | undefined;
-		let edge = this.context.edge.references(this.resultSet, this.referenceResult);
-		if (ReferenceResult.isStatic(this.referenceResult)) {
-			emittingNode = this.context.getEmittingNode(this.referenceResult);
-		}
-		if (emittingNode !== undefined) {
-			this.context.emitOnEndVisit(emittingNode, [edge]);
-		} else {
-			this.context.emit(edge);
-		}
+		this.emitEdgeToForeignReferenceResult(this.resultSet, this.referenceResult);
 		let declarations = this.tsSymbol.getDeclarations();
 		if (declarations !== undefined && declarations.length > 0) {
 			this.initializeDeclarations(declarations);

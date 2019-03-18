@@ -140,6 +140,23 @@
 			"outFiles": [
 				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
 			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "VS Code Chat",
+			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"cwd": "${workspaceFolder}/../Playgrounds/lsif/vscode-chat",
+			"args": [
+				 "-p", "./tsconfig.json",
+				 "--outputFormat", "json"
+			],
+			"preLaunchTask": "watch:tsc-lsif",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+			]
 		}
 	]
 }
