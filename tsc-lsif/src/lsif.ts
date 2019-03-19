@@ -24,6 +24,7 @@ import {
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
 import { Emitter } from './emitters/emitter';
+import { Options } from './main';
 
 namespace Converter {
 
@@ -973,6 +974,11 @@ export interface ProjectInfo {
 	outDir: string;
 }
 
+export interface Options {
+	projectRoot: string;
+	content: boolean;
+}
+
 class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
@@ -991,10 +997,10 @@ class Visitor implements SymbolItemContext {
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
-	constructor(private languageService: ts.LanguageService, projectRoot: string, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: false
+			emitSource: options.content
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
@@ -1011,7 +1017,7 @@ class Visitor implements SymbolItemContext {
 		})
 		this.emit(this.vertex.metaData(Version));
 		this.project = this.vertex.project();
-		this.projectRoot = projectRoot;
+		this.projectRoot = options.projectRoot;
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.outDir !== undefined) {
@@ -1537,6 +1543,6 @@ class Visitor implements SymbolItemContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, projectRoot: string, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
-	return new Visitor(languageService, projectRoot, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
+export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
+	return new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
 }

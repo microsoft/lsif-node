@@ -12,18 +12,20 @@ import * as tss from './typescripts';
 
 import { Id } from './shared/protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
-import { lsif, ProjectInfo } from './lsif';
+import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
 
 interface Options {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
 	projectRoot?: string;
+	content: boolean;
 }
 
 export namespace Options {
 	export const defaults: Options = {
 		outputFormat: 'json',
-		id: 'number'
+		id: 'number',
+		content: true
 	};
 }
 
@@ -80,7 +82,7 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function processProject(config: ts.ParsedCommandLine, projectRoot: string | undefined, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
+function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -103,10 +105,10 @@ function processProject(config: ts.ParsedCommandLine, projectRoot: string | unde
 		return undefined;
 	}
 
-	if (projectRoot === undefined) {
-		projectRoot = tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd();
+	if (options.projectRoot === undefined) {
+		options.projectRoot = tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd();
 	}
-	projectRoot = tss.normalizePath(projectRoot);
+	options.projectRoot = tss.normalizePath(options.projectRoot);
 
 	// Bind all symbols
 
@@ -162,7 +164,7 @@ function processProject(config: ts.ParsedCommandLine, projectRoot: string | unde
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = processProject(reference.commandLine, projectRoot, emitter, idGenerator);
+				const projectInfo = processProject(reference.commandLine, options, emitter, idGenerator);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -171,7 +173,7 @@ function processProject(config: ts.ParsedCommandLine, projectRoot: string | unde
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, projectRoot, dependsOn, emitter, idGenerator, tsconfigFileName);
+	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
 }
 
 function main(this: void, args: string[]) {
@@ -179,7 +181,8 @@ function main(this: void, args: string[]) {
 	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
 			'outputFormat', 'id', 'projectRoot'
-		]
+		],
+		boolean: [ 'content' ]
 	}));
 
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
@@ -190,7 +193,7 @@ function main(this: void, args: string[]) {
 		projectRoot = path.join(process.cwd(), projectRoot);
 	}
 	emitter.start();
-	processProject(config, projectRoot, emitter, idGenerator);
+	processProject(config, options, emitter, idGenerator);
 	emitter.end();
 }
 
