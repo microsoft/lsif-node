@@ -18,7 +18,7 @@ import * as tss from './typescripts';
 
 import {
 	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, ProjectData, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
 } from './shared/protocol'
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -1014,18 +1014,14 @@ class Visitor implements SymbolItemContext {
 		this.projectRoot = projectRoot;
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
-		let tag: ProjectData = {};
 		if (compilerOptions.outDir !== undefined) {
 			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
-			tag.outDir = URI.file(this.outDir).toString(true);
 		}
 		if (compilerOptions.rootDir !== undefined) {
 			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
-			tag.rootDir = URI.file(this.rootDir).toString(true);
 		} else {
 			// Try to compute the root directories.
 		}
-		this.project.data = tag;
 		this.emit(this.project);
 	}
 
