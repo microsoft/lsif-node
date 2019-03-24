@@ -605,6 +605,8 @@ export interface HoverResult extends V {
  */
 export type ReferenceResultId = Id;
 
+export type ReferenceResultItem = (RangeId | lsp.Location);
+
 /**
  * A vertex representing a reference result.
  */
@@ -618,17 +620,17 @@ export interface ReferenceResult extends V {
 	/**
 	 * The declarations belonging to the reference result.
 	 */
-	declarations?: (RangeId | lsp.Location)[];
+	declarations?: ReferenceResultItem[];
 
 	/**
 	 * The definitions belonging to the reference result.
 	 */
-	definitions?: (RangeId | lsp.Location)[];
+	definitions?: ReferenceResultItem[];
 
 	/**
 	 * The references belonging to the reference result.
 	 */
-	references?: (RangeId | lsp.Location)[];
+	references?: ReferenceResultItem[];
 
 	/**
 	 * The reference results belonging to this reference result.
@@ -637,7 +639,7 @@ export interface ReferenceResult extends V {
 }
 
 export namespace ReferenceResult {
-	export function isStatic(result: ReferenceResult): boolean {
+	export function isStatic(result: ReferenceResult): result is ((ReferenceResult & { referenceResults: ReferenceResultId[] }) | (ReferenceResult & { declarations: ReferenceResultItem[]; definitions: ReferenceResultItem[]; references: ReferenceResultItem[] })) {
 		return (result.declarations !== undefined && result.definitions !== undefined && result.references !== undefined)
 			|| result.referenceResults !== undefined;
 	}
