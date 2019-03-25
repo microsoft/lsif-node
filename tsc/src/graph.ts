@@ -6,17 +6,15 @@
 
 import URI from 'vscode-uri';
 
-import * as lsp from 'vscode-languageserver-protocol';
-
 import {
-	Id, Vertex, E,
+	lsp, Id, Vertex, E,
 	Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult, Range, RangeTag, RangeId,
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
 	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
-} from './shared/protocol';
+} from 'lsif-protocol';
 
 export interface BuilderOptions {
 	idGenerator?: () => Id;

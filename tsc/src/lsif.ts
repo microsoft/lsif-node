@@ -12,14 +12,13 @@ import * as crypto from 'crypto';
 
 import URI from 'vscode-uri';
 import * as ts from 'typescript';
-import * as lsp from 'vscode-languageserver-protocol';
 
 import * as tss from './typescripts';
 
 import {
-	Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
+	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
 	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
-} from './shared/protocol'
+} from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
@@ -364,13 +363,27 @@ abstract class SymbolItem {
 		ts.SyntaxKind.SourceFile
 	]);
 
-	public declarations: DefinitionRange | DefinitionRange[];
-	public rangeNodes: ts.Node | ts.Node[];
-	public resultSet: ResultSet;
-	public definitionResult: DefinitionResult;
-	public referenceResult:  ReferenceResult;
+	public declarations: DefinitionRange | DefinitionRange[] | undefined;
+	public rangeNodes: ts.Node | ts.Node[] | undefined;
+	public _resultSet: ResultSet | undefined;
+	public definitionResult: DefinitionResult | undefined;
+	public _referenceResult:  ReferenceResult | undefined;
 
 	protected constructor(public id: string, protected context: SymbolItemContext, public tsSymbol: ts.Symbol) {
+	}
+
+	public get resultSet(): ResultSet {
+		if (this._resultSet === undefined) {
+			throw new Error(`Result set not initialized.`)
+		}
+		return this._resultSet;
+	}
+
+	public get referenceResult(): ReferenceResult {
+		if (this._referenceResult === undefined) {
+			throw new Error(`Reference result not initialized.`)
+		}
+		return this._referenceResult;
 	}
 
 	protected initialize(): void {
@@ -488,7 +501,7 @@ abstract class SymbolItem {
 		if (this.resultSet !== undefined) {
 			return;
 		}
-		this.resultSet = this.context.vertex.resultSet();
+		this._resultSet = this.context.vertex.resultSet();
 		this.context.emit(this.resultSet);
 	}
 
@@ -506,10 +519,10 @@ abstract class SymbolItem {
 	private resolveReferenceResult(): void {
 		let declarations = this.tsSymbol.getDeclarations();
 		if (declarations === undefined || declarations.length === 0) {
-			this.referenceResult = this.createReferenceResult([], [], []);
+			this._referenceResult = this.createReferenceResult([], [], []);
 			return;
 		}
-		this.referenceResult = this.doResolveReferenceResult(this.resolveEmittingNode());
+		this._referenceResult = this.doResolveReferenceResult(this.resolveEmittingNode());
 	}
 
 	protected doResolveReferenceResult(emittingNode: ts.Node | undefined): ReferenceResult {
@@ -600,7 +613,7 @@ abstract class SymbolItem {
 			for (let declaration of this.declarations) {
 				func(declaration);
 			}
-		} else {
+		} else if (this.declarations !== undefined) {
 			func(this.declarations);
 		}
 	}
@@ -638,7 +651,7 @@ abstract class SymbolItem {
 					return (this.declarations as DefinitionRange[])[i];
 				}
 			}
-		} else {
+		} else if (this.rangeNodes !== undefined) {
 			if (this.rangeNodes.getStart() === start && this.rangeNodes.getEnd() === end) {
 				return this.declarations as DefinitionRange;
 			}
@@ -688,7 +701,7 @@ abstract class MemberContainerItem extends SymbolItem {
 
 	private static EMPTY: ReadonlyArray<MemberContainerItem> = Object.freeze([]);
 
-	private baseSymbols: ReadonlyArray<MemberContainerItem>;
+	private baseSymbols: ReadonlyArray<MemberContainerItem> | undefined;
 
 	public constructor(id: string, context: SymbolItemContext, tsSymbol: ts.Symbol) {
 		super(id, context, tsSymbol);
@@ -831,7 +844,7 @@ class ClassSymbolItem extends MemberContainerItem {
 
 class MethodSymbolItem extends SymbolItem {
 
-	private baseReferenceResults: ReadonlyArray<ReferenceResult>;
+	private baseReferenceResults: ReadonlyArray<ReferenceResult> | undefined;
 
 	public constructor(id: string, context: SymbolItemContext, tsSymbol: ts.Symbol) {
 		super(id, context, tsSymbol);
@@ -926,7 +939,7 @@ class AliasSymbolItem extends SymbolItem  {
 
 	protected initialize(): void {
 		this.ensureResultSet();
-		this.referenceResult = this.aliased.referenceResult;
+		this._referenceResult = this.aliased.referenceResult;
 		this.definitionResult = this.aliased.definitionResult;
 
 		// Wire the reference and definition result to aliased Symbol
@@ -984,8 +997,8 @@ class Visitor implements SymbolItemContext {
 	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
-	private rootDir: string;
-	private outDir: string;
+	private rootDir: string | undefined;
+	private outDir: string | undefined;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocument: Document | undefined;
@@ -1056,8 +1069,8 @@ class Visitor implements SymbolItemContext {
 			// console.log(`Processing ${sourceFile.fileName} took ${end-start} ms`);
 		}
 		return {
-			rootDir: this.rootDir,
-			outDir: this.outDir
+			rootDir: this.rootDir!,
+			outDir: this.outDir!
 		};
 	}
 
@@ -1168,7 +1181,7 @@ class Visitor implements SymbolItemContext {
 			return;
 		}
 
-		let path = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir));
+		let path = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir!, this.outDir!));
 
 		// Exported symbols.
 		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);

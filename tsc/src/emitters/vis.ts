@@ -7,7 +7,7 @@ import * as path from 'path';
 import URI from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
-import { Vertex, Edge } from '../shared/protocol';
+import { Vertex, Edge } from 'lsif-protocol';
 
 const __out = process.stdout;
 

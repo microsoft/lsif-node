@@ -10,7 +10,7 @@ import * as minimist from 'minimist';
 import * as ts from 'typescript';
 import * as tss from './typescripts';
 
-import { Id } from './shared/protocol';
+import { Id } from 'lsif-protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
 

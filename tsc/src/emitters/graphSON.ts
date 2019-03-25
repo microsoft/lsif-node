@@ -5,7 +5,7 @@
 import * as os from 'os';
 
 import { Emitter, Create } from './emitter';
-import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from '../shared/protocol';
+import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from 'lsif-protocol';
 
 const __out = process.stdout;
 const __eol = os.EOL;
