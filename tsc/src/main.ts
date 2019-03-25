@@ -176,7 +176,7 @@ function processProject(config: ts.ParsedCommandLine, options: Options, emitter:
 	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
 }
 
-function main(this: void, args: string[]) {
+export function main(this: void, args: string[]) {
 
 	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
@@ -195,6 +195,10 @@ function main(this: void, args: string[]) {
 	emitter.start();
 	processProject(config, options, emitter, idGenerator);
 	emitter.end();
+}
+
+export function run(): void {
+	main(ts.sys.args);
 }
 
 if (require.main === module) {
