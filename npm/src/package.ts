@@ -5,9 +5,8 @@
 
 import * as fs from 'fs';
 
-import * as Is from './shared/is';
-import * as paths from './shared/paths';
-
+import * as Is from 'lsif-tsc/lib/utils/is';
+import * as paths from 'lsif-tsc/lib/utils/paths';
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {
@@ -42,7 +41,7 @@ class PackageJson {
 		if (Is.string(json.main)) {
 			this.main = paths.normalizeSeparator(paths.removeExtension(json.main));
 		} else {
-			json.main= 'index';
+			this.main= 'index';
 		}
 		if (Is.string(json.typings)) {
 			this.typings = paths.normalizeSeparator(paths.removeExtension(json.typings));

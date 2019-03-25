@@ -13,9 +13,13 @@ import * as uuid from 'uuid';
 import URI from 'vscode-uri';
 
 import PackageJson from './package';
-import * as Is from './shared/is';
-import { Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, moniker, EdgeLabels, ElementTypes, VertexLabels, MonikerKind } from './shared/protocol';
-import { TscMoniker, NpmMoniker } from './shared/moniker'
+import {
+	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, moniker, EdgeLabels, ElementTypes, VertexLabels,
+	MonikerKind }
+from 'lsif-protocol';
+
+import * as Is from 'lsif-tsc/lib/utils/is';
+import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
 
 const __out = process.stdout;
 const __eol = os.EOL;
@@ -60,10 +64,17 @@ function makeAbsolute(p: string, root?: string): string {
 
 class ExportLinker {
 
-	private packageInformation: PackageInformation;
-	private idGenerator: () => Id;
+	private packageInformation: PackageInformation | undefined;
+	private _idGenerator: (() => Id) | undefined;
 
 	constructor(private projectRoot: string, private packageInfo: PackageJson) {
+	}
+
+	private get idGenerator(): () => Id {
+		if (this._idGenerator === undefined) {
+			throw new Error(`ID Generator not initialized.`);
+		}
+		return this._idGenerator;
 	}
 
 	public handleMoniker(moniker: Moniker): void {
@@ -118,11 +129,11 @@ class ExportLinker {
 		}
 		if (typeof id === 'number') {
 			let counter = Number.MAX_SAFE_INTEGER;
-			this.idGenerator = () => {
+			this._idGenerator = () => {
 				return counter--;
 			}
 		} else {
-			this.idGenerator = () => {
+			this._idGenerator = () => {
 				return uuid.v4();
 			}
 		}

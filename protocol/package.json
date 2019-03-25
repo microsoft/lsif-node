@@ -2,11 +2,11 @@
 	"name": "lsif-protocol",
 	"version": "0.2.0",
 	"description": "Typescript implementation of the LSIF protocol",
-	"author": "MS",
+	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Microsoft/vscode-typescript-sip.git"
+		"url": "git+https://github.com/Microsoft/lsif-typescript.git"
 	},
 	"main": "lib/main.js",
 	"typings": "lib/main.d.ts",

@@ -3,6 +3,10 @@
 	"version": "0.0.2",
 	"description": "Tool to create an LSIF dump for TypeScript projects.",
 	"main": "lib/main.js",
+	"typings": "lib/main.d.ts",
+	"bin": {
+		"lsif-tsc": "./bin/lsif-tsc"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Microsoft/vscode-typescript-sip.git"
@@ -32,6 +36,5 @@
 		"clean": "node ../node_modules/rimraf/bin.js lib",
 		"prepublishOnly": "npm run clean && npm run compile:prod",
 		"postpublish": "node ../build/bin/post-publish.js"
-
 	}
 }

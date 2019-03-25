@@ -12,11 +12,17 @@ try {
 		shell.rm('-rf', 'lsif-protocol');
 	}
 	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
-	// process.chdir(path.join(root, 'npm-lsif', 'src'));
-	// if (fs.existsSync('shared')) {
-	// 	shell.rm('-rf', 'shared');
-	// }
-	// shell.ln('-s', path.join('..', '..', 'shared'), 'shared');
+
+	process.chdir(path.join(root, 'npm', 'node_modules'));
+	if (fs.existsSync('lsif-protocol')) {
+		shell.rm('-rf', 'lsif-protocol');
+	}
+	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
+	if (fs.existsSync('lsif-tsc')) {
+		shell.rm('-rf', 'lsif-tsc');
+	}
+	shell.ln('-s', path.join('..', '..', 'tsc'), 'lsif-tsc');
+
 } finally {
 	process.chdir(current);
 }
