@@ -2,7 +2,7 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-const Version: string = "0.1.0";
+const Version: string = "0.2.0";
 
 import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
