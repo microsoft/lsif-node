@@ -18,14 +18,14 @@ interface Options {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
 	projectRoot?: string;
-	content: boolean;
+	noContent: boolean;
 }
 
 export namespace Options {
 	export const defaults: Options = {
-		outputFormat: 'json',
+		outputFormat: 'line',
 		id: 'number',
-		content: true
+		noContent: false
 	};
 }
 
@@ -182,7 +182,7 @@ function main(this: void, args: string[]) {
 		string: [
 			'outputFormat', 'id', 'projectRoot'
 		],
-		boolean: [ 'content' ]
+		boolean: [ 'noContent' ]
 	}));
 
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);

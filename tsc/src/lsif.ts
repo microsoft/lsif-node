@@ -498,7 +498,7 @@ abstract class SymbolItem {
 	}
 
 	protected ensureResultSet(): void {
-		if (this.resultSet !== undefined) {
+		if (this._resultSet !== undefined) {
 			return;
 		}
 		this._resultSet = this.context.vertex.resultSet();
@@ -510,7 +510,7 @@ abstract class SymbolItem {
 	}
 
 	private ensureReferenceResult(): void {
-		if (this.referenceResult !== undefined) {
+		if (this._referenceResult !== undefined) {
 			return;
 		}
 		this.resolveReferenceResult();
@@ -989,7 +989,7 @@ export interface ProjectInfo {
 
 export interface Options {
 	projectRoot: string;
-	content: boolean;
+	noContent: boolean;
 }
 
 class Visitor implements SymbolItemContext {
@@ -1013,7 +1013,7 @@ class Visitor implements SymbolItemContext {
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: options.content
+			emitSource: !options.noContent
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
