@@ -124,7 +124,7 @@ class ExportLinker {
 	}
 
 	private ensureIdGenerator(id: Id): void {
-		if (this.idGenerator !== undefined) {
+		if (this._idGenerator !== undefined) {
 			return;
 		}
 		if (typeof id === 'number') {
