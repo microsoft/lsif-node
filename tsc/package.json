@@ -1,27 +1,27 @@
 {
 	"name": "lsif-tsc",
-	"version": "0.2.2",
 	"description": "Tool to create an LSIF dump for TypeScript projects.",
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
-	"bin": {
-		"lsif-tsc": "./bin/lsif-tsc"
-	},
+	"version": "0.2.3",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Microsoft/lsif-typescript.git"
 	},
-	"author": "MS",
-	"license": "MIT",
 	"bugs": {
 		"url": "https://github.com/Microsoft/lsif-typescript/issues"
+	},
+	"main": "lib/main.js",
+	"typings": "lib/main.d.ts",
+	"bin": {
+		"lsif-tsc": "./bin/lsif-tsc"
 	},
 	"dependencies": {
 		"minimist": "^1.2.0",
 		"typescript": "^3.3.4000",
 		"uuid": "^3.3.2",
 		"vscode-uri": "^1.0.6",
-		"lsif-protocol": "0.2.0"
+		"lsif-protocol": "0.2.1"
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
@@ -33,6 +33,7 @@
 		"compile:prod": "node ../build/bin/tsc -b ./tsconfig.prod.json",
 		"watch": "node ../build/bin/tsc -w -b ./tsconfig.json",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
+		"clean-all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
 		"prepublishOnly": "npm run clean && npm run compile:prod",
 		"postpublish": "node ../build/bin/post-publish.js"
 	}

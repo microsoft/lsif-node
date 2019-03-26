@@ -225,7 +225,7 @@ class ImportLinker {
 	}
 }
 
-function main(): void {
+export function main(): void {
 	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
 			'file', 'projectRoot'

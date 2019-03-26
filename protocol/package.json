@@ -1,20 +1,23 @@
 {
 	"name": "lsif-protocol",
-	"version": "0.2.0",
 	"description": "Typescript implementation of the LSIF protocol",
+	"version": "0.2.1",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Microsoft/lsif-typescript.git"
 	},
+	"bugs": {
+		"url": "https://github.com/Microsoft/lsif-typescript/issues"
+	},
 	"main": "lib/main.js",
 	"typings": "lib/main.d.ts",
-	"devDependencies": {
-		"@types/node": "^10.14.3"
-	},
 	"dependencies": {
 		"vscode-languageserver-protocol": "^3.14.0"
+	},
+	"devDependencies": {
+		"@types/node": "^10.14.3"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -p ./tsconfig.json",

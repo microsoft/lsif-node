@@ -1,21 +1,26 @@
 {
 	"name": "lsif-npm",
 	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.2.0",
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
-	"bin": "",
-	"author": "MS",
+	"version": "0.2.1",
+	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Microsoft/vscode-typescript-sip.git"
 	},
+	"bugs": {
+		"url": "https://github.com/Microsoft/lsif-typescript/issues"
+	},
+	"main": "lib/main.js",
+	"typings": "lib/main.d.ts",
+	"bin": {
+		"list-npm": "./bin/lsif-npm"
+	},
 	"dependencies": {
 		"minimist": "^1.2.0",
 		"uuid": "^3.3.2",
-		"lsif-protocol": "0.2.0",
-		"lsif-tsc": "0.2.0"
+		"lsif-protocol": "0.2.1",
+		"lsif-tsc": "0.2.3"
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
@@ -27,7 +32,6 @@
 		"compile:prod": "node ../build/bin/tsc -p ./tsconfig.prod.json",
 		"watch": "node ../build/bin/tsc -w -b ./tsconfig.json",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
-		"clean-all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
 		"prepublishOnly": "npm run clean && npm run compile",
 		"postpublish": "node ../build/bin/post-publish.js"
 	}
