@@ -1,8 +1,13 @@
 {
 	"compilerOptions": {
+		"module": "commonjs",
+		"target": "es6",
         "noImplicitAny": true,
 		"noImplicitReturns": true,
 		"noUnusedLocals": true,
-        "strict": true
+		"strict": true,
+		"lib": [
+			"es6"
+		]
 	}
 }

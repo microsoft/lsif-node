@@ -6,17 +6,19 @@ A first draft specification can be found [here](https://github.com/Microsoft/lan
 
 ## How to Run the tools
 
-- `> git clone this repository`
-- `> npm install`
-- `> npm run compile`
-- `> npm run lsif-ts` runs the indexer over the samples/typescript directory
-- `> npm run lsif-ts-all` runs the indexed over the samples/typescript directory and pipes the output to the npm moniker rewriter.
+- `> npm installl -g lsif-tsc` install the tsc LSIF tool.
+- `> lsif-tsc -p .\tsconfig.json` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
+
+If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so run
+
+- `> npm install -g lsif-npm` install the npm LSIF tools
+- `> lsif-tsc -p .\tsconfig.json | lsif-npm -p .\package.json` creates an LSIF dump and converts the monikers to npm format.
 
 Please note that the tools are work in progress and that we have not done any extensive testing so far. Known issues are:
 
 1. Go to Declaration for function overloads doesn't honor the signature
 1. Go to Type Declaration is not fully implement
-1. Document link support is completely  missing
+1. Document link support and go to implementation is completely  missing
 1. Reference results are not always inlined when possible
 
 ## LSIF extension

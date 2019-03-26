@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+	},
+	"references": [
+		{ "path": "./tsc/tsconfig.json" },
+		{ "path": "./npm/tsconfig.json" }
+	],
+	"exclude": [
+		"node_modules",
+		"samples",
+		"protocol",
+		"npm",
+		"tsc"
+	]
+}
