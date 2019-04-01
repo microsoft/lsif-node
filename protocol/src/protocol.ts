@@ -495,7 +495,7 @@ export interface FoldingRangeResult extends V {
 	/**
 	 * The actual folding ranges.
 	 */
-	result: lsp.FoldingRange[];
+	result?: lsp.FoldingRange[];
 }
 
 /**
@@ -511,7 +511,7 @@ export interface DocumentLinkResult extends V {
 	/**
 	 * The actual document links.
 	 */
-	result: lsp.DocumentLink[];
+	result?: lsp.DocumentLink[];
 }
 
 /**
@@ -531,7 +531,7 @@ export interface DeclarationResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result: DeclarationResultType;
+	result?: DeclarationResultType;
 }
 
 /**
@@ -554,7 +554,7 @@ export interface DefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result: DefinitionResultType;
+	result?: DefinitionResultType;
 }
 
 /**
@@ -578,7 +578,7 @@ export interface TypeDefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result: TypeDefinitionResultType;
+	result?: TypeDefinitionResultType;
 }
 
 /**
@@ -735,10 +735,11 @@ export interface E<S extends V, T extends V, K extends EdgeLabels> extends Eleme
 }
 
 export enum ItemEdgeProperties {
-	declaration = 'declaration',
-	definition = 'definition',
-	reference =  'reference',
-	referenceResults = 'referenceResults'
+	declarations = 'declarations',
+	definitions = 'definitions',
+	references =  'references',
+	referenceResults = 'referenceResults',
+	implementationResults = 'implementationResults'
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E<S, T, EdgeLabels.item> {
