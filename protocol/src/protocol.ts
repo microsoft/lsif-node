@@ -514,12 +514,6 @@ export interface DocumentLinkResult extends V {
 	result: lsp.DocumentLink[];
 }
 
-/**
- * The LSP defines the result of a `textDocument/definition` request as
- * `Location | Location[]. In the SIP we allow to use range ids as well.
- */
-export type DeclarationResultType = (RangeId | lsp.Location)[];
-
 export interface DeclarationResult extends V {
 	/**
 	 * The label property.
@@ -529,14 +523,8 @@ export interface DeclarationResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: DeclarationResultType;
+	result?: (RangeId | lsp.Location)[];
 }
-
-/**
- * The LSP defines the result of a `textDocument/definition` request as
- * `Location | Location[]. In the SIP we allow to use range ids as well.
- */
-export type DefinitionResultType = (RangeId | lsp.Location)[];
 
 /**
  * A vertex representing a definition result.
@@ -550,14 +538,8 @@ export interface DefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: DefinitionResultType;
+	result?: (RangeId | lsp.Location)[];
 }
-
-/**
- * The LSP defines the result of a `textDocument/typeDefinition` request as
- * `Location | Location[]. In the SIP we allow to use range ids as well.
- */
-export type TypeDefinitionResultType = (RangeId | lsp.Location)[];
 
 /**
  * A vertex representing a type definition result.
@@ -572,7 +554,7 @@ export interface TypeDefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: TypeDefinitionResultType;
+	result?: (RangeId | lsp.Location)[];
 }
 
 /**

@@ -13,7 +13,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, DefinitionResultType, TypeDefinitionResultType
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -184,7 +184,7 @@ export class VertexBuilder {
 		}
 	}
 
-	public definitionResult(values: DefinitionResultType): DefinitionResult {
+	public definitionResult(values: RangeId[]): DefinitionResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -193,7 +193,7 @@ export class VertexBuilder {
 		};
 	}
 
-	public typeDefinitionResult(values: TypeDefinitionResultType): TypeDefinitionResult {
+	public typeDefinitionResult(values: RangeId[]): TypeDefinitionResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
