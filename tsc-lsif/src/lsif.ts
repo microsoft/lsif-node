@@ -158,10 +158,11 @@ interface SymbolItemContext {
 	typeChecker: ts.TypeChecker;
 	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
-	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined;
-	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined;
+	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
+	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 
 	emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void;
+	getEmittingNode(toEmit: Vertex | Edge): ts.Node | undefined;
 	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
 	isExported(symbol: ts.Symbol): boolean;
 }
@@ -1023,7 +1024,16 @@ class AliasSymbolItem extends SymbolItem  {
 		if (this.definitionResult !== undefined) {
 			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
 		}
-		this.context.emit(this.context.edge.references(this.resultSet, this.referenceResult));
+		let emittingNode: ts.Node | undefined;
+		let edge = this.context.edge.references(this.resultSet, this.referenceResult);
+		if (ReferenceResult.isStatic(this.referenceResult)) {
+			emittingNode = this.context.getEmittingNode(this.referenceResult);
+		}
+		if (emittingNode !== undefined) {
+			this.context.emitOnEndVisit(emittingNode, [edge]);
+		} else {
+			this.context.emit(edge);
+		}
 		let declarations = this.tsSymbol.getDeclarations();
 		if (declarations !== undefined && declarations.length > 0) {
 			this.initializeDeclarations(declarations);
@@ -1130,6 +1140,17 @@ class Visitor implements SymbolItemContext {
 		} else {
 			this._emitOnEndVisit.set(node, toEmit);
 		}
+	}
+
+	public getEmittingNode(toEmit: Vertex | Edge): ts.Node | undefined {
+		// We assume this is not called to often so we don't spent a hash map for now
+		for (let entry of this._emitOnEndVisit.entries()) {
+			let [key, elements] = entry;
+			if (elements.indexOf(toEmit) !== -1) {
+				return key;
+			}
+		}
+		return undefined;
 	}
 
 	protected visit(node: ts.Node): void {
@@ -1471,11 +1492,11 @@ class Visitor implements SymbolItemContext {
 		symbolInfo.addReference(reference);
 	}
 
-	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined {
+	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
 		return this.languageService.getDefinitionAtPosition(sourceFile.fileName, node.getStart(sourceFile));
 	}
 
-	public getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ts.DefinitionInfo[] | undefined {
+	public getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
 		return this.languageService.getTypeDefinitionAtPosition(sourceFile.fileName, node.getStart(sourceFile));
 	}
 

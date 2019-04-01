@@ -41,6 +41,23 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "TS Sample Ref",
+			"cwd": "${workspaceFolder}/samples/typescript-ref",
+			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"args": [
+				 "-p", "client/tsconfig.json",
+				 "--outputFormat", "line"
+			],
+			"preLaunchTask": "watch:tsc-lsif",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "npm-lsif",
 			"program": "${workspaceFolder}/npm-lsif/lib/main.js",
 			"cwd": "${workspaceFolder}/samples/typescript",

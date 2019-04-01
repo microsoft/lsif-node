@@ -254,51 +254,6 @@ export interface Location extends V {
 	range: lsp.Range;
 }
 
-export interface CompressorPropertyDescription {
-	/**
-	 * The name of the property.
-	 */
-	name: string;
-
-	/**
-	 * It's index in the array.
-	 */
-	index: number;
-
-	/**
-	 * Short form if the value is a string.
-	 */
-	shortForm?: [string, string | number][];
-
-	/**
-	 * Whether the value is raw in case it was an object literal.
-	 */
-	raw?: boolean;
-}
-
-export interface CompressorData {
-	vertexCompressor: number;
-	edgeCompressor: number;
-	all: CompressorDescription[];
-}
-
-export interface CompressorDescription {
-	/**
-	 * The compressor id.
-	 */
-	id: number;
-
-	/**
-	 * The parent compressor or undefined.
-	 */
-	parent: number | undefined;
-
-	/**
-	 * The compressed propeties.
-	 */
-	properties: CompressorPropertyDescription[];
-}
-
 /**
  * The meta data vertex.
  */
@@ -310,16 +265,11 @@ export interface MetaData extends V {
 	label: VertexLabels.metaData;
 
 	/**
-	 * The dump version
+	 * The version of the LSIF format using semver notation. See https://semver.org/
 	 */
 	version: string;
 
-	/**
-	 * A description of the compressor used.
-	 */
-	compressors?: CompressorData;
 }
-
 
 export type AdditionDataValueType = string | number | boolean | string[] | number[] | boolean[];
 export interface AdditionalData {
@@ -675,6 +625,13 @@ export interface ReferenceResult extends V {
 	 * The reference results belonging to this reference result.
 	 */
 	referenceResults?: ReferenceResultId[];
+}
+
+export namespace ReferenceResult {
+	export function isStatic(result: ReferenceResult): boolean {
+		return (result.declarations !== undefined && result.definitions !== undefined && result.references !== undefined)
+			|| result.referenceResults !== undefined;
+	}
 }
 
 
