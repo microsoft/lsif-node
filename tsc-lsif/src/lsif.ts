@@ -581,6 +581,7 @@ abstract class SymbolItem {
 		else {
 			implementationResult = this.context.vertex.implementationResult();
 			this.context.emit(implementationResult);
+			this.context.emit(this.context.edge.implementation(this.resultSet, implementationResult));
 		}
 
 		return implementationResult;
@@ -766,7 +767,7 @@ abstract class MemberContainerItem extends SymbolItem {
 		// If we have base symbols, add our declaration to their implementation results
 		this.baseSymbols.forEach(baseSymbol => {
 			if(baseSymbol.implementationResult.result === undefined) {
-				this.context.emit(this.context.edge.item(this.implementationResult, definition));
+				this.context.emit(this.context.edge.item(baseSymbol.implementationResult, definition));
 			}
 			else {
 				baseSymbol.implementationResult.result.push(definition.id);
