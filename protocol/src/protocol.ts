@@ -495,7 +495,7 @@ export interface FoldingRangeResult extends V {
 	/**
 	 * The actual folding ranges.
 	 */
-	result?: lsp.FoldingRange[];
+	result: lsp.FoldingRange[];
 }
 
 /**
@@ -511,16 +511,14 @@ export interface DocumentLinkResult extends V {
 	/**
 	 * The actual document links.
 	 */
-	result?: lsp.DocumentLink[];
+	result: lsp.DocumentLink[];
 }
 
 /**
  * The LSP defines the result of a `textDocument/definition` request as
  * `Location | Location[]. In the SIP we allow to use range ids as well.
  */
-export type DeclarationResultTypeSingle = RangeId | lsp.Location;
-export type DeclarationResultTypeMany = (RangeId | lsp.Location)[];
-export type DeclarationResultType = DeclarationResultTypeSingle | DeclarationResultTypeMany;
+export type DeclarationResultType = (RangeId | lsp.Location)[];
 
 export interface DeclarationResult extends V {
 	/**
@@ -538,9 +536,7 @@ export interface DeclarationResult extends V {
  * The LSP defines the result of a `textDocument/definition` request as
  * `Location | Location[]. In the SIP we allow to use range ids as well.
  */
-export type DefinitionResultTypeSingle = RangeId | lsp.Location;
-export type DefinitionResultTypeMany = (RangeId | lsp.Location)[];
-export type DefinitionResultType = DefinitionResultTypeSingle | DefinitionResultTypeMany;
+export type DefinitionResultType = (RangeId | lsp.Location)[];
 
 /**
  * A vertex representing a definition result.
@@ -561,9 +557,7 @@ export interface DefinitionResult extends V {
  * The LSP defines the result of a `textDocument/typeDefinition` request as
  * `Location | Location[]. In the SIP we allow to use range ids as well.
  */
-export type TypeDefinitionResultTypeSingle = RangeId | lsp.Location;
-export type TypeDefinitionResultTypeMany = (RangeId | lsp.Location)[];
-export type TypeDefinitionResultType = TypeDefinitionResultTypeSingle | TypeDefinitionResultTypeMany;
+export type TypeDefinitionResultType = (RangeId | lsp.Location)[];
 
 /**
  * A vertex representing a type definition result.

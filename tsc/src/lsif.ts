@@ -17,7 +17,7 @@ import * as tss from './typescripts';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultTypeMany, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, DefinitionResultType, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -398,7 +398,7 @@ abstract class SymbolItem {
 	}
 
 	protected initializeDeclarations(declarations: ts.Declaration[]): void {
-		let definitionResultValues: DefinitionResultTypeMany | undefined = this.getDefinitionResultValues();
+		let definitionResultValues: DefinitionResultType | undefined = this.getDefinitionResultValues();
 		let hover: boolean = false;
 		const monikerName = SymbolItem.computeMoniker(declarations);
 		let monikers: Map<string, Moniker> = new Map();
@@ -440,7 +440,7 @@ abstract class SymbolItem {
 			}
 		}
 		if (definitionResultValues !== undefined && definitionResultValues.length > 0) {
-			this.definitionResult = this.context.vertex.definitionResult(definitionResultValues.length === 1 ? definitionResultValues[0] : definitionResultValues);
+			this.definitionResult = this.context.vertex.definitionResult(definitionResultValues);
 			this.context.emit(this.definitionResult);
 			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
 		}
@@ -452,7 +452,7 @@ abstract class SymbolItem {
 				if (Array.isArray(typeSymbol.declarations)) {
 					result = this.context.vertex.typeDefinitionResult(typeSymbol.declarations.map(declaration => declaration.id));
 				} else if (typeSymbol.declarations !== undefined) {
-					result = this.context.vertex.typeDefinitionResult(typeSymbol.declarations.id);
+					result = this.context.vertex.typeDefinitionResult([typeSymbol.declarations.id]);
 				}
 				if (result !== undefined) {
 					this.context.emit(result);
@@ -505,7 +505,7 @@ abstract class SymbolItem {
 		this.context.emit(this.resultSet);
 	}
 
-	protected getDefinitionResultValues(): DefinitionResultTypeMany | undefined {
+	protected getDefinitionResultValues(): DefinitionResultType | undefined {
 		return [];
 	}
 
@@ -956,7 +956,7 @@ class AliasSymbolItem extends SymbolItem  {
 		}
 	}
 
-	protected getDefinitionResultValues(): DefinitionResultTypeMany | undefined {
+	protected getDefinitionResultValues(): DefinitionResultType | undefined {
 		// This is handled in recordDeclaration which forwards to the aliased set.
 		return undefined;
 	}

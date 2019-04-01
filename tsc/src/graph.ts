@@ -11,9 +11,9 @@ import {
 	Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult, Range, RangeTag, RangeId,
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
-	DefinitionResultType, ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResultType,
+	ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, DefinitionResultType, TypeDefinitionResultType
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
