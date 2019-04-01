@@ -989,7 +989,7 @@ export interface ProjectInfo {
 
 export interface Options {
 	projectRoot: string;
-	noContent: boolean;
+	noContents: boolean;
 }
 
 class Visitor implements SymbolItemContext {
@@ -1013,7 +1013,7 @@ class Visitor implements SymbolItemContext {
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: !options.noContent
+			emitSource: !options.noContents
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
