@@ -24,19 +24,38 @@ import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
 const __out = process.stdout;
 const __eol = os.EOL;
 
-interface Options extends minimist.ParsedArgs {
+interface Options {
+	help: boolean;
+	version: boolean;
 	package?: string;
 	projectRoot?: string;
 	file?: string;
 }
 
-export namespace Options {
+interface OptionDescription {
+	id: keyof Options;
+	type: 'boolean' | 'string';
+	alias?: string;
+	default: any;
+	values?: string[];
+	description: string;
+}
+
+namespace Options {
 	export const defaults: Options = {
-		_: [],
+		help: false,
+		version: false,
 		package: undefined,
 		projectRoot: undefined,
 		file: undefined
 	};
+	export const descriptions: OptionDescription[] = [
+		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
+		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
+		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
+		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
+		{ id: 'file', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump. Defaults to stdin.'},
+	];
 }
 
 function emit(value: string | Edge | Vertex): void {
@@ -228,11 +247,51 @@ class ImportLinker {
 }
 
 export function main(): void {
-	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
-		string: [
-			'package', 'projectRoot', 'file',
-		]
-	}));
+
+	let minOpts: minimist.Opts = {
+		string: [],
+		boolean: [],
+		default: Object.create(null),
+		alias: Object.create(null)
+	};
+
+	let longestId: number = 0;
+	for (let description of Options.descriptions) {
+		longestId = Math.max(longestId, description.id.length);
+		minOpts[description.type] = description.id;
+		minOpts.default![description.id] = description.default;
+		if (description.alias !== undefined) {
+			minOpts.alias![description.id] = [description.alias];
+		}
+	}
+
+	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
+
+	if (options.version) {
+		console.log(require('../package.json').version);
+		return;
+	}
+
+	let buffer: string[] = [];
+	if (options.help) {
+		buffer.push(`Languag Server Index Format tool for NPM`);
+		buffer.push(`Version: ${require('../package.json').version}`);
+		buffer.push('');
+		buffer.push(`Usage: lsif-npm [options]`);
+		buffer.push('');
+		buffer.push(`Options`);
+		for (let description of Options.descriptions) {
+			if (description.alias !== undefined) {
+				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
+			} else {
+				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
+			}
+		}
+		console.log(buffer.join('\n'));
+		return;
+	}
+
+
 	let packageFile: string | undefined = options.package;
 	if (packageFile === undefined) {
 		packageFile = 'package.json'
