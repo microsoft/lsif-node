@@ -46,6 +46,7 @@
 			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
 			"args": [
 				 "-p", "client/tsconfig.json",
+				 "--projectRoot", ".",
 				 "--outputFormat", "line"
 			],
 			"preLaunchTask": "watch:tsc-lsif",
@@ -131,6 +132,23 @@
 			"cwd": "${workspaceFolder}/../../connect-demo/vsls-guestbook",
 			"args": [
 				 "-p", "./jsconfig.json",
+				 "--outputFormat", "json"
+			],
+			"preLaunchTask": "watch:tsc-lsif",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "VS Code Chat",
+			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"cwd": "${workspaceFolder}/../Playgrounds/lsif/vscode-chat",
+			"args": [
+				 "-p", "./tsconfig.json",
 				 "--outputFormat", "json"
 			],
 			"preLaunchTask": "watch:tsc-lsif",

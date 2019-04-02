@@ -1,0 +1,22 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+        "sourceMap": true,
+		"declaration": true,
+		"composite": true,
+		"sourceRoot": "../src",
+		"rootDir": "./src",
+		"outDir": "lib",
+		"baseUrl": "./src",
+		"paths": {
+			"lsif-protocol": ["../../protocol/lib/main"],
+			"lsif-protocol/*": ["../../protocol/lib"]
+		}
+	},
+	"include": [
+		"src/**/*.ts"
+	],
+	"references": [
+		{ "path": "../protocol/tsconfig.json"}
+	]
+}

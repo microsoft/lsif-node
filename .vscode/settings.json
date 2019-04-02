@@ -1,6 +1,4 @@
 {
-	"cSpell.words": [
-		"LSIF"
-	],
-	"npm.autoDetect": "off"
+	"typescript.tsc.autoDetect": "off",
+	"npm.autoDetect": "on"
 }

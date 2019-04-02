@@ -13,21 +13,19 @@
 	},
 	"homepage": "https://github.com/Microsoft/language-server-index-format#readme",
 	"devDependencies": {
-		"typescript": "^3.3.3333",
+		"@types/node": "^10.14.3",
+		"typescript": "^3.3.4000",
 		"shelljs": "^0.8.3",
 		"rimraf": "^2.6.2"
 	},
 	"scripts": {
-		"postinstall": "cd shared && npm install && cd ../tsc-lsif && npm install && cd ../npm-lsif && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
+		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
-		"compile": "npm run compile:tsc-lsif && npm run compile:npm-lsif",
-		"compile:tsc-lsif": "tsc -p ./tsc-lsif/tsconfig.json",
-		"compile:npm-lsif": "tsc -p ./npm-lsif/tsconfig.json",
-		"watch:tsc-lsif": "tsc -w -p ./tsc-lsif/tsconfig.json",
-		"watch:npm-lsif": "tsc -w -p ./npm-lsif/tsconfig.json",
-		"clean": "cd tsc-lsif && npm run clean && cd ../npm-lsif && npm run clean && cd ..",
-		"lsif-ts": "cd samples/typescript && node ../../tsc-lsif/lib/main.js -p ./tsconfig.json  --outputFormat=line",
-		"lsif-ts-all": "cd samples/typescript && node ../../tsc-lsif/lib/main.js -p ./tsconfig.json  --outputFormat=line | node ../../npm-lsif/lib/main.js ./package.json",
-		"lsif-js": "cd samples/javascript && node ../../tsc-lsif/lib/main.js -p ./jsconfig.json  --outputFormat=line"
+		"compile": "tsc -b ./tsconfig.json",
+		"watch": "tsc -b ./tsconfig.json -w",
+		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ..",
+		"lsif-ts": "cd samples/typescript && node ../../tsc/lib/main.js -p ./tsconfig.json  --outputFormat=line",
+		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc/lib/main.js -p ./client/tsconfig.json --projectRoot . --outputFormat=line",
+		"lsif-js": "cd samples/javascript && node ../../tsc/lib/main.js -p ./jsconfig.json --outputFormat=line"
 	}
 }
