@@ -1,7 +1,7 @@
 {
 	"name": "lsif-tsc",
 	"description": "Tool to create an LSIF dump for TypeScript projects.",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -21,7 +21,7 @@
 		"typescript": "^3.3.4000",
 		"uuid": "^3.3.2",
 		"vscode-uri": "^1.0.6",
-		"lsif-protocol": "0.2.1"
+		"lsif-protocol": "0.2.2"
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
