@@ -80,7 +80,7 @@ class ExportLinker {
 	}
 
 	public handleMoniker(moniker: Moniker): void {
-		if (moniker.schema !== TscMoniker.schema) {
+		if (moniker.scheme !== TscMoniker.scheme) {
 			emit(moniker);
 			return;
 		}
@@ -91,7 +91,7 @@ class ExportLinker {
 			} else {
 				moniker.identifier = NpmMoniker.create(this.packageInfo.name, tscMoniker.path, tscMoniker.name);
 			}
-			moniker.schema = NpmMoniker.schema;
+			moniker.scheme = NpmMoniker.schema;
 			this.emitPackageInformation(moniker);
 		}
 		emit(moniker);
@@ -172,7 +172,7 @@ class ImportLinker {
 		this.monikers.delete(edge.outV);
 
 		if (moniker !== undefined) {
-			if (moniker.kind === MonikerKind.import && moniker.schema === TscMoniker.schema && packageInfo !== undefined && packageInfo.manager === NpmMoniker.schema) {
+			if (moniker.kind === MonikerKind.import && moniker.scheme === TscMoniker.scheme && packageInfo !== undefined && packageInfo.manager === NpmMoniker.schema) {
 				const tscMoniker = TscMoniker.parse(moniker.identifier);
 				if (TscMoniker.hasPath(tscMoniker)) {
 					const packageJson = this.getPackageJson(packageInfo);
@@ -185,7 +185,7 @@ class ImportLinker {
 						} else {
 							moniker.identifier = NpmMoniker.create(packageInfo.name, relativePath, tscMoniker.name);
 						}
-						moniker.schema = NpmMoniker.schema;
+						moniker.scheme = NpmMoniker.schema;
 					}
 				}
 			}

@@ -378,9 +378,9 @@ export interface Moniker extends V {
 	kind: MonikerKind;
 
 	/**
-	 * The schema of the moniker. For example tsc or .Net
+	 * The scheme of the moniker. For example tsc or .Net
 	 */
-	schema: string;
+	scheme: string;
 
 	/**
 	 * The identifier of the moniker. The value is opaque in LSIF however

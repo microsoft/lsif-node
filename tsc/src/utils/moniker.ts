@@ -20,7 +20,7 @@ export interface TscMoniker {
 
 export namespace TscMoniker {
 
-	export const schema: string = 'tsc';
+	export const scheme: string = 'tsc';
 
 	export function parse(identifier: string): TscMoniker {
 		let index = identifier.lastIndexOf(separator);

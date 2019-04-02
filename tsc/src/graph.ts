@@ -75,13 +75,13 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public moniker(kind: MonikerKind, schema: string, identifier: string): Moniker {
+	public moniker(kind: MonikerKind, scheme: string, identifier: string): Moniker {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.moniker,
 			kind,
-			schema,
+			scheme,
 			identifier
 		};
 	}
