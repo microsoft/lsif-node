@@ -23,7 +23,6 @@ import {
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
 import { Emitter } from './emitters/emitter';
-import { Options } from './main';
 
 namespace Converter {
 

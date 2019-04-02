@@ -15,18 +15,40 @@ import { Emitter, EmitterModule } from './emitters/emitter';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
 
 interface Options {
+	help: boolean;
+	version: boolean;
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
-	projectRoot?: string;
+	projectRoot: string | undefined;
 	noContents: boolean;
 }
 
-export namespace Options {
+interface OptionDescription {
+	id: keyof Options;
+	type: 'boolean' | 'string';
+	alias?: string;
+	default: any;
+	values?: string[];
+	description: string;
+}
+
+namespace Options {
 	export const defaults: Options = {
+		help: false,
+		version: false,
 		outputFormat: 'line',
 		id: 'number',
+		projectRoot: undefined,
 		noContents: false
 	};
+	export const descriptions: OptionDescription[] = [
+		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
+		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
+		{ id: 'outputFormat', type: 'string', alias: 'o', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
+		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
+		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file'},
+		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
+	];
 }
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
@@ -178,12 +200,48 @@ function processProject(config: ts.ParsedCommandLine, options: Options, emitter:
 
 export function main(this: void, args: string[]) {
 
-	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
-		string: [
-			'outputFormat', 'id', 'projectRoot'
-		],
-		boolean: [ 'noContents' ]
-	}));
+	let minOpts: minimist.Opts = {
+		string: [],
+		boolean: [],
+		default: Object.create(null),
+		alias: Object.create(null)
+	};
+
+	let longestId: number = 0;
+	for (let description of Options.descriptions) {
+		longestId = Math.max(longestId, description.id.length);
+		minOpts[description.type] = description.id;
+		minOpts.default![description.id] = description.default;
+		if (description.alias !== undefined) {
+			minOpts.alias![description.id] = [description.alias];
+		}
+	}
+
+	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
+
+	if (options.version) {
+		console.log(require('../package.json').version);
+		return;
+	}
+
+	let buffer: string[] = [];
+	if (options.help) {
+		buffer.push(`Languag Server Index Format tool for TypeScript`);
+		buffer.push(`Version: ${require('../package.json').version}`);
+		buffer.push('');
+		buffer.push(`Usage: lsif-tsc [options][tsc options]`);
+		buffer.push('');
+		buffer.push(`Options`);
+		for (let description of Options.descriptions) {
+			if (description.alias !== undefined) {
+				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
+			} else {
+				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
+			}
+		}
+		console.log(buffer.join('\n'));
+		return;
+	}
 
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
