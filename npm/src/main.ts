@@ -25,15 +25,17 @@ const __out = process.stdout;
 const __eol = os.EOL;
 
 interface Options extends minimist.ParsedArgs {
-	file?: string;
+	package?: string;
 	projectRoot?: string;
+	file?: string;
 }
 
 export namespace Options {
 	export const defaults: Options = {
 		_: [],
-		file: undefined,
-		projectRoot: undefined
+		package: undefined,
+		projectRoot: undefined,
+		file: undefined
 	};
 }
 
@@ -228,10 +230,10 @@ class ImportLinker {
 export function main(): void {
 	let options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), {
 		string: [
-			'file', 'projectRoot'
+			'package', 'projectRoot', 'file',
 		]
 	}));
-	let packageFile: string | undefined = options._[0];
+	let packageFile: string | undefined = options.package;
 	if (packageFile === undefined) {
 		packageFile = 'package.json'
 	}
