@@ -18,5 +18,8 @@
 	],
 	"references": [
 		{ "path": "../protocol/tsconfig.json"}
-	]
+	],
+	"typeAcquisition": {
+
+	}
 }

@@ -29,7 +29,8 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
-				 "--outputFormat", "line"
+				 "--outputFormat", "line",
+				 "--installTypings"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-require('../lib/main.js').run();
+require('../lib/main.js').main().then(undefined, console.error);

@@ -12,6 +12,7 @@ import * as tss from './typescripts';
 
 import { Id } from 'lsif-protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
+import { installTypings } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
 
 interface Options {
@@ -21,6 +22,7 @@ interface Options {
 	id: 'number' | 'uuid';
 	projectRoot: string | undefined;
 	noContents: boolean;
+	installTypings: boolean;
 }
 
 interface OptionDescription {
@@ -39,7 +41,8 @@ namespace Options {
 		outputFormat: 'line',
 		id: 'number',
 		projectRoot: undefined,
-		noContents: false
+		noContents: false,
+		installTypings: false,
 	};
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
@@ -48,6 +51,7 @@ namespace Options {
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
+		{ id: 'installTypings', type: 'boolean', default: false, description: 'Installs typings for JavaScript npm modules.'}
 	];
 }
 
@@ -104,7 +108,12 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id): ProjectInfo | undefined {
+function noTypingConfiguration(config: ts.ParsedCommandLine): boolean {
+	return config.options.typeRoots === undefined &&
+		config.options.types === undefined;
+}
+
+async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, handledPackages: Set<string>): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -131,6 +140,13 @@ function processProject(config: ts.ParsedCommandLine, options: Options, emitter:
 		options.projectRoot = tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd();
 	}
 	options.projectRoot = tss.normalizePath(options.projectRoot);
+
+	if (options.installTypings && noTypingConfiguration(config)) {
+		await installTypings(handledPackages,
+			options.projectRoot,
+			tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd()
+		)
+	}
 
 	// Bind all symbols
 
@@ -186,7 +202,7 @@ function processProject(config: ts.ParsedCommandLine, options: Options, emitter:
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = processProject(reference.commandLine, options, emitter, idGenerator);
+				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, handledPackages);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -198,7 +214,7 @@ function processProject(config: ts.ParsedCommandLine, options: Options, emitter:
 	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
 }
 
-export function main(this: void, args: string[]) {
+async function run(this: void, args: string[]): Promise<void> {
 
 	let minOpts: minimist.Opts = {
 		string: [],
@@ -250,15 +266,16 @@ export function main(this: void, args: string[]) {
 	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
 		projectRoot = path.join(process.cwd(), projectRoot);
 	}
+	const handled: Set<string> = new Set();
 	emitter.start();
-	processProject(config, options, emitter, idGenerator);
+	await processProject(config, options, emitter, idGenerator, handled);
 	emitter.end();
 }
 
-export function run(): void {
-	main(ts.sys.args);
+export async function main(): Promise<void> {
+	return run(ts.sys.args);
 }
 
 if (require.main === module) {
-	main(ts.sys.args);
+	run(ts.sys.args).then(undefined, console.error);
 }
