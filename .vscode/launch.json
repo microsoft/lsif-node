@@ -9,16 +9,16 @@
 			"request": "launch",
 			"name": "JS Sample",
 			"cwd": "${workspaceFolder}/samples/javascript",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "jsconfig.json",
 				 "--outputFormat", "line"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
@@ -26,16 +26,16 @@
 			"request": "launch",
 			"name": "TS Sample",
 			"cwd": "${workspaceFolder}/samples/typescript",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
@@ -43,34 +43,34 @@
 			"request": "launch",
 			"name": "TS Sample Ref",
 			"cwd": "${workspaceFolder}/samples/typescript-ref",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "client/tsconfig.json",
 				 "--projectRoot", ".",
 				 "--outputFormat", "line"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
 			"type": "node",
 			"request": "launch",
-			"name": "npm-lsif",
-			"program": "${workspaceFolder}/npm-lsif/lib/main.js",
+			"name": "lsif-npm",
+			"program": "${workspaceFolder}/npm/lib/main.js",
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"args": [
 				 "-p", "./tsconfig.json",
 				 "--file", "lsif.json"
 			],
-			"preLaunchTask": "watch:npm-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/npm-lsif/lib/**/*.js"
+				"${workspaceFolder}/npm/lib/**/*.js"
 			]
 		},
 		{
@@ -78,16 +78,16 @@
 			"request": "launch",
 			"name": "LSP Types",
 			"cwd": "${workspaceFolder}../../LanguageServer/Node/types",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
@@ -95,16 +95,16 @@
 			"request": "launch",
 			"name": "LSP JSONRPC",
 			"cwd": "${workspaceFolder}../../LanguageServer/Node/jsonrpc",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/out/**/*.js"
+				"${workspaceFolder}/tsc/lib/out/**/*.js"
 			]
 		},
 		{
@@ -112,50 +112,64 @@
 			"request": "launch",
 			"name": "LSP Protocol",
 			"cwd": "${workspaceFolder}../../LanguageServer/Node/protocol",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "json"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
 			"type": "node",
 			"request": "launch",
 			"name": "VSLS-Guestbook",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"cwd": "${workspaceFolder}/../../connect-demo/vsls-guestbook",
 			"args": [
 				 "-p", "./jsconfig.json",
 				 "--outputFormat", "json"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
 		},
 		{
 			"type": "node",
 			"request": "launch",
 			"name": "VS Code Chat",
-			"program": "${workspaceFolder}/tsc-lsif/lib/main.js",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"cwd": "${workspaceFolder}/../Playgrounds/lsif/vscode-chat",
 			"args": [
 				 "-p", "./tsconfig.json",
 				 "--outputFormat", "json"
 			],
-			"preLaunchTask": "watch:tsc-lsif",
+			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
 			"outputCapture": "std",
 			"outFiles": [
-				"${workspaceFolder}/tsc-lsif/lib/**/*.js"
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Typings",
+			"program": "${workspaceFolder}/typings/lib/main.js",
+			"cwd": "${workspaceFolder}/typings",
+			"args": [],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/typings/lib/**/*.js"
 			]
 		}
 	]
