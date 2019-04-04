@@ -6,7 +6,8 @@
 		"composite": true,
 		"sourceRoot": "../src",
 		"rootDir": "./src",
-		"outDir": "lib"
+		"outDir": "./lib",
+		"tsBuildInfoFile":"./lib/tsconfig.tsbuildInfo"
 	},
 	"include": [
 		"src/**/*.ts"
