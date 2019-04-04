@@ -22,7 +22,7 @@ interface Options {
 	id: 'number' | 'uuid';
 	projectRoot: string | undefined;
 	noContents: boolean;
-	installTypings: boolean;
+	inferTypings: boolean;
 }
 
 interface OptionDescription {
@@ -42,7 +42,7 @@ namespace Options {
 		id: 'number',
 		projectRoot: undefined,
 		noContents: false,
-		installTypings: false,
+		inferTypings: false,
 	};
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
@@ -51,7 +51,7 @@ namespace Options {
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
-		{ id: 'installTypings', type: 'boolean', default: false, description: 'Installs typings for JavaScript npm modules.'}
+		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'}
 	];
 }
 
@@ -136,7 +136,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 	options.projectRoot = tss.normalizePath(options.projectRoot);
 
-	if (options.installTypings) {
+	if (options.inferTypings) {
 		if (config.options.types !== undefined) {
 			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
 			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
