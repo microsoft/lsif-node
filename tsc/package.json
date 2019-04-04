@@ -18,7 +18,7 @@
 	},
 	"dependencies": {
 		"minimist": "^1.2.0",
-		"typescript": "^3.3.4000",
+		"typescript": "^3.4.1",
 		"uuid": "^3.3.2",
 		"vscode-uri": "^1.0.6",
 		"npm": "^6.9.0",

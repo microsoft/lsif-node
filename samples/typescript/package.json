@@ -9,6 +9,5 @@
     "is": "^3.2.1",
     "mobx": "^5.6.0"
   },
-  "devDependencies": {
-  }
+  "devDependencies": {}
 }
