@@ -12,7 +12,7 @@ import * as tss from './typescripts';
 
 import { Id } from 'lsif-protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
-import { installTypings } from './typings';
+import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
 
 interface Options {
@@ -108,12 +108,7 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function noTypingConfiguration(config: ts.ParsedCommandLine): boolean {
-	return config.options.typeRoots === undefined &&
-		config.options.types === undefined;
-}
-
-async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, handledPackages: Set<string>): Promise<ProjectInfo | undefined> {
+async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -141,11 +136,13 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 	options.projectRoot = tss.normalizePath(options.projectRoot);
 
-	if (options.installTypings && noTypingConfiguration(config)) {
-		await installTypings(handledPackages,
-			options.projectRoot,
-			tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd()
-		)
+	if (options.installTypings) {
+		if (config.options.types !== undefined) {
+			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
+			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
+		} else {
+			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
+		}
 	}
 
 	// Bind all symbols
@@ -202,7 +199,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, handledPackages);
+				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, typingsInstaller);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -266,9 +263,8 @@ async function run(this: void, args: string[]): Promise<void> {
 	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
 		projectRoot = path.join(process.cwd(), projectRoot);
 	}
-	const handled: Set<string> = new Set();
 	emitter.start();
-	await processProject(config, options, emitter, idGenerator, handled);
+	await processProject(config, options, emitter, idGenerator, new TypingsInstaller());
 	emitter.end();
 }
 

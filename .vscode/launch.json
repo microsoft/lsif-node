@@ -158,20 +158,6 @@
 			"outFiles": [
 				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
-		},
-		{
-			"type": "node",
-			"request": "launch",
-			"name": "Typings",
-			"program": "${workspaceFolder}/typings/lib/main.js",
-			"cwd": "${workspaceFolder}/typings",
-			"args": [],
-			"preLaunchTask": "npm: watch",
-			"sourceMaps": true,
-			"outputCapture": "std",
-			"outFiles": [
-				"${workspaceFolder}/typings/lib/**/*.js"
-			]
 		}
 	]
 }

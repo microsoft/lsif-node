@@ -12,6 +12,8 @@ import * as npm from 'npm';
 namespace fs {
 	export const exist = promisify(_fs.exists);
 	export const readFile = promisify(_fs.readFile);
+	export const stat = promisify(_fs.stat);
+	export const Stats = _fs.Stats;
 }
 
 interface Dictionary<T> {
@@ -56,63 +58,160 @@ function stripComments(content: string): string {
 	});
 }
 
-function ensureSeparator(directory: string): string {
-	return directory[directory.length - 1] !== path.sep ? `${directory}${path.sep}` : directory;
-}
+export class TypingsInstaller {
 
-export async function installTypings(handled: Set<string>, projectRoot: string, startDirectory: string): Promise<void> {
-	if (startDirectory.length < projectRoot.length) {
-		return;
+	private handledPackages: Set<string>;
+	private handledTsConfig: Set<string>;
+
+	constructor() {
+		this.handledPackages = new Set();
+		this.handledTsConfig = new Set();
 	}
-	projectRoot = path.normalize(projectRoot);
-	startDirectory = path.normalize(startDirectory);
-	if (!ensureSeparator(startDirectory).startsWith(ensureSeparator(projectRoot))) {
-		return;
+
+	private static ensureSeparator(directory: string): string {
+		return directory[directory.length - 1] !== path.sep ? `${directory}${path.sep}` : directory;
 	}
-	while (startDirectory.length >= projectRoot.length) {
-		let packageFile = path.join(startDirectory, 'package.json');
-		if (handled.has(packageFile)) {
+
+	public async installTypings(projectRoot: string, start: string, typings: string[]): Promise<void> {
+		if (typings.length === 0) {
 			return;
 		}
-		if (await fs.exist(packageFile)) {
-			await installTypingsForPackageFile(packageFile);
-			handled.add(packageFile);
+		let stat = await fs.stat(start);
+		let startDirectory: string;
+		let key: string;
+
+		if (stat.isDirectory()) {
+			startDirectory = start;
+			// this has a very very rare possibility of a clash
+			key = path.join(start, typings.join(':'));
+		} else if (stat.isFile()) {
+			startDirectory = path.dirname(start);
+			key = start;
+		} else {
+			return;
 		}
-		startDirectory = path.dirname(startDirectory);
+
+		if (this.handledTsConfig.has(key)) {
+			return;
+		}
+		if (startDirectory.length < projectRoot.length) {
+			return;
+		}
+		projectRoot = path.normalize(projectRoot);
+
+		typings = typings.map(typing => typing.startsWith('@types/') ? typing : `@types/${typing}`);
+
+		while (startDirectory.length >= projectRoot.length) {
+			let packageFile = path.join(startDirectory, 'package.json');
+			if (await fs.exist(packageFile)) {
+				typings = await this.filterTypingsToInstall(packageFile, typings);
+				if (typings.length === 0) {
+					return;
+				}
+				await this.loadNpm(packageFile);
+				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
+				this.handledTsConfig.add(key);
+				return;
+			}
+			startDirectory = path.dirname(startDirectory);
+		}
 	}
-}
 
-async function installTypingsForPackageFile(packageFile: string): Promise<void> {
+	public async guessTypings(projectRoot: string, startDirectory: string): Promise<void> {
+		if (startDirectory.length < projectRoot.length) {
+			return;
+		}
+		projectRoot = path.normalize(projectRoot);
+		startDirectory = path.normalize(startDirectory);
 
-	const prefix = path.dirname(packageFile);
-	const typings: Set<string> = new Set();
-	const modules: Map<string, string> = new Map();
-	const packageJson: PackageJson = JSON.parse(stripComments(await fs.readFile(packageFile, 'utf8')));
+		if (!TypingsInstaller.ensureSeparator(startDirectory).startsWith(TypingsInstaller.ensureSeparator(projectRoot))) {
+			return;
+		}
 
-	if (packageJson.devDependencies) {
-		for (let pack of Object.keys(packageJson.devDependencies)) {
-			if (pack.startsWith('@types/')) {
-				typings.add(pack);
+		while (startDirectory.length >= projectRoot.length) {
+			let packageFile = path.join(startDirectory, 'package.json');
+			if (this.handledPackages.has(packageFile)) {
+				return;
 			}
+			if (await fs.exist(packageFile)) {
+				let typings = await this.findTypingsToInstall(packageFile);
+				if (typings.length === 0) {
+					continue;
+				}
+				await this.loadNpm(packageFile);
+				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
+				this.handledPackages.add(packageFile);
+			}
+			startDirectory = path.dirname(startDirectory);
 		}
 	}
-	if (packageJson.dependencies !== undefined) {
-		for (let pack of Object.keys(packageJson.dependencies)) {
-			if (pack.startsWith('@types/')) {
-				typings.add(pack);
+
+	private async findTypingsToInstall(packageFile: string): Promise<string[]> {
+
+		const typings: Set<string> = new Set();
+		const toInstall: string[] = [];
+		const packageJson: PackageJson = JSON.parse(stripComments(await fs.readFile(packageFile, 'utf8')));
+
+		if (packageJson.devDependencies) {
+			for (let pack of Object.keys(packageJson.devDependencies)) {
+				if (pack.startsWith('@types/')) {
+					typings.add(pack);
+				}
 			}
 		}
-		for (let pack of Object.keys(packageJson.dependencies)) {
-			if (pack.startsWith('@types/')) {
-				continue;
+		if (packageJson.dependencies !== undefined) {
+			for (let pack of Object.keys(packageJson.dependencies)) {
+				if (pack.startsWith('@types/')) {
+					typings.add(pack);
+				}
 			}
-			if (!typings.has(`@types/${pack}`)) {
-				modules.set(pack, packageJson.dependencies[pack]);
+			for (let pack of Object.keys(packageJson.dependencies)) {
+				if (pack.startsWith('@types/')) {
+					continue;
+				}
+				const typing = `@types/${pack}`;
+				if (!typings.has(typing)) {
+					toInstall.push(typing);
+				}
 			}
 		}
+
+		if (toInstall.length === 0) {
+			return [];
+		}
+		return toInstall;
 	}
 
-	if (modules.size > 0) {
+	private async filterTypingsToInstall(packageFile: string, toInstall: string[]): Promise<string[]> {
+
+		const typings: Set<string> = new Set();
+		const packageJson: PackageJson = JSON.parse(stripComments(await fs.readFile(packageFile, 'utf8')));
+
+		if (packageJson.devDependencies) {
+			for (let pack of Object.keys(packageJson.devDependencies)) {
+				if (pack.startsWith('@types/')) {
+					typings.add(pack);
+				}
+			}
+		}
+		if (packageJson.dependencies !== undefined) {
+			for (let pack of Object.keys(packageJson.dependencies)) {
+				if (pack.startsWith('@types/')) {
+					typings.add(pack);
+				}
+			}
+		}
+		let result: string[] = [];
+		for (let typing of toInstall) {
+			if (!typings.has(typing)) {
+				result.push(typing);
+			}
+		}
+		return result;
+	}
+
+	private async loadNpm(packageFile: string): Promise<void> {
+		const prefix = path.dirname(packageFile);
 		await new Promise((resolve, reject) => {
 			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix }, (error, config) => {
 				if (error) {
@@ -122,28 +221,48 @@ async function installTypingsForPackageFile(packageFile: string): Promise<void> 
 				}
 			})
 		});
+	}
 
-		for (let module of modules.keys()) {
+	private async validateTypingsOnNpm(typings: string[]): Promise<string[]> {
+		if (typings.length === 0) {
+			return typings;
+		}
+		const promises: Promise<string | undefined>[] = [];
+		for (let typing of typings) {
 			try {
-				await new Promise((resolve, reject) => {
-					(npm.commands.view as ViewSignature)([`@types/${module}`], true, (error: Error | undefined | null, result: object) => {
+				promises.push(new Promise<string | undefined>((resolve, reject) => {
+					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
 						if (error) {
-							reject(error);
+							resolve(undefined)
 						}
-						resolve(result);
+						resolve(typing);
 					});
-				});
-				await new Promise((resolve, reject) => {
-					npm.commands.install([`@types/${module}`], (error, result) => {
-						if (error) {
-							reject(error);
-						}
-						resolve(result);
-					});
-				});
+				}));
 			} catch (error) {
 				// typing doesn't exist. Ignore the error
 			}
 		}
+		const all = await Promise.all(promises);
+		const result: string[] = [];
+		for (let elem of all) {
+			if (elem !== undefined) {
+				result.push(elem);
+			}
+		}
+		return result;
+	}
+
+	private async doInstallTypingsFromNpm(typings: string[]): Promise<void> {
+		if (typings.length === 0) {
+			return;
+		}
+		return new Promise((resolve, reject) => {
+			npm.commands.install(typings, (error, result) => {
+				if (error) {
+					reject(error);
+				}
+				resolve(result);
+			});
+		});
 	}
 }
