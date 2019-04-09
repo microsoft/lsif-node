@@ -388,7 +388,9 @@ export class EdgeBuilder {
 
 	public item(from: ReferenceResult, to: ReferenceResult): item;
 	public item(from: ReferenceResult, to: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
-	public item(from: ReferenceResult, to: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
+	public item(from: ImplementationResult, to: ImplementationResult): item;
+	public item(from: ImplementationResult, to: Range): item;
+	public item(from: ReferenceResult | ImplementationResult, to: Range | ReferenceResult | ImplementationResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
 		switch (from.label) {
 			case 'referenceResult':
 				switch (to.label) {
@@ -407,6 +409,28 @@ export class EdgeBuilder {
 							type: ElementTypes.edge,
 							label: EdgeLabels.item,
 							property: ItemEdgeProperties.referenceResults,
+							outV: from.id,
+							inV: to.id
+						}
+					}
+				}
+			case 'implementationResult':
+				switch(to.label) {
+					case 'range':
+						return {
+							id: this.nextId(),
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
+							property: ItemEdgeProperties.results,
+							outV: from.id,
+							inV: to.id
+						}
+					case 'implementationResult': {
+						return {
+							id: this.nextId(),
+							type: ElementTypes.edge,
+							label: EdgeLabels.item,
+							property: ItemEdgeProperties.implementationResults,
 							outV: from.id,
 							inV: to.id
 						}

@@ -639,7 +639,7 @@ export interface ImplementationResult extends V {
 	/**
 	 * The ranges and locations belong to the implementation result.
 	 */
-	result?: (RangeId | lsp.Location)[];
+	results?: (RangeId | lsp.Location)[];
 
 	/**
 	 * The other implementation results belonging to this result.
@@ -684,7 +684,7 @@ export enum EdgeLabels {
 	textDocument_typeDefinition = 'textDocument/typeDefinition',
 	textDocument_hover = 'textDocument/hover',
 	textDocument_references = 'textDocument/references',
-	textDocument_implementation = 'textDocument/implementatio',
+	textDocument_implementation = 'textDocument/implementation',
 }
 
 /**
@@ -715,6 +715,7 @@ export enum ItemEdgeProperties {
 	definitions = 'definitions',
 	references =  'references',
 	referenceResults = 'referenceResults',
+	results = 'results',
 	implementationResults = 'implementationResults'
 }
 
@@ -746,7 +747,7 @@ export type refersTo = E<Range, ResultSet, EdgeLabels.refersTo>;
  * - `ExportResult` -> `ExportResultItem`
  * - `ExternalImportResult` -> `ExternalImportItem`
  */
-export type item = ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult>;
+export type item = ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> | ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult>;
 
 /**
  * An edge associating a range with a moniker. The relationship exists between:

@@ -17,7 +17,7 @@ import * as tss from './typescripts';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -367,6 +367,7 @@ abstract class SymbolItem {
 	public _resultSet: ResultSet | undefined;
 	public definitionResult: DefinitionResult | undefined;
 	public _referenceResult:  ReferenceResult | undefined;
+	public _implementationResult: ImplementationResult | undefined;
 
 	protected constructor(public id: string, protected context: SymbolItemContext, public tsSymbol: ts.Symbol) {
 	}
@@ -390,6 +391,7 @@ abstract class SymbolItem {
 		let declarations: ts.Declaration[] | undefined = this.tsSymbol.getDeclarations();
 		if (declarations !== undefined && declarations.length > 0) {
 			this.ensureReferenceResult();
+			this.ensureImplementationResult();
 			this.initializeDeclarations(declarations);
 		} else {
 			this.initializeNoDeclarartions();
@@ -558,6 +560,47 @@ abstract class SymbolItem {
 		this.context.emit(this.context.edge.references(this.resultSet, result));
 	}
 
+	private ensureImplementationResult(): void {
+		if (this._implementationResult !== undefined) {
+			return;
+		}
+		this.resolveImplementationResult();
+	}
+
+	private resolveImplementationResult(): void {
+		let declarations = this.tsSymbol.getDeclarations();
+		if (declarations === undefined || declarations.length === 0) {
+			this._implementationResult = this.createImplementationResult();
+		}
+		this._implementationResult = this.doResolveImplementationResult(this.resolveEmittingNode());
+	}
+
+	protected doResolveImplementationResult(emittingNode: ts.Node | undefined): ImplementationResult {
+		if (emittingNode === undefined) {
+			return this.createImplementationResult();
+		}
+		return this.createImplementationResult(emittingNode);
+	}
+
+	protected createImplementationResult(): ImplementationResult;
+	protected createImplementationResult(emittingNode: ts.Node): ImplementationResult;
+	protected createImplementationResult(arg0?: any): ImplementationResult {
+		let implementationResult: ImplementationResult;
+
+		if (tss.isNode(arg0)) {
+			implementationResult = this.context.vertex.implementationResult();
+			implementationResult.results = [];
+			this.context.emitOnEndVisit(arg0, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult)]);
+		}
+		else {
+			implementationResult = this.context.vertex.implementationResult();
+			this.context.emit(implementationResult);
+			this.context.emit(this.context.edge.implementation(this.resultSet, implementationResult));
+		}
+
+		return implementationResult;
+	}
+
 	protected emitEdgeToForeignReferenceResult(from: ResultSet, to: ReferenceResult): void {
 		let emittingNode: ts.Node | undefined;
 		let edge = this.context.edge.references(from, to);
@@ -669,6 +712,20 @@ abstract class SymbolItem {
 		} else {
 			this.referenceResult.declarations.push(definition.id);
 		}
+
+		// If this is not an interface, each declaration is an implementation result
+		if (!MemberContainerItem.isInterface(this.tsSymbol) &&
+			// If this is a method and the symbol kind is NOT method, then it is not an implementation
+			!(MemberContainerItem.isMethodSymbol(this.tsSymbol) && definition.tag.kind !== lsp.SymbolKind.Method) &&
+			this._implementationResult
+		) {
+			if(this._implementationResult.results === undefined) {
+				this.context.emit(this.context.edge.item(this._implementationResult, definition));
+			}
+			else {
+				this._implementationResult.results.push(definition.id);
+			}
+		}
 	}
 
 	protected recordReference(reference: ReferenceRange): void {
@@ -730,6 +787,24 @@ abstract class MemberContainerItem extends SymbolItem {
 			baseSymbols.push(baseSymbol);
 		}
 		this.baseSymbols = baseSymbols;
+	}
+
+	protected recordDeclaration(definition: DefinitionRange): void {
+		super.recordDeclaration(definition);
+
+		// If we have base symbols, add our declaration to their implementation results
+		if (this.baseSymbols) {
+			this.baseSymbols.forEach(baseSymbol => {
+				if (baseSymbol._implementationResult) {
+					if(baseSymbol._implementationResult.results === undefined) {
+						this.context.emit(this.context.edge.item(baseSymbol._implementationResult, definition));
+					}
+					else {
+						baseSymbol._implementationResult.results.push(definition.id);
+					}
+				}
+			});
+		}
 	}
 
 	protected abstract getBaseSymbols(): ts.Symbol[]  | undefined;
@@ -849,6 +924,19 @@ class MethodSymbolItem extends SymbolItem {
 		super(id, context, tsSymbol);
 	}
 
+	private findBaseMethods(): MethodSymbolItem[] {
+		let classSymbol = this.getMemberContainer();
+		if (classSymbol === undefined) {
+			return [];
+		}
+		let methodName = this.tsSymbol.getName();
+		let baseMethods = classSymbol.findBaseMembers(methodName);
+		if (baseMethods === undefined) {
+			return [];
+		}
+		return baseMethods;
+	}
+
 	protected doResolveReferenceResult(emittingNode: ts.Node): ReferenceResult {
 		if (SymbolItem.isPrivate(this.tsSymbol)) {
 			return super.doResolveReferenceResult(emittingNode);
@@ -858,14 +946,8 @@ class MethodSymbolItem extends SymbolItem {
 		}
 		// We have a method that could be overridden. So try to find
 		// a base method with the same name.
-		let classSymbol = this.getMemberContainer();
-		if (classSymbol === undefined) {
-			return this.createReferenceResult();
-		}
-		let methodName = this.tsSymbol.getName();
-		let baseMethods = classSymbol.findBaseMembers(methodName);
-		// No base Methods
-		if (baseMethods === undefined || baseMethods.length === 0) {
+		let baseMethods = this.findBaseMethods();
+		if (baseMethods.length === 0) {
 			return this.createReferenceResult();
 		}
 		// We do have base methods. Easy case only one. Then reuse what the
@@ -897,6 +979,39 @@ class MethodSymbolItem extends SymbolItem {
 		return referenceResult;
 	}
 
+	protected doResolveImplementationResult(emittingNode: ts.Node): ImplementationResult {
+		// Implementation is the same as declaration
+		if (SymbolItem.isPrivate(this.tsSymbol)) {
+			return super.doResolveImplementationResult(emittingNode);
+		}
+		if (SymbolItem.isStatic(this.tsSymbol)) {
+			return super.doResolveImplementationResult(emittingNode);
+		}
+
+		// We could be implementing another method
+		// Look for base method
+		let baseMethods = this.findBaseMethods();
+		if (baseMethods.length === 0) {
+			return super.doResolveImplementationResult(emittingNode);
+		}
+
+		// We implement some base method
+		let implementationResult = this.context.vertex.implementationResult();
+		implementationResult.results = [];
+
+		// In this case, point all base methods to our results as well
+		let toEmit: Edge[] = [];
+		baseMethods.forEach(baseMethod => {
+			if (baseMethod._implementationResult) {
+				toEmit.push(this.context.edge.item(baseMethod._implementationResult, implementationResult));
+			}
+		});
+
+		this.context.emitOnEndVisit(emittingNode, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult), ...toEmit]);
+
+		return implementationResult;
+	}
+
 	private getMemberContainer(): MemberContainerItem | undefined {
 		let tsSymbol = this.tsSymbol;
 		let symbolParent = tss.getSymbolParent(tsSymbol);
@@ -916,7 +1031,6 @@ class MethodSymbolItem extends SymbolItem {
 			this.baseReferenceResults.forEach(result =>  {
 				this.context.emit(this.context.edge.item(result, definition, ItemEdgeProperties.definitions))
 			});
-			return;
 		}
 	}
 
