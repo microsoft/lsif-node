@@ -639,7 +639,7 @@ export interface ImplementationResult extends V {
 	/**
 	 * The ranges and locations belong to the implementation result.
 	 */
-	results?: (RangeId | lsp.Location)[];
+	result?: (RangeId | lsp.Location)[];
 
 	/**
 	 * The other implementation results belonging to this result.

@@ -589,7 +589,7 @@ abstract class SymbolItem {
 
 		if (tss.isNode(arg0)) {
 			implementationResult = this.context.vertex.implementationResult();
-			implementationResult.results = [];
+			implementationResult.result = [];
 			this.context.emitOnEndVisit(arg0, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult)]);
 		}
 		else {
@@ -719,11 +719,11 @@ abstract class SymbolItem {
 			!(MemberContainerItem.isMethodSymbol(this.tsSymbol) && definition.tag.kind !== lsp.SymbolKind.Method) &&
 			this._implementationResult
 		) {
-			if(this._implementationResult.results === undefined) {
+			if(this._implementationResult.result === undefined) {
 				this.context.emit(this.context.edge.item(this._implementationResult, definition));
 			}
 			else {
-				this._implementationResult.results.push(definition.id);
+				this._implementationResult.result.push(definition.id);
 			}
 		}
 	}
@@ -796,11 +796,11 @@ abstract class MemberContainerItem extends SymbolItem {
 		if (this.baseSymbols) {
 			this.baseSymbols.forEach(baseSymbol => {
 				if (baseSymbol._implementationResult) {
-					if(baseSymbol._implementationResult.results === undefined) {
+					if(baseSymbol._implementationResult.result === undefined) {
 						this.context.emit(this.context.edge.item(baseSymbol._implementationResult, definition));
 					}
 					else {
-						baseSymbol._implementationResult.results.push(definition.id);
+						baseSymbol._implementationResult.result.push(definition.id);
 					}
 				}
 			});
@@ -997,7 +997,7 @@ class MethodSymbolItem extends SymbolItem {
 
 		// We implement some base method
 		let implementationResult = this.context.vertex.implementationResult();
-		implementationResult.results = [];
+		implementationResult.result = [];
 
 		// In this case, point all base methods to our results as well
 		let toEmit: Edge[] = [];

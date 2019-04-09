@@ -224,9 +224,9 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 							id: element.id,
 							label: element.label,
 						};
-						if (element.results) {
+						if (element.result) {
 							gs.properties =  {
-								result: [ { id: idGenerator(), value: JSON.stringify(element.results, undefined, 0) }]
+								result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0) }]
 							};
 						}
 						vertices.set(gs.id, gs);
