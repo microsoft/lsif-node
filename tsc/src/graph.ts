@@ -421,7 +421,7 @@ export class EdgeBuilder {
 							id: this.nextId(),
 							type: ElementTypes.edge,
 							label: EdgeLabels.item,
-							property: ItemEdgeProperties.results,
+							property: ItemEdgeProperties.result,
 							outV: from.id,
 							inV: to.id
 						}
