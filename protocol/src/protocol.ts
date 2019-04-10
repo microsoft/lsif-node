@@ -715,7 +715,7 @@ export enum ItemEdgeProperties {
 	definitions = 'definitions',
 	references =  'references',
 	referenceResults = 'referenceResults',
-	results = 'results',
+	result = 'result',
 	implementationResults = 'implementationResults'
 }
 
