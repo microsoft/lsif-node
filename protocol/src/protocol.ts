@@ -5,6 +5,8 @@
 
 import * as lsp from 'vscode-languageserver-protocol';
 
+export const Version: string = '0.3.0';
+
 /**
  * An `Id` to identify a vertex or an edge.
  */
@@ -266,6 +268,24 @@ export interface MetaData extends V {
 	 */
 	version: string;
 
+	/**
+	 * The encoding used to denote the character offset into a line. The LSP requires
+	 * this to be `utf-16` but we should be more flexible with the LSIF.
+	 */
+	offsetEncoding: string;
+
+	/**
+	 * The project root to compute this dump.
+	 */
+	projectRoot?: string;
+
+	/**
+	 * Information about the tool that created the dump
+	 */
+	toolInfo?: {
+		name: string;
+		args?: string[];
+	}
 }
 
 export type AdditionDataValueType = string | number | boolean | string[] | number[] | boolean[];
