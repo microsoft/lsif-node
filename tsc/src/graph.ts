@@ -39,12 +39,13 @@ export class VertexBuilder {
 		return this.options.emitSource;
 	}
 
-	public metaData(version: string): MetaData {
+	public metaData(version: string, projectRoot?: string): MetaData {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.metaData,
 			version,
+			projectRoot
 		}
 	}
 

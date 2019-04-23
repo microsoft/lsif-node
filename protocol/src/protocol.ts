@@ -267,7 +267,7 @@ export interface MetaData extends V {
 	version: string;
 
 	/**
-	 * The project root to compute this dump.
+	 * The project root (in form of a URI) used to compute this dump.
 	 */
 	projectRoot?: string;
 

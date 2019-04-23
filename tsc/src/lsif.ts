@@ -1141,9 +1141,9 @@ class Visitor implements SymbolItemContext {
 		this.dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
 		})
-		this.emit(this.vertex.metaData(Version));
-		this.project = this.vertex.project();
 		this.projectRoot = options.projectRoot;
+		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
+		this.project = this.vertex.project();
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.outDir !== undefined) {
