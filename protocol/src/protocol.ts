@@ -266,6 +266,18 @@ export interface MetaData extends V {
 	 */
 	version: string;
 
+	/**
+	 * The project root to compute this dump.
+	 */
+	projectRoot?: string;
+
+	/**
+	 * Information about the tool that created the dump
+	 */
+	toolInfo?: {
+		name: string;
+		args?: string[];
+	}
 }
 
 export type AdditionDataValueType = string | number | boolean | string[] | number[] | boolean[];
