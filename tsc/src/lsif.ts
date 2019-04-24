@@ -2,8 +2,6 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-const Version: string = "0.2.0";
-
 import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
@@ -17,7 +15,7 @@ import * as tss from './typescripts';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult, Version
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
