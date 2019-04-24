@@ -23,6 +23,12 @@ try {
 	}
 	shell.ln('-s', path.join('..', '..', 'tsc'), 'lsif-tsc');
 
+	process.chdir(path.join(root, 'sqlite', 'node_modules'));
+	if (fs.existsSync('lsif-protocol')) {
+		shell.rm('-rf', 'lsif-protocol');
+	}
+	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
+
 } finally {
 	process.chdir(current);
 }

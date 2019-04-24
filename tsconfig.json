@@ -4,13 +4,15 @@
 	},
 	"references": [
 		{ "path": "./tsc/tsconfig.json" },
-		{ "path": "./npm/tsconfig.json" }
+		{ "path": "./npm/tsconfig.json" },
+		{ "path": "./sqlite/tsconfig.json" }
 	],
 	"exclude": [
 		"node_modules",
 		"samples",
 		"protocol",
 		"npm",
-		"tsc"
+		"tsc",
+		"sqlite"
 	]
 }
