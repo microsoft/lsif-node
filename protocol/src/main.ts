@@ -7,3 +7,8 @@ import * as lsp from 'vscode-languageserver-protocol';
 export { lsp };
 
 export * from './protocol';
+
+export const Version = function () {
+	let packageJson = require('../package.json');
+	return packageJson.version;
+}();
