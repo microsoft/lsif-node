@@ -28,6 +28,7 @@ export enum ElementTypes {
  */
 export enum VertexLabels {
 	metaData = 'metaData',
+	event = '$event',
 	project = 'project',
 	range = 'range',
 	location = 'location',
@@ -55,6 +56,52 @@ export type Uri = string;
 export interface V extends Element {
 	type: ElementTypes.vertex;
 	label: VertexLabels;
+}
+
+/**
+ * The event kinds
+ */
+export enum EventKind {
+	begin = 'begin',
+	end = 'end'
+}
+
+/**
+ * The event scopes
+ */
+export enum EventScope {
+	project = 'project',
+	document = 'document'
+}
+
+export interface Event extends V {
+	label: VertexLabels.event;
+
+	/**
+	 * The event kind.
+	 */
+	kind: EventKind;
+
+	/**
+	 * The event scope.
+	 */
+	scope: EventScope;
+}
+
+export interface ProjectEvent extends Event {
+
+	/**
+	 * The project URI this event relates to.
+	 */
+	data: Uri;
+}
+
+export interface DocumentEvent extends Event {
+
+	/**
+	 * The document URI this event relates to.
+	 */
+	data: Uri;
 }
 
 /**
@@ -269,7 +316,7 @@ export interface MetaData extends V {
 	/**
 	 * The project root (in form of a URI) used to compute this dump.
 	 */
-	projectRoot?: string;
+	projectRoot?: Uri;
 
 	/**
 	 * Information about the tool that created the dump
@@ -278,18 +325,6 @@ export interface MetaData extends V {
 		name: string;
 		args?: string[];
 	}
-}
-
-export type AdditionDataValueType = string | number | boolean | string[] | number[] | boolean[];
-export interface AdditionalData {
-	[key: string]: AdditionDataValueType | AdditionalData | AdditionalData[];
-}
-
-/**
- * A document tag allows Indexers to tag documents for special
- * purposes
- */
-export interface ProjectData extends AdditionalData {
 }
 
 /**
@@ -314,21 +349,9 @@ export interface Project extends V {
 	resource?: Uri;
 
 	/**
-	 * Optional project data specific to the programming language.
-	 */
-	data?: ProjectData;
-
-	/**
 	 * Optional the content of the project file, `base64` encoded.
 	 */
 	contents?: string;
-}
-
-/**
- * A document tag allows Indexers to tag documents for special
- * purposes
- */
-export interface DocumentData extends AdditionalData {
 }
 
 export type DocumentId = Id;
@@ -353,11 +376,6 @@ export interface Document extends V {
 	 * (https://microsoft.github.io/language-server-protocol/specification)
 	 */
 	languageId: string;
-
-	/**
-	 * Optional document data specific to the programming language.
-	 */
-	data?: DocumentData;
 
 	/**
 	 * Optional the content of the document, `based64` encoded
@@ -418,7 +436,7 @@ export interface PackageInformation extends V {
 	/**
 	 * A uri pointing to the location of the file describing the package.
 	 */
-	uri?: string;
+	uri?: Uri;
 
 	/**
 	 * Optional the content of the document, `based64` encoded
@@ -535,7 +553,7 @@ export interface DeclarationResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: (RangeId | lsp.Location)[];
+	result: (RangeId | lsp.Location)[];
 }
 
 /**
@@ -550,7 +568,7 @@ export interface DefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: (RangeId | lsp.Location)[];
+	result: (RangeId | lsp.Location)[];
 }
 
 /**
@@ -566,7 +584,7 @@ export interface TypeDefinitionResult extends V {
 	/**
 	 * The actual result.
 	 */
-	result?: (RangeId | lsp.Location)[];
+	result: (RangeId | lsp.Location)[];
 }
 
 /**

@@ -495,7 +495,6 @@ Compressor.registerVertexCompressor(VertexLabels.location, locationCompressor);
 const projectCompressor = new GenericCompressor<Project>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('kind', next()),
 	GenericCompressorProperty.scalar('resource', next()),
-	GenericCompressorProperty.scalar('data', next()),
 	GenericCompressorProperty.scalar('contents', next())
 ]);
 Compressor.registerVertexCompressor(VertexLabels.project, projectCompressor);
@@ -503,7 +502,6 @@ Compressor.registerVertexCompressor(VertexLabels.project, projectCompressor);
 const documentCompressor = new GenericCompressor<Document>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('uri', next()),
 	GenericCompressorProperty.scalar('languageId', next()),
-	GenericCompressorProperty.raw('data', next()),
 	GenericCompressorProperty.scalar('contents', next())
 ]);
 Compressor.registerVertexCompressor(VertexLabels.document, documentCompressor);

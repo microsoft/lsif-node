@@ -147,6 +147,8 @@ namespace Converter {
 	}
 }
 
+
+
 interface SymbolItemContext {
 	vertex: VertexBuilder;
 	edge: EdgeBuilder;

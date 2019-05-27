@@ -13,7 +13,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, Uri, DocumentEvent, ProjectEvent
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -47,6 +47,20 @@ export class VertexBuilder {
 			version,
 			projectRoot
 		}
+	}
+
+	public event(kind: EventKind, scope: EventScope.project, data: Uri): ProjectEvent;
+	public event(kind: EventKind, scope: EventScope.document, data: Uri): DocumentEvent;
+	public event(kind: EventKind, scope: EventScope, data: Uri): Event {
+		let result: ProjectEvent | DocumentEvent = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.event,
+			kind,
+			scope,
+			data
+		};
+		return result;
 	}
 
 	public project(contents?: string): Project {
