@@ -1,10 +1,11 @@
-import * as mobx from 'mobx';
+export function func(): void {
+}
 
-let map: mobx.ObservableMap = new mobx.ObservableMap();
+// import * as mobx from 'mobx';
+
+// let map: mobx.ObservableMap = new mobx.ObservableMap();
 
 
-// export function func(): void {
-// }
 
 // export class Emitter {
 // 	private doEmit() {

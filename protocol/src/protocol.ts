@@ -682,6 +682,8 @@ export interface ImplementationResult extends V {
  */
 export type Vertex =
 	MetaData |
+	ProjectEvent |
+	DocumentEvent |
 	Project |
 	Document |
 	Moniker |
@@ -702,6 +704,7 @@ export type Vertex =
 export enum EdgeLabels {
 	contains = 'contains',
 	item = 'item',
+	belongsTo = 'belongsTo',
 	refersTo = 'refersTo',
 	moniker = 'moniker',
 	packageInformation = 'packageInformation',
@@ -760,6 +763,14 @@ export interface ItemEdge<S extends V, T extends V> extends E<S, T, EdgeLabels.i
  * - `Document` -> `Range`
  */
 export type contains = E<Project, Document, EdgeLabels.contains> | E<Document, Range, EdgeLabels.contains>;
+
+/**
+ * An edge associating a result partition with a document. The relationship exists between:
+ *
+ * - `DeclarationResult | DefinitionResult | ReferenceResult` -> `Document`
+ */
+export type belongsTo = E<DeclarationResult | DefinitionResult | ReferenceResult, Document, EdgeLabels.belongsTo>;
+
 
 /**
  * An edge associating a range with a result set. The relationship exists between:
@@ -879,12 +890,14 @@ export type Edge =
 	contains |
 	item |
 	refersTo |
+	belongsTo |
 	moniker |
 	packageInformation |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
 	textDocument_documentLink |
 	textDocument_diagnostic |
+	textDocument_declaration |
 	textDocument_definition |
 	textDocument_typeDefinition |
 	textDocument_hover |

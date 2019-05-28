@@ -13,7 +13,7 @@ import {
 	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
 	ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition,
 	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, Uri, DocumentEvent, ProjectEvent
+	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, Uri, DocumentEvent, ProjectEvent, DeclarationResult, belongsTo, textDocument_declaration
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -199,6 +199,15 @@ export class VertexBuilder {
 		}
 	}
 
+	public declarationResult(values: RangeId[]): DeclarationResult {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.declarationResult,
+			result: values
+		};
+	}
+
 	public definitionResult(values: RangeId[]): DefinitionResult {
 		return {
 			id: this.nextId(),
@@ -301,6 +310,16 @@ export class EdgeBuilder {
 		};
 	}
 
+	public belongsTo(from: DeclarationResult | DefinitionResult | ReferenceResult, to: Document): belongsTo {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.belongsTo,
+			outV: from.id,
+			inV: to.id
+		};
+	}
+
 	public moniker(from: Range, to: Moniker): moniker {
 		return {
 			id: this.nextId(),
@@ -361,6 +380,16 @@ export class EdgeBuilder {
 		};
 	}
 
+	public declaration(from: Range | ResultSet, to: DeclarationResult): textDocument_declaration {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_declaration,
+			outV: from.id,
+			inV: to.id
+		};
+	}
+
 	public definition(from: Range | ResultSet, to: DefinitionResult): textDocument_definition {
 		return {
 			id: this.nextId(),
@@ -368,7 +397,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.textDocument_definition,
 			outV: from.id,
 			inV: to.id
-		}
+		};
 	}
 
 	public typeDefinition(from: Range | ResultSet, to: TypeDefinitionResult): textDocument_typeDefinition {
