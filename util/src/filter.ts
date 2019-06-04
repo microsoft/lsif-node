@@ -1,3 +1,7 @@
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
 import * as LSIF from 'lsif-protocol';
 
 export interface IFilter {
@@ -21,23 +25,23 @@ export function getFilteredIds(argv: IFilter, input: LSIF.Element[]): string[] {
 
     result = result.filter((element: LSIF.Element) => includes(id, element.id));
     result = result.filter((element: LSIF.Element) => {
-        const edge: LSIF.Edge = <LSIF.Edge> element;
+        const edge: LSIF.Edge = element as LSIF.Edge;
 
         return includes(inV, edge.inV);
     });
     result = result.filter((element: LSIF.Element) => {
-        const edge: LSIF.Edge = <LSIF.Edge> element;
+        const edge: LSIF.Edge = element as LSIF.Edge;
 
         return includes(outV, edge.outV);
     });
     result = result.filter((element: LSIF.Element) => element.type !== undefined && includes(type, element.type));
     result = result.filter((element: LSIF.Element) => {
-        const param: IParameter = <IParameter> element;
+        const param: IParameter = element as IParameter;
 
         return includes(label, param.label);
     });
     result = result.filter((element: LSIF.Element) => {
-        const param: IParameter = <IParameter> element;
+        const param: IParameter = element as IParameter;
 
         return includes(property, param.property);
     });

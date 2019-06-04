@@ -14,7 +14,7 @@
     "test": "jest",
     "clean": "node ./node_modules/rimraf/bin.js -rf lib",
     "compile": "tsc -p ./",
-    "lint": "tslint --fix ./src/*.ts",
+    "lint": "tslint --fix ./src/*.ts && tslint --fix ./src/test/*.ts",
     "prepublishOnly": "npm install && npm run clean && npm run lint && npm run compile && npm run test"
   },
   "author": "Microsoft Corporation",
@@ -31,7 +31,6 @@
     "jest": "^24.8.0",
     "rimraf": "^2.6.3",
     "tslint": "^5.14.0",
-    "tslint-microsoft-contrib": "^6.1.0",
     "typescript": "^3.3.3333"
   },
   "dependencies": {

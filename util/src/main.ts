@@ -1,3 +1,7 @@
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
 import * as fse from 'fs-extra';
 import * as LSIF from 'lsif-protocol';
 import * as path from 'path';
@@ -43,29 +47,30 @@ export function main(): void {
     // Validation tool
     .command('validate [file]', '', (argv: yargs.Argv) => argv
         .positional('file', {
+            default: './lsif.json',
             describe: 'input file',
-            default: './lsif.json'
         }),  (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string }>) => {
             readInput(argv.inputFormat, argv.stdin ? undefined : argv.file, (input: LSIF.Element[]) => {
-                const filter: IFilter = <IFilter> <unknown>argv;
-                exit(validate(input, getFilteredIds(filter, input),
-                              path.join(path.dirname(process.argv[1]), '../node_modules/lsif-protocol/lib/protocol.d.ts')));
+                const filter: IFilter = argv as unknown as IFilter;
+                process.exitCode = validate(input, getFilteredIds(filter, input),
+                                            path.join(path.dirname(process.argv[1]),
+                                                      '../node_modules/lsif-protocol/lib/protocol.d.ts'));
             });
         })
 
     // Visualization tool
     .command('visualize [file]', '', (argv: yargs.Argv) => argv
         .positional('file', {
+            default: './lsif.json',
             describe: 'input file',
-            default: './lsif.json'
         })
         .option('distance', {
+            default: 1,
             describe: 'Max distance between any vertex and the filtered input',
-            default: 1
         }),  (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string; distance: number }>) => {
             readInput(argv.inputFormat, argv.stdin ? undefined : argv.file, (input: LSIF.Element[]) => {
-                const filter: IFilter = <IFilter> <unknown>argv;
-                exit(visualize(input, getFilteredIds(filter, input), argv.distance));
+                const filter: IFilter = argv as unknown as IFilter;
+                process.exitCode = visualize(input, getFilteredIds(filter, input), argv.distance);
             });
         })
 

@@ -1,3 +1,7 @@
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
 import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
@@ -11,7 +15,7 @@ const errors: Error[] = [];
 
 enum Check {
     vertexBeforeEdge = 0,
-    allVerticesUsed
+    allVerticesUsed,
 }
 const checks: boolean[] = [true, true];
 
@@ -26,7 +30,8 @@ class Error {
 
     public print(): void {
         console.error(
-            `\n${this.element.type.toUpperCase()} ${this.element.id}: FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`
+            `\n${this.element.type.toUpperCase()} ${this.element.id}:
+            FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`,
         );
     }
 }
@@ -63,10 +68,10 @@ export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath
     checkAllVisited();
 
     if (fse.pathExistsSync(protocolPath)) {
-        checkVertices(toolOutput.filter((e : LSIF.Element) => e.type === 'vertex')
+        checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
                       .map((e: LSIF.Element) => e.id.toString()),
                       protocolPath);
-        checkEdges(toolOutput.filter((e : LSIF.Element) => e.type === 'edge')
+        checkEdges(toolOutput.filter((e: LSIF.Element) => e.type === 'edge')
                    .map((e: LSIF.Element) => e.id.toString()),
                    protocolPath);
     } else {
@@ -84,7 +89,7 @@ function readInput(toolOutput: LSIF.Element[]): void {
 
     for (const object of toolOutput) {
         if (object.type === 'edge') {
-            const edge: LSIF.Edge = <LSIF.Edge> object;
+            const edge: LSIF.Edge = object as LSIF.Edge;
             edges[edge.id.toString()] = new Element(edge);
 
             if (edge.inV === undefined || edge.outV === undefined) {
@@ -113,7 +118,7 @@ function readInput(toolOutput: LSIF.Element[]): void {
 function checkAllVisited(): void {
     Object.keys(vertices)
     .forEach((key: string) => {
-        const vertex: LSIF.Vertex = <LSIF.Vertex> vertices[key].element;
+        const vertex: LSIF.Vertex = vertices[key].element as LSIF.Vertex;
         if (!visited[key] && vertex.label !== 'metaData') {
             errors.push(new Error(vertex, `not connected to any other vertex`));
             checks[Check.allVerticesUsed] = false;
@@ -130,7 +135,7 @@ function checkVertices(ids: string[], protocolPath: string): void {
     const length: number = ids.length;
 
     ids.forEach((key: string) => {
-        const vertex: LSIF.Vertex = <LSIF.Vertex> vertices[key].element;
+        const vertex: LSIF.Vertex = vertices[key].element as LSIF.Vertex;
         outputMessage = `Verifying vertex ${count} of ${length}...`;
         process.stdout.write(`${outputMessage}\r`);
         count++;
@@ -178,7 +183,7 @@ function checkEdges(ids: string[], protocolPath: string): void {
     const length: number = ids.length;
 
     ids.forEach((key: string) => {
-        const edge: LSIF.Edge = <LSIF.Edge> edges[key].element;
+        const edge: LSIF.Edge = edges[key].element as LSIF.Edge;
         outputMessage = `Verifying edge ${count} of ${length}...`;
         process.stdout.write(`${outputMessage}\r`);
         count++;
@@ -227,10 +232,12 @@ function printOutput(ids: string[]): void {
     console.log();
 
     const verticesStats: Statistics = getStatistics(vertices, ids);
-    console.log(`Vertices:\t${verticesStats.passed} passed, ${verticesStats.failed} failed, ${verticesStats.total} total`);
+    console.log(`Vertices:\t${verticesStats.passed} passed,
+                ${verticesStats.failed} failed, ${verticesStats.total} total`);
 
     const edgesStats: Statistics = getStatistics(edges, ids);
-    console.log(`Edges:\t\t${edgesStats.passed} passed, ${edgesStats.failed} failed, ${edgesStats.total} total`);
+    console.log(`Edges:\t\t${edgesStats.passed} passed,
+                ${edgesStats.failed} failed, ${edgesStats.total} total`);
 
     errors.forEach((e: Error) => {
         // Only print error for the elements verified

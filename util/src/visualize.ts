@@ -1,3 +1,7 @@
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
 import * as LSIF from 'lsif-protocol';
 
 export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: number): number {
@@ -9,7 +13,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
     ids.forEach((id: string) => {
         const element: LSIF.Element = toolOutput.filter((e: LSIF.Element) => e.id.toString() === id)[0];
         if (element.type === 'edge') {
-            const edge: LSIF.Edge = <LSIF.Edge> element;
+            const edge: LSIF.Edge = element as LSIF.Edge;
             idQueue.push(edge.inV.toString(), edge.outV.toString());
         } else {
             idQueue.push(element.id.toString());
@@ -22,7 +26,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
         idQueue = [];
 
         allEdges.forEach((element: LSIF.Element) => {
-            const edge: LSIF.Edge = <LSIF.Edge> element;
+            const edge: LSIF.Edge = element as LSIF.Edge;
             const inV: string = edge.inV.toString();
             const outV: string = edge.outV.toString();
             if (targetIds.includes(inV) || targetIds.includes(outV)) {
@@ -34,7 +38,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 
     Object.keys(edges)
     .forEach((key: string) => {
-        const edge: LSIF.Edge = <LSIF.Edge> edges[key];
+        const edge: LSIF.Edge = edges[key] as LSIF.Edge;
         const inV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.inV)[0];
         const outV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.outV)[0];
 
@@ -52,7 +56,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 
     Object.keys(vertices)
     .forEach((key: string) => {
-        const vertex: LSIF.Vertex = <LSIF.Vertex> vertices[key];
+        const vertex: LSIF.Vertex = vertices[key] as LSIF.Vertex;
         let extraText: string = '';
         const extraInfo: LSIF.Vertex = JSON.parse(JSON.stringify(vertex));
 
@@ -77,7 +81,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 
     Object.keys(edges)
     .forEach((key: string) => {
-        const edge: LSIF.Edge = <LSIF.Edge> edges[key];
+        const edge: LSIF.Edge = edges[key] as LSIF.Edge;
         digraph += `  ${edge.outV} -> ${edge.inV} [label="${edge.label}"]\n`;
     });
 
