@@ -1,0 +1,22 @@
+{
+    "defaultSeverity": "error",
+    "rulesDirectory": [
+        "node_modules/tslint-microsoft-contrib"
+    ],
+    "extends": [
+        "tslint:recommended",
+        "tslint-microsoft-contrib"
+    ],
+    "jsRules": {},
+    "rules": {
+        "no-console": false,
+        "no-increment-decrement": false,
+        "no-unsafe-any": false,
+        "completed-docs": false,
+        "no-floating-promises": false,
+        "linebreak-style": [true, "CRLF"],
+        "no-relative-imports": false,
+        "no-unused-expression": false,
+        "no-reserved-keywords": false
+    }
+}
