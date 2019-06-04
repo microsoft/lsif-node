@@ -11,7 +11,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "jest",
+    "test": "jest --ci --reporters=jest-junit --reporters=default",
     "clean": "node ./node_modules/rimraf/bin.js -rf lib",
     "compile": "tsc -p ./",
     "lint": "tslint --fix ./src/*.ts && tslint --fix ./src/test/*.ts",
@@ -29,6 +29,7 @@
     "@types/node": "^11.11.0",
     "@types/yargs": "^13.0.0",
     "jest": "^24.8.0",
+    "jest-junit": "^6.4.0",
     "rimraf": "^2.6.3",
     "tslint": "^5.14.0",
     "typescript": "^3.3.3333"
