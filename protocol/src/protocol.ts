@@ -403,11 +403,6 @@ export interface Moniker extends V {
 	label: VertexLabels.moniker;
 
 	/**
-	 * The moniker kind.
-	 */
-	kind: MonikerKind;
-
-	/**
 	 * The scheme of the moniker. For example tsc or .Net
 	 */
 	scheme: string;
@@ -417,6 +412,11 @@ export interface Moniker extends V {
 	 * schema owners are allowed to define the structure if they want.
 	 */
 	identifier: string;
+
+	/**
+	 * The moniker kind if unknown.
+	 */
+	kind?: MonikerKind;
 }
 
 export interface PackageInformation extends V {
