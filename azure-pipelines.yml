@@ -17,3 +17,7 @@ steps:
 - script: |
     npm run compile
   displayName: 'Compile client'
+
+- script: |
+    npm run test
+  displayName: 'Run unit tests'
