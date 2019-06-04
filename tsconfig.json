@@ -14,6 +14,7 @@
 		"protocol",
 		"npm",
 		"tsc",
-		"sqlite"
+		"sqlite",
+		"util"
 	]
 }
