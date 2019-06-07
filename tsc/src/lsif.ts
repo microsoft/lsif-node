@@ -346,7 +346,7 @@ export class DataTable {
 
 	private projectData: ProjectData;
 	private documentDatas: Map<string, DocumentData | null>;
-	private symbolDataPerDocuments: Map<string, Map<string, SymbolDataPerDocument>>;
+	private symbolDataPerDocuments: Map<string, Map<string, SymbolDataPerDocument> | null>;
 
 	public constructor(private context: EmitContext, project: Project) {
 		this.projectData = new ProjectData(context, project);
@@ -381,6 +381,9 @@ export class DataTable {
 
 	public getSymbolDataPerDocument(fileName: string, symbolInfo: SymbolItem): SymbolDataPerDocument | undefined {
 		let symbols = this.symbolDataPerDocuments.get(fileName);
+		if (symbols === null) {
+			throw new Error(`There was already a managed symbol date per document for file: ${fileName}`);
+		}
 		if (symbols === undefined) {
 			symbols = new Map();
 			this.symbolDataPerDocuments.set(fileName, symbols);
@@ -407,6 +410,16 @@ export class DataTable {
 		}
 		result.end();
 		this.documentDatas.set(fileName, null);
+		let symbols = this.symbolDataPerDocuments.get(fileName);
+		if (symbols === null) {
+			throw new Error(`Managed symbol data per document for file '${fileName}' is already closed.`);
+		}
+		if (symbols !== undefined) {
+			for (let item of symbols.values()) {
+				item.end();
+			}
+		}
+		this.symbolDataPerDocuments.set(fileName, null);
 	}
 }
 
