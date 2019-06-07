@@ -335,7 +335,7 @@ export class EdgeBuilder {
 		};
 	}
 
-	public diagnostic(from: Document, to: DiagnosticResult): textDocument_diagnostic {
+	public diagnostic(from: Project | Document, to: DiagnosticResult): textDocument_diagnostic {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,

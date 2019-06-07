@@ -154,7 +154,7 @@ interface EmitContext {
 	emit(element: Vertex | Edge): void;
 }
 
-abstract class Partition {
+abstract class DataPartition {
 	protected constructor(private context: EmitContext) {
 	}
 
@@ -175,16 +175,19 @@ abstract class Partition {
 	}
 }
 
-class ProjectPartition extends Partition {
+class ProjectData extends DataPartition {
 
 	private documents: Document[];
+	private diagnostics: lsp.Diagnostic[];
 
 	public constructor(context: EmitContext, private project: Project) {
 		super(context);
 		this.documents = [];
+		this.diagnostics = [];
 	}
 
 	public begin(): void {
+		this.emit(this.project);
 		this.emit(this.vertex.event(EventKind.begin, this.project));
 	}
 
@@ -196,16 +199,25 @@ class ProjectPartition extends Partition {
 		}
 	}
 
+	public addDiagnostic(diagnostic: lsp.Diagnostic): void {
+		this.diagnostics.push(diagnostic);
+	}
+
 	public end(): void {
 		if (this.documents.length > 0) {
 			this.emit(this.edge.contains(this.project, this.documents));
 			this.documents = [];
 		}
+		if (this.diagnostics.length > 0) {
+			let dr = this.vertex.diagnosticResult(this.diagnostics);
+			this.emit(dr);
+			this.emit(this.edge.diagnostic(this.project, dr));
+		}
 		this.emit(this.vertex.event(EventKind.end, this.project));
 	}
 }
 
-class DocumentPartition extends Partition {
+class DocumentData extends DataPartition {
 
 	private ranges: Range[];
 	private diagnostics: lsp.Diagnostic[] | undefined;
@@ -260,7 +272,7 @@ class DocumentPartition extends Partition {
 	}
 }
 
-class SymbolItemPartition extends Partition {
+class SymbolDataPerDocument extends DataPartition {
 
 	public definitionResult: DefinitionResult | undefined;
 	private definitionRanges: Range[] | undefined;
@@ -330,11 +342,79 @@ class SymbolItemPartition extends Partition {
 	}
 }
 
+export class DataTable {
+
+	private projectData: ProjectData;
+	private documentDatas: Map<string, DocumentData | null>;
+	private symbolDataPerDocuments: Map<string, Map<string, SymbolDataPerDocument>>;
+
+	public constructor(private context: EmitContext, project: Project) {
+		this.projectData = new ProjectData(context, project);
+		this.projectData.begin();
+		this.documentDatas = new Map();
+		this.symbolDataPerDocuments = new Map();
+	}
+
+	public getProjectData(): ProjectData {
+		return this.projectData;
+	}
+
+	public projectDone(): void {
+		this.projectData.end();
+		this.projectData;
+	}
+
+	public getDocumentData(fileName: string): DocumentData | undefined {
+		let result = this.documentDatas.get(fileName);
+		if (result === null) {
+			throw new Error(`There was already a managed document data for file: ${fileName}`);
+		}
+		return result;
+	}
+
+	public createDocumentData(fileName: string, document: Document): DocumentData {
+		let result = new DocumentData(this.context, document);
+		result.begin();
+		this.documentDatas.set(fileName, result);
+		return result;
+	}
+
+	public getSymbolDataPerDocument(fileName: string, symbolInfo: SymbolItem): SymbolDataPerDocument | undefined {
+		let symbols = this.symbolDataPerDocuments.get(fileName);
+		if (symbols === undefined) {
+			symbols = new Map();
+			this.symbolDataPerDocuments.set(fileName, symbols);
+		}
+		let result = symbols.get(symbolInfo.id);
+		if (result === undefined) {
+			let documentData = this.getDocumentData(fileName);
+			if (documentData === undefined) {
+				throw new Error(`No document available for '${fileName}`);
+			}
+			result = new SymbolDataPerDocument(this.context, documentData.document);
+			symbols.set(fileName, result);
+		}
+		return result;
+	}
+
+	public documentDone(fileName: string): void {
+		let result = this.documentDatas.get(fileName);
+		if (result === null) {
+			throw new Error(`Managed document data for file '${fileName}' is already closed.`);
+		}
+		if (result === undefined) {
+			throw new Error(`There is not document data for file '${fileName}`);
+		}
+		result.end();
+		this.documentDatas.set(fileName, null);
+	}
+}
+
 interface SymbolItemContext extends EmitContext {
 
 	typeChecker: ts.TypeChecker;
 	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
-	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolItemPartition;
+	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPerDocument;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
 	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
@@ -825,7 +905,7 @@ abstract class SymbolItem {
 		}
 	}
 
-	public addReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+	public addReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
 		this.recordReference(symbolItemCluster, reference);
 	}
 
@@ -866,7 +946,7 @@ abstract class SymbolItem {
 		return undefined;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
 		this.context.emit(this.context.edge.next(definition, this.resultSet));
 		symbolItemCluster.addDefinition(definition);
 		// If this is not an interface, each declaration is an implementation result
@@ -884,7 +964,7 @@ abstract class SymbolItem {
 		// }
 	}
 
-	protected recordReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+	protected recordReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
 		this.context.emit(this.context.edge.next(reference, this.resultSet));
 		symbolItemCluster.addReference(reference, ItemEdgeProperties.references);
 	}
@@ -938,7 +1018,7 @@ abstract class MemberContainerItem extends SymbolItem {
 		this.baseSymbols = baseSymbols;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
 		super.recordDeclaration(symbolItemCluster, definition);
 
 		// If we have base symbols, add our declaration to their implementation results
@@ -1174,7 +1254,7 @@ class MethodSymbolItem extends SymbolItem {
 		return memberContainer;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
 		super.recordDeclaration(symbolItemCluster, definition);
 		// if (this.baseReferenceResults !== undefined) {
 		// 	this.baseReferenceResults.forEach(result =>  {
@@ -1183,7 +1263,7 @@ class MethodSymbolItem extends SymbolItem {
 		// }
 	}
 
-	protected recordReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+	protected recordReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
 		super.recordReference(symbolItemCluster, reference);
 		// if (this.baseReferenceResults !== undefined) {
 		// 	this.baseReferenceResults.forEach(result => {
@@ -1223,7 +1303,7 @@ class AliasSymbolItem extends SymbolItem  {
 		return undefined;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
 		// this.context.emit(this.context.edge.next(definition, this.resultSet));
 		// symbolItemCluster.
 		// if (this.referenceResult === undefined) {
@@ -1240,7 +1320,7 @@ class AliasSymbolItem extends SymbolItem  {
 
 interface DocumentInformation {
 	document: Document;
-	documentPartition: DocumentPartition;
+	documentPartition: DocumentData;
 	packageInfo?: PackageInformation;
 	monikerKind?: MonikerKind;
 	monikerPath?: string;
@@ -1260,19 +1340,19 @@ class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
 	private project: Project;
-	private projectPartition: ProjectPartition;
+	private projectPartition: ProjectData;
 	private projectRoot: string;
 	private rootDir: string | undefined;
 	private outDir: string | undefined;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
-	private _currentDocumentPartition: DocumentPartition | undefined;
+	private _currentDocumentPartition: DocumentData | undefined;
 	private _currentExports: Set<ts.Symbol> | undefined;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private documents: Map<string, DocumentInformation | null>;
 	private packageInfos: Map<string, PackageInformation>;
-	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolItemPartition>>;
+	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolDataPerDocument>>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
@@ -1309,7 +1389,7 @@ class Visitor implements SymbolItemContext {
 			// Try to compute the root directories.
 		}
 		this.emit(this.project);
-		this.projectPartition = new ProjectPartition(this, this.project);
+		this.projectPartition = new ProjectData(this, this.project);
 		this.projectPartition.begin();
 	}
 
@@ -1766,7 +1846,7 @@ class Visitor implements SymbolItemContext {
 			monikerPath = computeMonikerPath(file);
 		}
 
-		result = { document, documentPartition: new DocumentPartition(this, document) };
+		result = { document, documentPartition: new DocumentData(this, document) };
 		this.emit(document);
 		result.documentPartition.begin();
 		if (monikerPath !== undefined) {
@@ -1781,7 +1861,7 @@ class Visitor implements SymbolItemContext {
 		return result;
 	}
 
-	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolItemPartition {
+	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPerDocument {
 		let symbolMap = this.resultPartitions.get(document.uri);
 		if (symbolMap === undefined) {
 			symbolMap = new Map();
@@ -1789,7 +1869,7 @@ class Visitor implements SymbolItemContext {
 		}
 		let result = symbolMap.get(symbolItem.id);
 		if (result === undefined) {
-			result = new SymbolItemPartition(this, document);
+			result = new SymbolDataPerDocument(this, document);
 			symbolMap.set(symbolItem.id, result);
 		}
 		return result;
@@ -1827,7 +1907,7 @@ class Visitor implements SymbolItemContext {
 		this.emitter.emit(element);
 	}
 
-	private get currentDocumentPartition(): DocumentPartition {
+	private get currentDocumentPartition(): DocumentData {
 		if (this._currentDocumentPartition === undefined) {
 			throw new Error(`No current document partition`);
 		}
