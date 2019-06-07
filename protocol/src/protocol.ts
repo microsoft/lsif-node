@@ -91,17 +91,17 @@ export interface Event extends V {
 export interface ProjectEvent extends Event {
 
 	/**
-	 * The project URI this event relates to.
+	 * The id of the project vertex.
 	 */
-	data: Uri;
+	data: Id;
 }
 
 export interface DocumentEvent extends Event {
 
 	/**
-	 * The document URI this event relates to.
+	 * The id of the document vertex.
 	 */
-	data: Uri;
+	data: Id;
 }
 
 /**
@@ -549,11 +549,6 @@ export interface DeclarationResult extends V {
 	 * The label property.
 	 */
 	label: VertexLabels.declarationResult;
-
-	/**
-	 * The actual result.
-	 */
-	result: (RangeId | lsp.Location)[];
 }
 
 /**
@@ -564,11 +559,6 @@ export interface DefinitionResult extends V {
 	 * The label property.
 	 */
 	label: VertexLabels.definitionResult;
-
-	/**
-	 * The actual result.
-	 */
-	result: (RangeId | lsp.Location)[];
 }
 
 /**
@@ -580,11 +570,28 @@ export interface TypeDefinitionResult extends V {
 	 * The label property.
 	 */
 	label: VertexLabels.typeDefinitionResult;
+}
+
+/**
+ * A vertex representing a reference result.
+ */
+export interface ReferenceResult extends V {
 
 	/**
-	 * The actual result.
+	 * The label property.
 	 */
-	result: (RangeId | lsp.Location)[];
+	label: VertexLabels.referenceResult;
+}
+
+/**
+ * A vertex representing an implementation result.
+ */
+export interface ImplementationResult extends V {
+
+	/**
+	 * The label property.
+	 */
+	label: VertexLabels.implementationResult;
 }
 
 /**
@@ -603,78 +610,6 @@ export interface HoverResult extends V {
 	 * The hover result. This is the normal LSP hover result.
 	 */
 	result: lsp.Hover;
-}
-
-/**
- * The id type of a reference result is a normal id.
- */
-export type ReferenceResultId = Id;
-
-export type ReferenceResultItem = (RangeId | lsp.Location);
-
-/**
- * A vertex representing a reference result.
- */
-export interface ReferenceResult extends V {
-
-	/**
-	 * The label property.
-	 */
-	label: VertexLabels.referenceResult;
-
-	/**
-	 * The declarations belonging to the reference result.
-	 */
-	declarations?: ReferenceResultItem[];
-
-	/**
-	 * The definitions belonging to the reference result.
-	 */
-	definitions?: ReferenceResultItem[];
-
-	/**
-	 * The references belonging to the reference result.
-	 */
-	references?: ReferenceResultItem[];
-
-	/**
-	 * The reference results belonging to this reference result.
-	 */
-	referenceResults?: ReferenceResultId[];
-}
-
-export namespace ReferenceResult {
-	export function isStatic(result: ReferenceResult): result is ((ReferenceResult & { referenceResults: ReferenceResultId[] }) | (ReferenceResult & { declarations: ReferenceResultItem[]; definitions: ReferenceResultItem[]; references: ReferenceResultItem[] })) {
-		return (result.declarations !== undefined && result.definitions !== undefined && result.references !== undefined)
-			|| result.referenceResults !== undefined;
-	}
-}
-
-
-/**
- * The id type of an implementation result is a normal id.
- */
-export type ImplementationResultId = Id;
-
-/**
- * A vertex representing an implementation result.
- */
-export interface ImplementationResult extends V {
-
-	/**
-	 * The label property.
-	 */
-	label: VertexLabels.implementationResult;
-
-	/**
-	 * The ranges and locations belong to the implementation result.
-	 */
-	result?: (RangeId | lsp.Location)[];
-
-	/**
-	 * The other implementation results belonging to this result.
-	 */
-	implementationResults?: ImplementationResultId[];
 }
 
 /**
@@ -704,8 +639,7 @@ export type Vertex =
 export enum EdgeLabels {
 	contains = 'contains',
 	item = 'item',
-	belongsTo = 'belongsTo',
-	refersTo = 'refersTo',
+	next = 'next',
 	moniker = 'moniker',
 	packageInformation = 'packageInformation',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
@@ -725,7 +659,7 @@ export enum EdgeLabels {
  * documentation purpose only. An edge never holds a direct reference to a vertex. They are
  * referenced by `Id`.
  */
-export interface E<S extends V, T extends V, K extends EdgeLabels> extends Element {
+export interface E11<S extends V, T extends V, K extends EdgeLabels> extends Element {
 	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
 	_?: [S, T];
 	id: Id;
@@ -743,6 +677,38 @@ export interface E<S extends V, T extends V, K extends EdgeLabels> extends Eleme
 	inV: Id;
 }
 
+export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
+	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
+	_?: [S, T];
+	id: Id;
+	type: ElementTypes.edge;
+	label: K;
+
+	/**
+	 * The id of the from vertex.
+	 */
+	outV: Id;
+
+	/**
+	 * The ids of the to vertices.
+	 */
+	inVs: Id[];
+}
+
+export type E<S extends V, T extends V, K extends EdgeLabels> = E11<S, T, K> | E1N<S, T, K>;
+
+export namespace E {
+	export function is11<S extends V, T extends V, K extends EdgeLabels>(value: E<S, T, K>): value is E11<S, T, K> {
+		let candidate = value as E11<S, T, K>;
+		return candidate && candidate.inV !== undefined;
+	}
+
+	export function is1N<S extends V, T extends V, K extends EdgeLabels>(value: E<S, T, K>): value is E1N<S, T, K> {
+		let candidate = value as E1N<S, T, K>;
+		return candidate && Array.isArray(candidate.inVs);
+	}
+}
+
 export enum ItemEdgeProperties {
 	declarations = 'declarations',
 	definitions = 'definitions',
@@ -751,7 +717,8 @@ export enum ItemEdgeProperties {
 	implementationResults = 'implementationResults'
 }
 
-export interface ItemEdge<S extends V, T extends V> extends E<S, T, EdgeLabels.item> {
+export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {
+	document: Id;
 	property?: ItemEdgeProperties;
 }
 
@@ -762,47 +729,54 @@ export interface ItemEdge<S extends V, T extends V> extends E<S, T, EdgeLabels.i
  * - `Package` -> `Document`
  * - `Document` -> `Range`
  */
-export type contains = E<Project, Document, EdgeLabels.contains> | E<Document, Range, EdgeLabels.contains>;
-
-/**
- * An edge associating a result partition with a document. The relationship exists between:
- *
- * - `DeclarationResult | DefinitionResult | ReferenceResult` -> `Document`
- */
-export type belongsTo = E<DeclarationResult | DefinitionResult | ReferenceResult, Document, EdgeLabels.belongsTo>;
-
+export type contains = E1N<Project, Document, EdgeLabels.contains> | E1N<Document, Range, EdgeLabels.contains>;
 
 /**
  * An edge associating a range with a result set. The relationship exists between:
  *
  * - `Range` -> `ResultSet`
+ * - `ResultSet` -> `ResultSet`
  */
-export type refersTo = E<Range, ResultSet, EdgeLabels.refersTo>;
+export type next = E11<Range, ResultSet, EdgeLabels.next>;
 
 /**
  * An edge representing a item in a result set. The relationship exists between:
  *
- * - `ReferenceResult` -> `Range`
- * - `ReferenceResult` -> `ReferenceResult`
- * - `ExportResult` -> `ExportResultItem`
- * - `ExternalImportResult` -> `ExternalImportItem`
+ * - `ReferenceResult` -> `Range[]`
+ * - `ReferenceResult` -> `ReferenceResult[]`
  */
-export type item = ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> | ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult>;
+export type item =
+	ItemEdge<DeclarationResult, Range> | ItemEdge<DefinitionResult, Range> |
+	ItemEdge<TypeDefinitionResult, Range> |
+	ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> |
+	ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult>;
 
 /**
  * An edge associating a range with a moniker. The relationship exists between:
  *
  * - `Range` -> `Moniker`
+ * - `ResultSet` -> `Moniker`
+ * - `DeclarationResult` -> `Moniker`
+ * - `DefinitionResult` -> `Moniker`
+ * - `TypeDefinitionResult` -> `Moniker`
+ * - `ReferenceResult` -> `Moniker`
+ * - `ImplementationResult` -> `Moniker`
  */
-export type moniker = E<Range, Moniker, EdgeLabels.moniker>;
-
+export type moniker =
+	E11<Range, Moniker, EdgeLabels.moniker> |
+	E11<ResultSet, Moniker, EdgeLabels.moniker> |
+	E11<DeclarationResult, Moniker, EdgeLabels.moniker> |
+	E11<DefinitionResult, Moniker, EdgeLabels.moniker> |
+	E11<TypeDefinitionResult, Moniker, EdgeLabels.moniker> |
+	E11<ReferenceResult, Moniker, EdgeLabels.moniker> |
+	E11<ImplementationResult, Moniker, EdgeLabels.moniker>;
 
 /**
  * An edge associating a moniker with a package information. The relationship exists between:
  *
  * - `Moniker` -> `PackageInformation`
  */
-export type packageInformation = E<Moniker, PackageInformation, EdgeLabels.packageInformation>;
+export type packageInformation = E11<Moniker, PackageInformation, EdgeLabels.packageInformation>;
 
 
 /**
@@ -810,21 +784,21 @@ export type packageInformation = E<Moniker, PackageInformation, EdgeLabels.packa
  *
  * - `Document` -> `DocumentSymbolResult`
  */
-export type textDocument_documentSymbol = E<Document, DocumentSymbolResult, EdgeLabels.textDocument_documentSymbol>;
+export type textDocument_documentSymbol = E11<Document, DocumentSymbolResult, EdgeLabels.textDocument_documentSymbol>;
 
 /**
  * An edge representing a `textDocument/foldingRange` relationship. The relationship exists between:
  *
  * - `Document` -> `FoldingRangeResult`
  */
-export type textDocument_foldingRange = E<Document, FoldingRangeResult, EdgeLabels.textDocument_foldingRange>;
+export type textDocument_foldingRange = E11<Document, FoldingRangeResult, EdgeLabels.textDocument_foldingRange>;
 
 /**
  * An edge representing a `textDocument/documentLink` relationship. The relationship exists between:
  *
  * - `Document` -> `DocumentLinkResult`
  */
-export type textDocument_documentLink = E<Document, DocumentLinkResult, EdgeLabels.textDocument_documentLink>;
+export type textDocument_documentLink = E11<Document, DocumentLinkResult, EdgeLabels.textDocument_documentLink>;
 
 /**
  * An edge representing a `textDocument/diagnostic` relationship. The relationship exists between:
@@ -832,7 +806,7 @@ export type textDocument_documentLink = E<Document, DocumentLinkResult, EdgeLabe
  * - `Project` -> `DiagnosticResult`
  * - `Document` -> `DiagnosticResult`
  */
-export type textDocument_diagnostic = E<Project, DiagnosticResult, EdgeLabels.textDocument_diagnostic> | E<Document, DiagnosticResult, EdgeLabels.textDocument_diagnostic>;
+export type textDocument_diagnostic = E11<Project, DiagnosticResult, EdgeLabels.textDocument_diagnostic> | E11<Document, DiagnosticResult, EdgeLabels.textDocument_diagnostic>;
 
 /**
  * An edge representing a declaration relationship. The relationship exists between:
@@ -840,7 +814,7 @@ export type textDocument_diagnostic = E<Project, DiagnosticResult, EdgeLabels.te
  * - `Range` -> `DefinitionResult`
  * - `ResultSet` -> `DefinitionResult`
  */
-export type textDocument_declaration = E<Range, DeclarationResult, EdgeLabels.textDocument_declaration> | E<ResultSet, DeclarationResult, EdgeLabels.textDocument_declaration>;
+export type textDocument_declaration = E11<Range, DeclarationResult, EdgeLabels.textDocument_declaration> | E11<ResultSet, DeclarationResult, EdgeLabels.textDocument_declaration>;
 
 /**
  * An edge representing a definition relationship. The relationship exists between:
@@ -848,7 +822,7 @@ export type textDocument_declaration = E<Range, DeclarationResult, EdgeLabels.te
  * - `Range` -> `DefinitionResult`
  * - `ResultSet` -> `DefinitionResult`
  */
-export type textDocument_definition = E<Range, DefinitionResult, EdgeLabels.textDocument_definition> | E<ResultSet, DefinitionResult, EdgeLabels.textDocument_definition>;
+export type textDocument_definition = E11<Range, DefinitionResult, EdgeLabels.textDocument_definition> | E11<ResultSet, DefinitionResult, EdgeLabels.textDocument_definition>;
 
 /**
  * An edge representing a type definition relations ship. The relationship exists between:
@@ -856,7 +830,7 @@ export type textDocument_definition = E<Range, DefinitionResult, EdgeLabels.text
  * - `Range` -> `TypeDefinitionResult`
  * - `ResultSet` -> `TypeDefinitionResult`
  */
-export type textDocument_typeDefinition = E<Range, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition> | E<ResultSet, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition>;
+export type textDocument_typeDefinition = E11<Range, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition> | E11<ResultSet, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition>;
 
 /**
  * An edge representing a hover relationship. The relationship exists between:
@@ -864,7 +838,7 @@ export type textDocument_typeDefinition = E<Range, TypeDefinitionResult, EdgeLab
  * - `Range` -> `HoverResult`
  * - `ResultSet` -> `HoverResult`
  */
-export type textDocument_hover = E<Range, HoverResult, EdgeLabels.textDocument_hover> | E<ResultSet, HoverResult, EdgeLabels.textDocument_hover>;
+export type textDocument_hover = E11<Range, HoverResult, EdgeLabels.textDocument_hover> | E11<ResultSet, HoverResult, EdgeLabels.textDocument_hover>;
 
 /**
  * An edge representing a references relationship. The relationship exists between:
@@ -872,7 +846,7 @@ export type textDocument_hover = E<Range, HoverResult, EdgeLabels.textDocument_h
  * - `Range` -> `ReferenceResult`
  * - `ResultSet` -> `ReferenceResult`
  */
-export type textDocument_references = E<Range, ReferenceResult, EdgeLabels.textDocument_references> | E<ResultSet, ReferenceResult, EdgeLabels.textDocument_references>;
+export type textDocument_references = E11<Range, ReferenceResult, EdgeLabels.textDocument_references> | E11<ResultSet, ReferenceResult, EdgeLabels.textDocument_references>;
 
 /**
  * An edge representing a implementation relationship. The relationship exists between:
@@ -880,7 +854,7 @@ export type textDocument_references = E<Range, ReferenceResult, EdgeLabels.textD
  * - `Range` -> `ImplementationResult`
  * - `ResultSet` -> `ImplementationResult`
  */
-export type textDocument_implementation = E<Range, ImplementationResult, EdgeLabels.textDocument_implementation> | E<ResultSet, ImplementationResult, EdgeLabels.textDocument_implementation>;
+export type textDocument_implementation = E11<Range, ImplementationResult, EdgeLabels.textDocument_implementation> | E11<ResultSet, ImplementationResult, EdgeLabels.textDocument_implementation>;
 
 /**
  *
@@ -889,8 +863,7 @@ export type textDocument_implementation = E<Range, ImplementationResult, EdgeLab
 export type Edge =
 	contains |
 	item |
-	refersTo |
-	belongsTo |
+	next |
 	moniker |
 	packageInformation |
 	textDocument_documentSymbol |

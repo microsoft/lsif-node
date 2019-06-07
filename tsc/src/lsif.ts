@@ -14,8 +14,9 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, ReferenceResultId, RangeId, TypeDefinitionResult, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, Moniker, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult, Version, DeclarationResult
+	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, RangeId, RangeBasedDocumentSymbol,
+	ResultSet, HoverResult, DefinitionRange, DefinitionResult, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult, Version,
+	Range, EventKind
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -153,52 +154,179 @@ interface EmitContext {
 	emit(element: Vertex | Edge): void;
 }
 
-class ResultPartition {
-
-	private declarationResult: DeclarationResult | undefined;
-	private definitionResult: DefinitionResult | undefined;
-
-	public constructor(private context: EmitContext, private resultSet: ResultSet, private document: Document) {
+abstract class Partition {
+	protected constructor(private context: EmitContext) {
 	}
 
-	public addDeclaration(value: RangeId | lsp.Location): void {
-		if (this.declarationResult === undefined) {
-			this.declarationResult = this.vertex.declarationResult([]);
-		}
-		this.declarationResult.result.push(value);
-	}
+	public abstract begin(): void;
 
-	public addDefinition(value: RangeId | lsp.Location): void {
-		if (this.definitionResult === undefined) {
-			this.definitionResult = this.vertex.definitionResult([]);
-		}
-		this.definitionResult.result.push(value);
-	}
+	public abstract end(): void;
 
-	public emit(): void {
-		if (this.declarationResult) {
-			this._emit(this.declarationResult);
-			this._emit(this.edge.declaration(this.resultSet, this.declarationResult));
-			this._emit(this.edge.belongsTo(this.declarationResult, this.document));
-		}
-
-		if (this.definitionResult) {
-			this._emit(this.definitionResult);
-			this._emit(this.edge.definition(this.resultSet, this.definitionResult));
-			this._emit(this.edge.belongsTo(this.definitionResult, this.document));
-		}
-	}
-
-	private _emit(value: Vertex | Edge): void {
+	protected emit(value: Vertex | Edge): void {
 		this.context.emit(value);
 	}
 
-	private get vertex(): VertexBuilder {
+	protected get vertex(): VertexBuilder {
 		return this.context.vertex;
 	}
 
-	private get edge(): EdgeBuilder {
+	protected get edge(): EdgeBuilder {
 		return this.context.edge;
+	}
+}
+
+class ProjectPartition extends Partition {
+
+	private documents: Document[];
+
+	public constructor(context: EmitContext, private project: Project) {
+		super(context);
+		this.documents = [];
+	}
+
+	public begin(): void {
+		this.emit(this.vertex.event(EventKind.begin, this.project));
+	}
+
+	public addDocument(document: Document): void {
+		this.documents.push(document);
+		if (this.documents.length > 32) {
+			this.emit(this.edge.contains(this.project, this.documents));
+			this.documents = [];
+		}
+	}
+
+	public end(): void {
+		if (this.documents.length > 0) {
+			this.emit(this.edge.contains(this.project, this.documents));
+			this.documents = [];
+		}
+		this.emit(this.vertex.event(EventKind.end, this.project));
+	}
+}
+
+class DocumentPartition extends Partition {
+
+	private ranges: Range[];
+	private diagnostics: lsp.Diagnostic[] | undefined;
+	private foldingRanges: lsp.FoldingRange[] | undefined;
+	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
+
+	public constructor(context: EmitContext, public document: Document) {
+		super(context);
+		this.ranges = [];
+	}
+
+	public begin(): void {
+		this.emit(this.vertex.event(EventKind.begin, this.document));
+	}
+
+	public addRange(range: Range): void {
+		this.ranges.push(range);
+	}
+
+	public addDiagnostics(diagnostics: lsp.Diagnostic[]): void {
+		this.diagnostics = diagnostics;
+	}
+
+	public addFoldingRanges(foldingRanges: lsp.FoldingRange[]): void {
+		this.foldingRanges = foldingRanges;
+	}
+
+	public addDocumentSymbols(documentSymbols: RangeBasedDocumentSymbol[]): void {
+		this.documentSymbols = documentSymbols;
+	}
+
+	public end(): void {
+		if (this.ranges.length >= 0) {
+			this.emit(this.edge.contains(this.document, this.ranges));
+		}
+		if (this.diagnostics !== undefined) {
+			let dr = this.vertex.diagnosticResult(this.diagnostics);
+			this.emit(dr);
+			this.emit(this.edge.diagnostic(this.document, dr));
+		}
+		if (this.foldingRanges !== undefined) {
+			const fr = this.vertex.foldingRangeResult(this.foldingRanges);
+			this.emit(fr);
+			this.emit(this.edge.foldingRange(this.document, fr));
+		}
+		if (this.documentSymbols !== undefined) {
+			const ds = this.vertex.documentSymbolResult(this.documentSymbols);
+			this.emit(ds);
+			this.emit(this.edge.documentSymbols(this.document, ds));
+		}
+		this.emit(this.vertex.event(EventKind.end, this.document));
+	}
+}
+
+class SymbolItemPartition extends Partition {
+
+	public definitionResult: DefinitionResult | undefined;
+	private definitionRanges: Range[] | undefined;
+
+	public referenceResult: ReferenceResult | undefined;
+	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]> | undefined;
+	private referenceResults: ReferenceResult[] | undefined;
+
+	public constructor(context: EmitContext, private document: Document) {
+		super(context);
+	}
+
+	public begin(): void {
+		// Do nothing.
+	}
+
+	public addDefinition(value: DefinitionRange): void {
+		if (this.definitionResult === undefined) {
+			throw new Error(`Definition result not set`);
+		}
+		if (this.definitionRanges === undefined) {
+			this.definitionRanges = [];
+		}
+		this.definitionRanges.push(value);
+		this.addReference(value, ItemEdgeProperties.definitions);
+	}
+
+	public addReference(value: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public addReference(value: ReferenceResult): void;
+	public addReference(value: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (this.referenceResult === undefined) {
+			throw new Error(`Reference result not set`);
+		}
+		if (value.label === 'range' && property !== undefined) {
+			if (this.referenceRanges === undefined) {
+				this.referenceRanges = new Map();
+			}
+			let values = this.referenceRanges.get(property);
+			if (values === undefined) {
+				values = [];
+				this.referenceRanges.set(property, values);
+			}
+			values.push(value);
+		} else if (value.label === 'referenceResult') {
+			if (this.referenceResults === undefined) {
+				this.referenceResults = [];
+			}
+			this.referenceResults.push(value);
+		}
+	}
+
+	public end(): void {
+		if (this.definitionResult !== undefined && this.definitionRanges !== undefined) {
+			this.emit(this.edge.item(this.definitionResult, this.definitionRanges, this.document));
+		}
+		if (this.referenceResult !== undefined) {
+			if (this.referenceRanges !== undefined) {
+				for (let property of this.referenceRanges.keys()) {
+					let values = this.referenceRanges.get(property)!;
+					this.emit(this.edge.item(this.referenceResult, values, this.document, property))
+				}
+			}
+			if (this.referenceResults !== undefined) {
+				this.emit(this.edge.item(this.referenceResult, this.referenceResults, this.document));
+			}
+		}
 	}
 }
 
@@ -206,7 +334,7 @@ interface SymbolItemContext extends EmitContext {
 
 	typeChecker: ts.TypeChecker;
 	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
-	getResultPartition(document: Document, symbolItem: SymbolItem, resultSet: ResultSet): ResultPartition;
+	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolItemPartition;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
 	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
@@ -452,13 +580,21 @@ abstract class SymbolItem {
 	protected initializeDeclarations(declarations: ts.Declaration[]): void {
 		let hover: boolean = false;
 		const monikerName = SymbolItem.computeMoniker(declarations);
-		let monikers: Map<string, Moniker> = new Map();
+		let monikers: { definition: DefinitionRange; identifier: string; kind: MonikerKind, packageInfo: PackageInformation | undefined }[] = [];
+		let definitionResult: DefinitionResult | undefined;
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
 			let [range, rangeNode, text] = this.resolveDefinitionRange(sourceFile, declaration);
 			if (range !== undefined && rangeNode !== undefined && text !== undefined) {
-				let { document, monikerPath, monikerKind, packageInfo } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
-				let resultPartition = this.context.getResultPartition(document, this, this.resultSet);
+				let { document, documentPartition, monikerPath, monikerKind, packageInfo } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
+				let symbolItemCluster = this.context.getSymbolItemPartition(document, this);
+				if (definitionResult === undefined) {
+					definitionResult = this.context.vertex.definitionResult();
+					this.context.emit(definitionResult);
+					this.context.emit(this.context.edge.definition(this.resultSet, definitionResult));
+				}
+				symbolItemCluster.definitionResult = definitionResult;
+				symbolItemCluster.referenceResult = this.referenceResult;
 				let definition = this.context.vertex.range(Converter.rangeFromNode(sourceFile, rangeNode), {
 					type: RangeTagTypes.definition,
 					text: text,
@@ -466,21 +602,12 @@ abstract class SymbolItem {
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
 				});
 				this.context.emit(definition);
-				resultPartition.addDefinition(definition.id);
-				this.context.emit(this.context.edge.contains(document, definition));
-				let moniker = monikers.get(sourceFile.fileName);
-				if (moniker === undefined && monikerName !== undefined && monikerPath !== undefined && monikerKind !== undefined) {
-					moniker = this.context.vertex.moniker(monikerKind, 'tsc', tss.createMonikerIdentifier(monikerPath, monikerName));
-					monikers.set(sourceFile.fileName, moniker);
-					this.context.emit(moniker);
-					if (packageInfo !== undefined) {
-						this.context.emit(this.context.edge.packageInformation(moniker, packageInfo));
-					}
+				documentPartition.addRange(definition);
+				this.recordDeclaration(symbolItemCluster, definition);
+				if (monikerName !== undefined && monikerPath !== undefined && monikerKind !== undefined) {
+					const mi = tss.createMonikerIdentifier(monikerPath, monikerName);
+					monikers.push({ definition, identifier: mi, kind: monikerKind, packageInfo });
 				}
-				if (moniker !== undefined) {
-					this.context.emit(this.context.edge.moniker(definition, moniker));
-				}
-				this.recordDeclaration(definition);
 				this.storeDefinitionAndRange(definition, rangeNode);
 				if (!hover && tss.isNamedDeclaration(declaration)) {
 					hover = this.handleHover(sourceFile, declaration.name);
@@ -489,28 +616,60 @@ abstract class SymbolItem {
 				// We should log this somewhere to improve the tool.
 			}
 		}
-		if (SymbolItem.isBlockScopedVariable(this.tsSymbol) && declarations.length === 1) {
-			let type = this.context.typeChecker.getTypeOfSymbolAtLocation(this.tsSymbol, declarations[0]);
-			if (type.symbol) {
-				let typeSymbol = SymbolItem.get(this.context, type.symbol);
-				let result: TypeDefinitionResult | undefined;
-				if (Array.isArray(typeSymbol.declarations)) {
-					result = this.context.vertex.typeDefinitionResult(typeSymbol.declarations.map(declaration => declaration.id));
-				} else if (typeSymbol.declarations !== undefined) {
-					result = this.context.vertex.typeDefinitionResult([typeSymbol.declarations.id]);
+		if (monikers.length > 0) {
+			let last: typeof monikers[0] | undefined;
+			let same = true;
+			for (let item of monikers) {
+				if (last === undefined) {
+					last = item;
+				} else {
+					if (last.identifier !== item.identifier || last.kind !== item.kind || last.packageInfo !== item.packageInfo) {
+						same = false;
+						break;
+					}
 				}
-				if (result !== undefined) {
-					this.context.emit(result);
-					this.context.emit(this.context.edge.typeDefinition(this.resultSet, result));
+			}
+			if (same) {
+				const item = monikers[0];
+				const moniker = this.context.vertex.moniker(item.kind, 'tsc', item.identifier);
+				this.context.emit(moniker);
+				if (item.packageInfo) {
+					this.context.emit(this.context.edge.packageInformation(moniker, item.packageInfo));
+				}
+				this.context.emit(this.context.edge.moniker(this.resultSet, moniker));
+			} else {
+				for (let item of monikers) {
+					const moniker = this.context.vertex.moniker(item.kind, 'tsc', item.identifier);
+					this.context.emit(moniker);
+					if (item.packageInfo) {
+						this.context.emit(this.context.edge.packageInformation(moniker, item.packageInfo));
+					}
+					this.context.emit(this.context.edge.moniker(item.definition, moniker));
 				}
 			}
 		}
+		// if (SymbolItem.isBlockScopedVariable(this.tsSymbol) && declarations.length === 1) {
+		// 	let type = this.context.typeChecker.getTypeOfSymbolAtLocation(this.tsSymbol, declarations[0]);
+		// 	if (type.symbol) {
+		// 		let typeSymbol = SymbolItem.get(this.context, type.symbol);
+		// 		let result: TypeDefinitionResult | undefined;
+		// 		if (Array.isArray(typeSymbol.declarations)) {
+		// 			result = this.context.vertex.typeDefinitionResult(typeSymbol.declarations.map(declaration => declaration.id));
+		// 		} else if (typeSymbol.declarations !== undefined) {
+		// 			result = this.context.vertex.typeDefinitionResult([typeSymbol.declarations.id]);
+		// 		}
+		// 		if (result !== undefined) {
+		// 			this.context.emit(result);
+		// 			this.context.emit(this.context.edge.typeDefinition(this.resultSet, result));
+		// 		}
+		// 	}
+		// }
 	}
 
 	protected initializeNoDeclarartions(): void {
 		this.ensureReferenceResult();
 		this.emitReferenceResult(this.referenceResult);
-		this.definitionResult = this.context.vertex.definitionResult([]);
+		this.definitionResult = this.context.vertex.definitionResult();
 		this.context.emit(this.definitionResult);
 		this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
 	}
@@ -559,44 +718,24 @@ abstract class SymbolItem {
 			return;
 		}
 		this.resolveReferenceResult();
+		this.emitReferenceResult(this.referenceResult);
 	}
 
 	private resolveReferenceResult(): void {
 		let declarations = this.tsSymbol.getDeclarations();
 		if (declarations === undefined || declarations.length === 0) {
-			this._referenceResult = this.createReferenceResult([], [], []);
+			this._referenceResult = this.createReferenceResult();
 			return;
 		}
-		this._referenceResult = this.doResolveReferenceResult(this.resolveEmittingNode());
+		this._referenceResult = this.doResolveReferenceResult();
 	}
 
-	protected doResolveReferenceResult(emittingNode: ts.Node | undefined): ReferenceResult {
-		if (emittingNode !== undefined) {
-			return this.createReferenceResult(emittingNode);
-		} else {
-			return this.createReferenceResult();
-		}
+	protected doResolveReferenceResult(): ReferenceResult {
+		return this.createReferenceResult();
 	}
 
-	protected createReferenceResult(): ReferenceResult;
-	protected createReferenceResult(emittingNode: ts.Node): ReferenceResult;
-	protected createReferenceResult(referenceResults: ReferenceResultId[]): ReferenceResult;
-	protected createReferenceResult(declarations: (RangeId | lsp.Location)[], definitions: (RangeId | lsp.Location)[], references: (RangeId | lsp.Location)[]): ReferenceResult;
-	protected createReferenceResult(arg0?: any, arg1?: any, arg2?: any): ReferenceResult {
-		let result: ReferenceResult;
-		if (tss.isNode(arg0)) {
-			result = this.context.vertex.referencesResult([],[],[]);
-			this.context.emitOnEndVisit(arg0, [
-				result,
-				this.context.edge.references(this.resultSet, result)
-			]);
-		} else {
-			result = this.context.vertex.referencesResult(arg0, arg1, arg2);
-			if (result.referenceResults === undefined && result.declarations === undefined && result.definitions === undefined && result.references === undefined) {
-				this.emitReferenceResult(result);
-			}
-		}
-		return result;
+	protected createReferenceResult(): ReferenceResult {
+		return this.context.vertex.referencesResult();
 	}
 
 	protected emitReferenceResult(result: ReferenceResult): void {
@@ -616,46 +755,28 @@ abstract class SymbolItem {
 		if (declarations === undefined || declarations.length === 0) {
 			this._implementationResult = this.createImplementationResult();
 		}
-		this._implementationResult = this.doResolveImplementationResult(this.resolveEmittingNode());
+		this._implementationResult = this.doResolveImplementationResult();
 	}
 
-	protected doResolveImplementationResult(emittingNode: ts.Node | undefined): ImplementationResult {
-		if (emittingNode === undefined) {
-			return this.createImplementationResult();
-		}
-		return this.createImplementationResult(emittingNode);
+	protected doResolveImplementationResult(): ImplementationResult {
+		return this.createImplementationResult();
 	}
 
-	protected createImplementationResult(): ImplementationResult;
-	protected createImplementationResult(emittingNode: ts.Node): ImplementationResult;
-	protected createImplementationResult(arg0?: any): ImplementationResult {
-		let implementationResult: ImplementationResult;
-
-		if (tss.isNode(arg0)) {
-			implementationResult = this.context.vertex.implementationResult();
-			implementationResult.result = [];
-			this.context.emitOnEndVisit(arg0, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult)]);
-		}
-		else {
-			implementationResult = this.context.vertex.implementationResult();
-			this.context.emit(implementationResult);
-			this.context.emit(this.context.edge.implementation(this.resultSet, implementationResult));
-		}
-
-		return implementationResult;
+	protected createImplementationResult(): ImplementationResult {
+		return this.context.vertex.implementationResult();
 	}
 
 	protected emitEdgeToForeignReferenceResult(from: ResultSet, to: ReferenceResult): void {
-		let emittingNode: ts.Node | undefined;
-		let edge = this.context.edge.references(from, to);
-		if (ReferenceResult.isStatic(to)) {
-			emittingNode = this.context.getEmittingNode(to);
-		}
-		if (emittingNode !== undefined) {
-			this.context.emitOnEndVisit(emittingNode, [edge]);
-		} else {
-			this.context.emit(edge);
-		}
+		// let emittingNode: ts.Node | undefined;
+		// let edge = this.context.edge.references(from, to);
+		// if (ReferenceResult.isStatic(to)) {
+		// 	emittingNode = this.context.getEmittingNode(to);
+		// }
+		// if (emittingNode !== undefined) {
+		// 	this.context.emitOnEndVisit(emittingNode, [edge]);
+		// } else {
+		// 	this.context.emit(edge);
+		// }
 	}
 
 	protected resolveDefinitionRange(sourceFile: ts.SourceFile, declaration: ts.Declaration): [lsp.Range, ts.Node, string] | [undefined, undefined, undefined] {
@@ -704,8 +825,8 @@ abstract class SymbolItem {
 		}
 	}
 
-	public addReference(reference: ReferenceRange): void {
-		this.recordReference(reference);
+	public addReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+		this.recordReference(symbolItemCluster, reference);
 	}
 
 	public hasDeclaration(node: ts.Node): boolean {
@@ -745,43 +866,27 @@ abstract class SymbolItem {
 		return undefined;
 	}
 
-	protected recordDeclaration(definition: DefinitionRange): void {
-		this.context.emit(this.context.edge.refersTo(definition, this.resultSet));
-		if (this.referenceResult === undefined) {
-			return;
-		}
-		// We have a lazy reference result
-		if (this.referenceResult.declarations === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.definitions));
-		} else {
-			this.referenceResult.declarations.push(definition.id);
-		}
-
+	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+		this.context.emit(this.context.edge.next(definition, this.resultSet));
+		symbolItemCluster.addDefinition(definition);
 		// If this is not an interface, each declaration is an implementation result
-		if (!MemberContainerItem.isInterface(this.tsSymbol) &&
-			// If this is a method and the symbol kind is NOT method, then it is not an implementation
-			!(MemberContainerItem.isMethodSymbol(this.tsSymbol) && definition.tag.kind !== lsp.SymbolKind.Method) &&
-			this._implementationResult
-		) {
-			if(this._implementationResult.result === undefined) {
-				this.context.emit(this.context.edge.item(this._implementationResult, definition));
-			}
-			else {
-				this._implementationResult.result.push(definition.id);
-			}
-		}
+		// if (!MemberContainerItem.isInterface(this.tsSymbol) &&
+		// 	// If this is a method and the symbol kind is NOT method, then it is not an implementation
+		// 	!(MemberContainerItem.isMethodSymbol(this.tsSymbol) && definition.tag.kind !== lsp.SymbolKind.Method) &&
+		// 	this._implementationResult
+		// ) {
+		// 	if(this._implementationResult.result === undefined) {
+		// 		this.context.emit(this.context.edge.item(this._implementationResult, definition));
+		// 	}
+		// 	else {
+		// 		this._implementationResult.result.push(definition.id);
+		// 	}
+		// }
 	}
 
-	protected recordReference(reference: ReferenceRange): void {
-		this.context.emit(this.context.edge.refersTo(reference, this.resultSet));
-		if (this.referenceResult === undefined) {
-			return;
-		}
-		if (this.referenceResult.references === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, reference, ItemEdgeProperties.references));
-		} else {
-			this.referenceResult.references.push(reference.id);
-		}
+	protected recordReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+		this.context.emit(this.context.edge.next(reference, this.resultSet));
+		symbolItemCluster.addReference(reference, ItemEdgeProperties.references);
 	}
 }
 
@@ -833,22 +938,22 @@ abstract class MemberContainerItem extends SymbolItem {
 		this.baseSymbols = baseSymbols;
 	}
 
-	protected recordDeclaration(definition: DefinitionRange): void {
-		super.recordDeclaration(definition);
+	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+		super.recordDeclaration(symbolItemCluster, definition);
 
 		// If we have base symbols, add our declaration to their implementation results
-		if (this.baseSymbols) {
-			this.baseSymbols.forEach(baseSymbol => {
-				if (baseSymbol._implementationResult) {
-					if(baseSymbol._implementationResult.result === undefined) {
-						this.context.emit(this.context.edge.item(baseSymbol._implementationResult, definition));
-					}
-					else {
-						baseSymbol._implementationResult.result.push(definition.id);
-					}
-				}
-			});
-		}
+		// if (this.baseSymbols) {
+		// 	this.baseSymbols.forEach(baseSymbol => {
+		// 		if (baseSymbol._implementationResult) {
+		// 			if(baseSymbol._implementationResult.result === undefined) {
+		// 				this.context.emit(this.context.edge.item(baseSymbol._implementationResult, definition));
+		// 			}
+		// 			else {
+		// 				baseSymbol._implementationResult.result.push(definition.id);
+		// 			}
+		// 		}
+		// 	});
+		// }
 	}
 
 	protected abstract getBaseSymbols(): ts.Symbol[]  | undefined;
@@ -962,7 +1067,7 @@ class ClassSymbolItem extends MemberContainerItem {
 
 class MethodSymbolItem extends SymbolItem {
 
-	private baseReferenceResults: ReadonlyArray<ReferenceResult> | undefined;
+	//private baseReferenceResults: ReadonlyArray<ReferenceResult> | undefined;
 
 	public constructor(id: string, context: SymbolItemContext, tsSymbol: ts.Symbol) {
 		super(id, context, tsSymbol);
@@ -981,77 +1086,77 @@ class MethodSymbolItem extends SymbolItem {
 		return baseMethods;
 	}
 
-	protected doResolveReferenceResult(emittingNode: ts.Node): ReferenceResult {
-		if (SymbolItem.isPrivate(this.tsSymbol)) {
-			return super.doResolveReferenceResult(emittingNode);
-		}
-		if (SymbolItem.isStatic(this.tsSymbol)) {
-			return super.doResolveReferenceResult(emittingNode);
-		}
-		// We have a method that could be overridden. So try to find
-		// a base method with the same name.
-		let baseMethods = this.findBaseMethods();
-		if (baseMethods.length === 0) {
-			return this.createReferenceResult();
-		}
-		// We do have base methods. Easy case only one. Then reuse what the
-		// base method has
-		if (baseMethods.length === 1) {
-			let baseMethod = baseMethods[0];
-			let referenceResult = baseMethod.referenceResult;
-			this.baseReferenceResults = baseMethod.baseReferenceResults;
-			this.emitEdgeToForeignReferenceResult(this.resultSet, referenceResult);
-			return referenceResult;
-		}
+	// protected doResolveReferenceResult(): ReferenceResult {
+	// 	if (SymbolItem.isPrivate(this.tsSymbol)) {
+	// 		return super.doResolveReferenceResult();
+	// 	}
+	// 	if (SymbolItem.isStatic(this.tsSymbol)) {
+	// 		return super.doResolveReferenceResult();
+	// 	}
+	// 	// We have a method that could be overridden. So try to find
+	// 	// a base method with the same name.
+	// 	let baseMethods = this.findBaseMethods();
+	// 	if (baseMethods.length === 0) {
+	// 		return this.createReferenceResult();
+	// 	}
+	// 	// We do have base methods. Easy case only one. Then reuse what the
+	// 	// base method has
+	// 	if (baseMethods.length === 1) {
+	// 		let baseMethod = baseMethods[0];
+	// 		let referenceResult = baseMethod.referenceResult;
+	// 		this.baseReferenceResults = baseMethod.baseReferenceResults;
+	// 		this.emitEdgeToForeignReferenceResult(this.resultSet, referenceResult);
+	// 		return referenceResult;
+	// 	}
 
-		let baseReferenceResults: ReferenceResult[] = [];
-		let mergeIds: ReferenceResultId[] = [];
-		for (let base of baseMethods) {
-			if (base.referenceResult !== undefined) {
-				mergeIds.push(base.referenceResult.id);
-			}
-			if (base.referenceResult !== undefined && base.baseReferenceResults === undefined) {
-				baseReferenceResults.push(base.referenceResult);
-			} else if (base.baseReferenceResults !== undefined) {
-				baseReferenceResults.push(...base.baseReferenceResults);
-			}
-		}
-		this.baseReferenceResults = baseReferenceResults;
-		let referenceResult = this.createReferenceResult(mergeIds);
-		// The merged ID set is complete. So we can emit it
-		this.emitReferenceResult(referenceResult);
-		return referenceResult;
-	}
+	// 	let baseReferenceResults: ReferenceResult[] = [];
+	// 	let mergeIds: ReferenceResultId[] = [];
+	// 	for (let base of baseMethods) {
+	// 		if (base.referenceResult !== undefined) {
+	// 			mergeIds.push(base.referenceResult.id);
+	// 		}
+	// 		if (base.referenceResult !== undefined && base.baseReferenceResults === undefined) {
+	// 			baseReferenceResults.push(base.referenceResult);
+	// 		} else if (base.baseReferenceResults !== undefined) {
+	// 			baseReferenceResults.push(...base.baseReferenceResults);
+	// 		}
+	// 	}
+	// 	this.baseReferenceResults = baseReferenceResults;
+	// 	let referenceResult = this.createReferenceResult(mergeIds);
+	// 	// The merged ID set is complete. So we can emit it
+	// 	this.emitReferenceResult(referenceResult);
+	// 	return referenceResult;
+	// }
 
-	protected doResolveImplementationResult(emittingNode: ts.Node): ImplementationResult {
+	protected doResolveImplementationResult(): ImplementationResult {
 		// Implementation is the same as declaration
 		if (SymbolItem.isPrivate(this.tsSymbol)) {
-			return super.doResolveImplementationResult(emittingNode);
+			return super.doResolveImplementationResult();
 		}
 		if (SymbolItem.isStatic(this.tsSymbol)) {
-			return super.doResolveImplementationResult(emittingNode);
+			return super.doResolveImplementationResult();
 		}
 
 		// We could be implementing another method
 		// Look for base method
 		let baseMethods = this.findBaseMethods();
 		if (baseMethods.length === 0) {
-			return super.doResolveImplementationResult(emittingNode);
+			return super.doResolveImplementationResult();
 		}
 
 		// We implement some base method
 		let implementationResult = this.context.vertex.implementationResult();
-		implementationResult.result = [];
+		// implementationResult.result = [];
 
-		// In this case, point all base methods to our results as well
-		let toEmit: Edge[] = [];
-		baseMethods.forEach(baseMethod => {
-			if (baseMethod._implementationResult) {
-				toEmit.push(this.context.edge.item(baseMethod._implementationResult, implementationResult));
-			}
-		});
+		// // In this case, point all base methods to our results as well
+		// let toEmit: Edge[] = [];
+		// baseMethods.forEach(baseMethod => {
+		// 	if (baseMethod._implementationResult) {
+		// 		toEmit.push(this.context.edge.item(baseMethod._implementationResult, implementationResult));
+		// 	}
+		// });
 
-		this.context.emitOnEndVisit(emittingNode, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult), ...toEmit]);
+		// this.context.emitOnEndVisit(emittingNode, [implementationResult, this.context.edge.implementation(this.resultSet, implementationResult), ...toEmit]);
 
 		return implementationResult;
 	}
@@ -1069,23 +1174,23 @@ class MethodSymbolItem extends SymbolItem {
 		return memberContainer;
 	}
 
-	protected recordDeclaration(definition: DefinitionRange): void {
-		super.recordDeclaration(definition);
-		if (this.baseReferenceResults !== undefined) {
-			this.baseReferenceResults.forEach(result =>  {
-				this.context.emit(this.context.edge.item(result, definition, ItemEdgeProperties.definitions))
-			});
-		}
+	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+		super.recordDeclaration(symbolItemCluster, definition);
+		// if (this.baseReferenceResults !== undefined) {
+		// 	this.baseReferenceResults.forEach(result =>  {
+		// 		this.context.emit(this.context.edge.item(result, definition, ItemEdgeProperties.definitions))
+		// 	});
+		// }
 	}
 
-	protected recordReference(reference: ReferenceRange): void {
-		super.recordReference(reference);
-		if (this.baseReferenceResults !== undefined) {
-			this.baseReferenceResults.forEach(result => {
-				this.context.emit(this.context.edge.item(result, reference, ItemEdgeProperties.references));
-			});
-			return;
-		}
+	protected recordReference(symbolItemCluster: SymbolItemPartition, reference: ReferenceRange): void {
+		super.recordReference(symbolItemCluster, reference);
+		// if (this.baseReferenceResults !== undefined) {
+		// 	this.baseReferenceResults.forEach(result => {
+		// 		this.context.emit(this.context.edge.item(result, reference, ItemEdgeProperties.references));
+		// 	});
+		// 	return;
+		// }
 	}
 }
 
@@ -1118,22 +1223,24 @@ class AliasSymbolItem extends SymbolItem  {
 		return undefined;
 	}
 
-	protected recordDeclaration(definition: DefinitionRange): void {
-		this.context.emit(this.context.edge.refersTo(definition, this.resultSet));
-		if (this.referenceResult === undefined) {
-			return;
-		}
-		// Alias declarations are recorded as references on the aliased set.
-		if (this.referenceResult.references === undefined) {
-			this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.references));
-		} else {
-			this.referenceResult.references.push(definition.id);
-		}
+	protected recordDeclaration(symbolItemCluster: SymbolItemPartition, definition: DefinitionRange): void {
+		// this.context.emit(this.context.edge.next(definition, this.resultSet));
+		// symbolItemCluster.
+		// if (this.referenceResult === undefined) {
+		// 	return;
+		// }
+		// // Alias declarations are recorded as references on the aliased set.
+		// if (this.referenceResult.references === undefined) {
+		// 	this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.references));
+		// } else {
+		// 	this.referenceResult.references.push(definition.id);
+		// }
 	}
 }
 
 interface DocumentInformation {
 	document: Document;
+	documentPartition: DocumentPartition;
 	packageInfo?: PackageInformation;
 	monikerKind?: MonikerKind;
 	monikerPath?: string;
@@ -1153,18 +1260,19 @@ class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
 	private project: Project;
+	private projectPartition: ProjectPartition;
 	private projectRoot: string;
 	private rootDir: string | undefined;
 	private outDir: string | undefined;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
-	private _currentDocument: Document | undefined;
+	private _currentDocumentPartition: DocumentPartition | undefined;
 	private _currentExports: Set<ts.Symbol> | undefined;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
-	private documents: Map<string, DocumentInformation>;
+	private documents: Map<string, DocumentInformation | null>;
 	private packageInfos: Map<string, PackageInformation>;
-	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, ResultPartition>>;
+	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolItemPartition>>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
@@ -1201,6 +1309,8 @@ class Visitor implements SymbolItemContext {
 			// Try to compute the root directories.
 		}
 		this.emit(this.project);
+		this.projectPartition = new ProjectPartition(this, this.project);
+		this.projectPartition.begin();
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1231,6 +1341,10 @@ class Visitor implements SymbolItemContext {
 			rootDir: this.rootDir!,
 			outDir: this.outDir!
 		};
+	}
+
+	public endVisitProgram(): void {
+		this.projectPartition.end();
 	}
 
 	public emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void {
@@ -1313,7 +1427,7 @@ class Visitor implements SymbolItemContext {
 
 		this.currentSourceFile = sourceFile;
 		let info = this.getDocumentAndEmitIfNecessary(sourceFile);
-		this._currentDocument = info.document;
+		this._currentDocumentPartition = info.documentPartition;
 		this.symbolContainer.push({ id: info.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
 
@@ -1346,7 +1460,7 @@ class Visitor implements SymbolItemContext {
 		if (resultPartitions !== undefined) {
 			this.resultPartitions.delete(key);
 			for (let partition of resultPartitions.values()) {
-				partition.emit();
+				partition.end();
 			}
 		}
 
@@ -1361,6 +1475,7 @@ class Visitor implements SymbolItemContext {
 		}
 		this._currentExports = undefined;
 
+		let documentPartition = this.documents.get(sourceFile.fileName)!.documentPartition;
 		// Diagnostics
 		let diagnostics: lsp.Diagnostic[] = [];
 		let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
@@ -1374,9 +1489,7 @@ class Visitor implements SymbolItemContext {
 			}
 		}
 		if (diagnostics.length > 0) {
-			let set = this.vertex.diagnosticResult(diagnostics);
-			this.emit(set);
-			this.emit(this.edge.diagnostic(this.currentDocument, set));
+			documentPartition.addDiagnostics(diagnostics);
 		}
 
 		// Folding ranges
@@ -1387,23 +1500,21 @@ class Visitor implements SymbolItemContext {
 				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
 			}
 			if (foldingRanges.length > 0) {
-				let foldingRangeResult = this.vertex.foldingRangeResult(foldingRanges)
-				this.emit(foldingRangeResult);
-				this.emit(this.edge.foldingRange(this.currentDocument, foldingRangeResult));
+				documentPartition.addFoldingRanges(foldingRanges);
 			}
 		}
 
 		// Document symbols.
 		let values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
 		if (values !== undefined && values.length > 0) {
-			let set = this.vertex.documentSymbolResult(values);
-			this.emit(set);
-			this.emit(this.edge.documentSymbols(this.currentDocument, set));
+			documentPartition.addDocumentSymbols(values);
 		}
 		this.recordDocumentSymbol.pop();
 
 		this.currentSourceFile = undefined;
-		this._currentDocument = undefined;
+		this._currentDocumentPartition = undefined;
+		documentPartition.end();
+		this.documents.set(sourceFile.fileName, null);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
@@ -1416,16 +1527,7 @@ class Visitor implements SymbolItemContext {
 			let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
 			let moniker = this.vertex.moniker(MonikerKind.export, 'tsc', tss.createMonikerIdentifier(path, fullName));
 			this.emit(moniker);
-			let declarations = symbolItem.declarations;
-			if (declarations !== undefined) {
-				if (Array.isArray(declarations)) {
-					for (let declaration of declarations) {
-						this.emit(this.edge.moniker(declaration, moniker));
-					}
-				} else {
-					this.emit(this.edge.moniker(declarations, moniker));
-				}
-			}
+			this.emit(this.edge.moniker(symbolItem.resultSet, moniker));
 		}
 		if (symbol.exports !== undefined && symbol.exports.size > 0) {
 			symbol.exports.forEach(item => this.emitExportMonikers(path, name, item));
@@ -1437,7 +1539,6 @@ class Visitor implements SymbolItemContext {
 				}
 			});
 		}
-
 	}
 
 	public isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
@@ -1600,8 +1701,9 @@ class Visitor implements SymbolItemContext {
 		let sourceFile = this.currentSourceFile!;
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.emit(reference);
-		this.emit(this.edge.contains(this.currentDocument, reference));
-		symbolInfo.addReference(reference);
+		this.currentDocumentPartition.addRange(reference);
+		let symbolItemCluster = this.getSymbolItemPartition(this.currentDocumentPartition.document, symbolInfo);
+		symbolInfo.addReference(symbolItemCluster, reference);
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
@@ -1626,7 +1728,10 @@ class Visitor implements SymbolItemContext {
 			return undefined;
 		}
 
-		let result: DocumentInformation | undefined = this.documents.get(file.fileName);
+		let result: DocumentInformation | undefined | null = this.documents.get(file.fileName);
+		if (result === null) {
+			throw new Error(`Document ${file.fileName} got already processed.`);
+		}
 		if (result !== undefined) {
 			return result;
 		}
@@ -1661,8 +1766,9 @@ class Visitor implements SymbolItemContext {
 			monikerPath = computeMonikerPath(file);
 		}
 
-		result = { document };
+		result = { document, documentPartition: new DocumentPartition(this, document) };
 		this.emit(document);
+		result.documentPartition.begin();
 		if (monikerPath !== undefined) {
 			result.monikerPath = monikerPath;
 			result.monikerKind = MonikerKind.import;
@@ -1670,14 +1776,12 @@ class Visitor implements SymbolItemContext {
 		if (packageInfo != undefined) {
 			result.packageInfo = packageInfo;
 		}
-		if (this.project) {
-			this.emit(this.edge.contains(this.project, result.document));
-		}
+		this.projectPartition.addDocument(result.document);
 		this.documents.set(file.fileName, result);
 		return result;
 	}
 
-	public getResultPartition(document: Document, symbolItem: SymbolItem, resultSet: ResultSet): ResultPartition {
+	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolItemPartition {
 		let symbolMap = this.resultPartitions.get(document.uri);
 		if (symbolMap === undefined) {
 			symbolMap = new Map();
@@ -1685,7 +1789,7 @@ class Visitor implements SymbolItemContext {
 		}
 		let result = symbolMap.get(symbolItem.id);
 		if (result === undefined) {
-			result = new ResultPartition(this, resultSet, document);
+			result = new SymbolItemPartition(this, document);
 			symbolMap.set(symbolItem.id, result);
 		}
 		return result;
@@ -1723,11 +1827,11 @@ class Visitor implements SymbolItemContext {
 		this.emitter.emit(element);
 	}
 
-	private get currentDocument(): Document {
-		if (this._currentDocument === undefined) {
-			throw new Error(`No current document`);
+	private get currentDocumentPartition(): DocumentPartition {
+		if (this._currentDocumentPartition === undefined) {
+			throw new Error(`No current document partition`);
 		}
-		return this._currentDocument;
+		return this._currentDocumentPartition;
 	}
 
 	private get currentRecordDocumentSymbol(): boolean {
@@ -1741,5 +1845,8 @@ class Visitor implements SymbolItemContext {
 
 
 export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
-	return new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile).visitProgram();
+	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile);
+	let result = visitor.visitProgram();
+	visitor.endVisitProgram();
+	return result;
 }

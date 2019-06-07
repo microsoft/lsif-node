@@ -86,7 +86,7 @@ export const create: Create = (): Emitter => {
 				// }
 				let edge: VisEdge = {
 					from: element.outV as number,
-					to: element.inV as number,
+					to: 10, //element.inV as number,
 					label: element.label
 				}
 				data.edges.push(edge)
