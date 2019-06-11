@@ -5,6 +5,9 @@
 import * as yargs from 'yargs';
 import { main } from '../main';
 
+const delay: number = 500;
+
+// The following test suite should only be run locally
 describe('The console-line interface usage', () => {
     beforeAll(() => {
         // Hijack console functions to suppress logs
@@ -15,14 +18,18 @@ describe('The console-line interface usage', () => {
             // Empty
         };
     });
-    it('Should require at least one command', () => {
-        yargs.parse([]);
+    it('Should work with file path specified', () => {
+        yargs.parse(['visualize', '.\\example\\line.json']);
         main();
-        expect(process.exitCode).toBe(1);
+        setTimeout(() => {
+            expect(process.exitCode).toBe(0);
+        }, delay);
     });
-    it('Should ask for an input file if none specified and --stdin is missing', () => {
-        yargs.parse(['validate']);
+    it('Should accept different input formats', () => {
+        yargs.parse(['visualize', '.\\example\\json.json', '--inputFormat', 'json']);
         main();
-        expect(process.exitCode).toBe(1);
+        setTimeout(() => {
+            expect(process.exitCode).toBe(0);
+        }, delay);
     });
 });

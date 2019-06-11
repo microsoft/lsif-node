@@ -11,7 +11,8 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "jest --ci --reporters=jest-junit --reporters=default",
+    "test": "jest",
+    "test:ci": "jest --ci --reporters=jest-junit --reporters=default --testPathIgnorePatterns local.js",
     "clean": "node ./node_modules/rimraf/bin.js -rf lib",
     "compile": "tsc -p ./",
     "lint": "tslint --fix ./src/*.ts && tslint --fix ./src/test/*.ts",
