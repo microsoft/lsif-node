@@ -27,18 +27,4 @@ describe('The console-line interface usage', () => {
         main();
         expect(process.exitCode).toBe(1);
     });
-    it('Should work with file path specified', () => {
-        yargs.parse(['visualize', '.\\example\\line.json']);
-        main();
-        setTimeout(() => {
-            expect(process.exitCode).toBe(0);
-        }, delay);
-    });
-    it('Should accept different input formats', () => {
-        yargs.parse(['visualize', '.\\example\\json.json', '--inputFormat', 'json']);
-        main();
-        setTimeout(() => {
-            expect(process.exitCode).toBe(0);
-        }, delay);
-    });
 });
