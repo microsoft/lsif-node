@@ -15,7 +15,7 @@ import * as tss from './typescripts';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, ReferenceRange, RangeId, RangeBasedDocumentSymbol,
-	ResultSet, HoverResult, DefinitionRange, DefinitionResult, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult, Version,
+	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, PackageInformation, ItemEdgeProperties, ImplementationResult, Version,
 	Range, EventKind
 } from 'lsif-protocol';
 
@@ -236,10 +236,12 @@ class DocumentData extends LSIFData {
 	}
 
 	public begin(): void {
+		this.emit(this.document);
 		this.emit(this.vertex.event(EventKind.begin, this.document));
 	}
 
 	public addRange(range: Range): void {
+		this.emit(range);
 		this.ranges.push(range);
 	}
 
@@ -297,8 +299,18 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.resultSet);
 	}
 
-	public linkRange(range: Range): void {
-		this.emit(this.edge.next(range, this.resultSet));
+	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+		this.emit(this.edge.next(definition, this.resultSet));
+		this.getOrCreatePartition(sourceFile).addDefinition(definition);
+	}
+
+	public addReference(sourceFile: ts.SourceFile, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public addReference(sourceFile: ts.SourceFile, reference: ReferenceResult): void;
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (reference.label === 'range') {
+			this.emit(this.edge.next(reference, this.resultSet));
+		}
+		this.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
 	}
 
 	public getOrCreateDefinitionResult(): DefinitionResult {
@@ -325,6 +337,13 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
+	public addMoniker(path: string | undefined, prefix: string | undefined, name: string): void {
+		let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
+		let moniker = this.vertex.moniker(MonikerKind.export, 'tsc', tss.createMonikerIdentifier(path, fullName));
+		this.emit(moniker);
+		this.emit(this.edge.moniker(this.resultSet, moniker));
+	}
+
 	public abstract getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition;
 
 	public abstract nodeProcessed(node: ts.Node): boolean;
@@ -349,6 +368,7 @@ class LocalSymbolData extends SymbolData {
 				throw new Error(`No document data for ${fileName}`);
 			}
 			this.partition = new SymbolDataPartition(this.context, this, documentData.document);
+			this.context.manageLifeCycle(this.scope, this);
 			this.partition.begin();
 		}
 		return this.partition;
@@ -392,6 +412,7 @@ class GlobalSymbolData extends SymbolData {
 				throw new Error(`No document data for ${fileName}`);
 			}
 			result = new SymbolDataPartition(this.context, this, documentData.document);
+			this.context.manageLifeCycle(sourceFile, this);
 			result.begin();
 			this.partitions.set(fileName, result);
 		}
@@ -488,7 +509,7 @@ class SymbolDataPartition extends LSIFData {
 	}
 }
 
-export class DataTable implements SymbolDataContext {
+export class DataManager implements SymbolDataContext {
 
 	private projectData: ProjectData;
 	private documentDatas: Map<string, DocumentData | null>;
@@ -553,6 +574,14 @@ export class DataTable implements SymbolDataContext {
 		return result;
 	}
 
+	public documentDone(fileName: string): void {
+		let data = this.getDocumentData(fileName);
+		if (data === undefined) {
+			throw new Error(`No document data for file ${fileName}`);
+		}
+		data.end();
+		this.documentDatas.set(fileName, null);
+	}
 
 	public getSymbolData(symbolInfo: SymbolItem): SymbolData | undefined {
 		let result = this.symbolDatas.get(symbolInfo.id);
@@ -601,14 +630,12 @@ export class DataTable implements SymbolDataContext {
 interface SymbolItemContext extends EmitContext {
 
 	typeChecker: ts.TypeChecker;
-	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
-	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPartition;
-	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
+	getOrCreateDocumentData(file: ts.SourceFile): DocumentData;
+	getOrCreateSymbolData(symbolInfo: SymbolItem, scope?: ts.Node): SymbolData;
+	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined;
 	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 
-	emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void;
-	getEmittingNode(toEmit: Vertex | Edge): ts.Node | undefined;
 	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
 	isExported(symbol: ts.Symbol): boolean;
 }
@@ -834,11 +861,11 @@ abstract class SymbolItem {
 	}
 
 	protected initialize(): void {
-		this.ensureResultSet();
+		// this.ensureResultSet();
 		let declarations: ts.Declaration[] | undefined = this.tsSymbol.getDeclarations();
 		if (declarations !== undefined && declarations.length > 0) {
-			this.ensureReferenceResult();
-			this.ensureImplementationResult();
+			// this.ensureReferenceResult();
+			// this.ensureImplementationResult();
 			this.initializeDeclarations(declarations);
 		} else {
 			this.initializeNoDeclarartions();
@@ -849,36 +876,27 @@ abstract class SymbolItem {
 		let hover: boolean = false;
 		const monikerName = SymbolItem.computeMoniker(declarations);
 		let monikers: { definition: DefinitionRange; identifier: string; kind: MonikerKind, packageInfo: PackageInformation | undefined }[] = [];
-		let definitionResult: DefinitionResult | undefined;
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
 			let [range, rangeNode, text] = this.resolveDefinitionRange(sourceFile, declaration);
 			if (range !== undefined && rangeNode !== undefined && text !== undefined) {
-				let { document, documentPartition, monikerPath, monikerKind, packageInfo } = this.context.getDocumentAndEmitIfNecessary(sourceFile);
-				let symbolItemCluster = this.context.getSymbolItemPartition(document, this);
-				if (definitionResult === undefined) {
-					definitionResult = this.context.vertex.definitionResult();
-					this.context.emit(definitionResult);
-					this.context.emit(this.context.edge.definition(this.resultSet, definitionResult));
-				}
-				symbolItemCluster.definitionResult = definitionResult;
-				symbolItemCluster.referenceResult = this.referenceResult;
+				let documentData = this.context.getOrCreateDocumentData(sourceFile);
+				let symbolData = this.context.getOrCreateSymbolData(this, this.resolveEmittingNode());
 				let definition = this.context.vertex.range(Converter.rangeFromNode(sourceFile, rangeNode), {
 					type: RangeTagTypes.definition,
 					text: text,
 					kind: Converter.asSymbolKind(declaration),
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
 				});
-				this.context.emit(definition);
-				documentPartition.addRange(definition);
-				this.recordDeclaration(symbolItemCluster, definition);
-				if (monikerName !== undefined && monikerPath !== undefined && monikerKind !== undefined) {
-					const mi = tss.createMonikerIdentifier(monikerPath, monikerName);
-					monikers.push({ definition, identifier: mi, kind: monikerKind, packageInfo });
+				documentData.addRange(definition);
+				symbolData.addDefinition(sourceFile, definition);
+				if (monikerName !== undefined && documentData.monikerPath !== undefined && documentData.monikerKind !== undefined) {
+					const mi = tss.createMonikerIdentifier(documentData.monikerPath, monikerName);
+					monikers.push({ definition, identifier: mi, kind: documentData.monikerKind, packageInfo: documentData.packageInfo });
 				}
 				this.storeDefinitionAndRange(definition, rangeNode);
 				if (!hover && tss.isNamedDeclaration(declaration)) {
-					hover = this.handleHover(sourceFile, declaration.name);
+					hover = this.handleHover(sourceFile, declaration.name, symbolData);
 				}
 			} else {
 				// We should log this somewhere to improve the tool.
@@ -1011,20 +1029,20 @@ abstract class SymbolItem {
 		this.context.emit(this.context.edge.references(this.resultSet, result));
 	}
 
-	private ensureImplementationResult(): void {
-		if (this._implementationResult !== undefined) {
-			return;
-		}
-		this.resolveImplementationResult();
-	}
+	// private ensureImplementationResult(): void {
+	// 	if (this._implementationResult !== undefined) {
+	// 		return;
+	// 	}
+	// 	this.resolveImplementationResult();
+	// }
 
-	private resolveImplementationResult(): void {
-		let declarations = this.tsSymbol.getDeclarations();
-		if (declarations === undefined || declarations.length === 0) {
-			this._implementationResult = this.createImplementationResult();
-		}
-		this._implementationResult = this.doResolveImplementationResult();
-	}
+	// private resolveImplementationResult(): void {
+	// 	let declarations = this.tsSymbol.getDeclarations();
+	// 	if (declarations === undefined || declarations.length === 0) {
+	// 		this._implementationResult = this.createImplementationResult();
+	// 	}
+	// 	this._implementationResult = this.doResolveImplementationResult();
+	// }
 
 	protected doResolveImplementationResult(): ImplementationResult {
 		return this.createImplementationResult();
@@ -1059,11 +1077,10 @@ abstract class SymbolItem {
 		return [undefined, undefined, undefined];
 	}
 
-	protected handleHover(sourceFile: ts.SourceFile, rangeNode: ts.DeclarationName): boolean  {
+	protected handleHover(sourceFile: ts.SourceFile, rangeNode: ts.DeclarationName, symbolData: SymbolData): boolean  {
 		let hover = this.context.getHover(rangeNode, sourceFile);
 		if (hover !== undefined) {
-			this.context.emit(hover);
-			this.context.emit(this.context.edge.hover(this.resultSet, hover));
+			symbolData.addHover(hover);
 			return true;
 		} else {
 			return false;
@@ -1506,14 +1523,6 @@ class AliasSymbolItem extends SymbolItem  {
 	}
 }
 
-interface DocumentInformation {
-	document: Document;
-	documentPartition: DocumentData;
-	packageInfo?: PackageInformation;
-	monikerKind?: MonikerKind;
-	monikerPath?: string;
-}
-
 export interface ProjectInfo {
 	rootDir: string;
 	outDir: string;
@@ -1528,21 +1537,19 @@ class Visitor implements SymbolItemContext {
 
 	private builder: Builder;
 	private project: Project;
-	private projectPartition: ProjectData;
 	private projectRoot: string;
 	private rootDir: string | undefined;
 	private outDir: string | undefined;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
-	private _currentDocumentPartition: DocumentData | undefined;
+	private _currentDocumentData: DocumentData | undefined;
 	private _currentExports: Set<ts.Symbol> | undefined;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
-	private documents: Map<string, DocumentInformation | null>;
+	private dataManager: DataManager;
 	private packageInfos: Map<string, PackageInformation>;
 	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolDataPartition>>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
-	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
@@ -1551,11 +1558,9 @@ class Visitor implements SymbolItemContext {
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
-		this.documents = new Map();
 		this.externalLibraryImports = new Map();
 		this.packageInfos = new Map();
 		this.resultPartitions = new Map();
-		this._emitOnEndVisit = new Map();
 		this.dependentOutDirs = [];
 		for (let info of dependsOn) {
 			this.dependentOutDirs.push(info.outDir);
@@ -1576,9 +1581,7 @@ class Visitor implements SymbolItemContext {
 		} else {
 			// Try to compute the root directories.
 		}
-		this.emit(this.project);
-		this.projectPartition = new ProjectData(this, this.project);
-		this.projectPartition.begin();
+		this.dataManager = new DataManager(this, this.project);
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1612,27 +1615,7 @@ class Visitor implements SymbolItemContext {
 	}
 
 	public endVisitProgram(): void {
-		this.projectPartition.end();
-	}
-
-	public emitOnEndVisit(node: ts.Node, toEmit: (Vertex | Edge)[]): void {
-		let current = this._emitOnEndVisit.get(node);
-		if (current !== undefined) {
-			current.push(...toEmit);
-		} else {
-			this._emitOnEndVisit.set(node, toEmit);
-		}
-	}
-
-	public getEmittingNode(toEmit: Vertex | Edge): ts.Node | undefined {
-		// We assume this is not called to often so we don't spent a hash map for now
-		for (let entry of this._emitOnEndVisit.entries()) {
-			let [key, elements] = entry;
-			if (elements.indexOf(toEmit) !== -1) {
-				return key;
-			}
-		}
-		return undefined;
+		this.dataManager.projectDone();
 	}
 
 	protected visit(node: ts.Node): void {
@@ -1680,11 +1663,7 @@ class Visitor implements SymbolItemContext {
 			node.forEachChild(child => this.visit(child));
 		}
 		endVisit.call(this, node);
-		let toEmit = this._emitOnEndVisit.get(node);
-		if (toEmit) {
-			this._emitOnEndVisit.delete(node);
-			toEmit.forEach(this.emit, this);
-		}
+		this.dataManager.nodeProcessed(node);
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
@@ -1694,9 +1673,9 @@ class Visitor implements SymbolItemContext {
 		// process.stderr.write('.');
 
 		this.currentSourceFile = sourceFile;
-		let info = this.getDocumentAndEmitIfNecessary(sourceFile);
-		this._currentDocumentPartition = info.documentPartition;
-		this.symbolContainer.push({ id: info.document.id, children: [] });
+		let documentData = this.getOrCreateDocumentData(sourceFile);
+		this._currentDocumentData = documentData;
+		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
 
 		// Exported Symbols
@@ -1743,7 +1722,7 @@ class Visitor implements SymbolItemContext {
 		}
 		this._currentExports = undefined;
 
-		let documentPartition = this.documents.get(sourceFile.fileName)!.documentPartition;
+		let documentData = this.currentDocumentData;
 		// Diagnostics
 		let diagnostics: lsp.Diagnostic[] = [];
 		let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
@@ -1757,7 +1736,7 @@ class Visitor implements SymbolItemContext {
 			}
 		}
 		if (diagnostics.length > 0) {
-			documentPartition.addDiagnostics(diagnostics);
+			documentData.addDiagnostics(diagnostics);
 		}
 
 		// Folding ranges
@@ -1768,21 +1747,20 @@ class Visitor implements SymbolItemContext {
 				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
 			}
 			if (foldingRanges.length > 0) {
-				documentPartition.addFoldingRanges(foldingRanges);
+				documentData.addFoldingRanges(foldingRanges);
 			}
 		}
 
 		// Document symbols.
 		let values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
 		if (values !== undefined && values.length > 0) {
-			documentPartition.addDocumentSymbols(values);
+			documentData.addDocumentSymbols(values);
 		}
 		this.recordDocumentSymbol.pop();
 
 		this.currentSourceFile = undefined;
-		this._currentDocumentPartition = undefined;
-		documentPartition.end();
-		this.documents.set(sourceFile.fileName, null);
+		this._currentDocumentData = undefined;
+		this.dataManager.documentDone(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
@@ -1792,10 +1770,8 @@ class Visitor implements SymbolItemContext {
 		const name  = symbol.getName();
 		let symbolItem = this.getSymbolInfo(symbol);
 		if (symbolItem !== undefined) {
-			let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
-			let moniker = this.vertex.moniker(MonikerKind.export, 'tsc', tss.createMonikerIdentifier(path, fullName));
-			this.emit(moniker);
-			this.emit(this.edge.moniker(symbolItem.resultSet, moniker));
+			let symbolData = this.dataManager.getSymbolData(symbolItem)!;
+			symbolData.addMoniker(path, prefix, name);
 		}
 		if (symbol.exports !== undefined && symbol.exports.size > 0) {
 			symbol.exports.forEach(item => this.emitExportMonikers(path, name, item));
@@ -1968,10 +1944,9 @@ class Visitor implements SymbolItemContext {
 
 		let sourceFile = this.currentSourceFile!;
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
-		this.emit(reference);
-		this.currentDocumentPartition.addRange(reference);
-		let symbolItemCluster = this.getSymbolItemPartition(this.currentDocumentPartition.document, symbolInfo);
-		symbolInfo.addReference(symbolItemCluster, reference);
+		this.currentDocumentData.addRange(reference);
+		let symbolData = this.dataManager.getOrCreateSymbolData(symbolInfo, node);
+		symbolData.getOrCreatePartition(sourceFile).addReference(reference, ItemEdgeProperties.references);
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
@@ -1982,7 +1957,7 @@ class Visitor implements SymbolItemContext {
 		return this.languageService.getTypeDefinitionAtPosition(sourceFile.fileName, node.getStart(sourceFile));
 	}
 
-	public getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation {
+	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
 		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
 			if (!sourceFile.isDeclarationFile) {
 				return undefined;
@@ -1996,17 +1971,14 @@ class Visitor implements SymbolItemContext {
 			return undefined;
 		}
 
-		let result: DocumentInformation | undefined | null = this.documents.get(file.fileName);
-		if (result === null) {
-			throw new Error(`Document ${file.fileName} got already processed.`);
-		}
+		let result = this.dataManager.getDocumentData(sourceFile.fileName);
 		if (result !== undefined) {
 			return result;
 		}
 
-		let document = this.vertex.document(file.fileName, file.text)
+		let document = this.vertex.document(sourceFile.fileName, sourceFile.text)
 
-		let resolvedModule = this.externalLibraryImports.get(file.fileName);
+		let resolvedModule = this.externalLibraryImports.get(sourceFile.fileName);
 		let monikerPath: string | undefined;
 		let packageInfo: PackageInformation | undefined;
 		if (resolvedModule !== undefined) {
@@ -2018,9 +1990,9 @@ class Visitor implements SymbolItemContext {
 					packageInfo = this.vertex.packageInformation(packageId.name, 'npm');
 					packageInfo.version = packageId.version;
 					let modulePart = `node_modules/${packageId.name}`;
-					let index = file.fileName.lastIndexOf(modulePart);
+					let index = sourceFile.fileName.lastIndexOf(modulePart);
 					if (index !== -1) {
-						let packageFile = path.join(file.fileName.substring(0, index + modulePart.length), 'package.json');
+						let packageFile = path.join(sourceFile.fileName.substring(0, index + modulePart.length), 'package.json');
 						if (fs.existsSync(packageFile)) {
 							packageInfo.uri = URI.file(packageFile).toString(true);
 						}
@@ -2029,41 +2001,20 @@ class Visitor implements SymbolItemContext {
 					this.packageInfos.set(key, packageInfo);
 				}
 			}
-			monikerPath = tss.computeMonikerPath(this.projectRoot, file.fileName);
+			monikerPath = tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
 		} else {
-			monikerPath = computeMonikerPath(file);
+			monikerPath = computeMonikerPath(sourceFile);
 		}
 
-		result = { document, documentPartition: new DocumentData(this, document) };
-		this.emit(document);
-		result.documentPartition.begin();
-		if (monikerPath !== undefined) {
-			result.monikerPath = monikerPath;
-			result.monikerKind = MonikerKind.import;
-		}
-		if (packageInfo != undefined) {
-			result.packageInfo = packageInfo;
-		}
-		this.projectPartition.addDocument(result.document);
-		this.documents.set(file.fileName, result);
+		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, packageInfo, MonikerKind.import, monikerPath);
 		return result;
 	}
 
-	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPartition {
-		let symbolMap = this.resultPartitions.get(document.uri);
-		if (symbolMap === undefined) {
-			symbolMap = new Map();
-			this.resultPartitions.set(document.uri, symbolMap);
-		}
-		let result = symbolMap.get(symbolItem.id);
-		if (result === undefined) {
-			result = new SymbolDataPartition(this, document);
-			symbolMap.set(symbolItem.id, result);
-		}
-		return result;
+	public getOrCreateSymbolData(symbolInfo: SymbolItem, scope?: ts.Node): SymbolData {
+		return this.dataManager.getOrCreateSymbolData(symbolInfo, scope);
 	}
 
-	public getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined {
+	public getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
@@ -2071,8 +2022,7 @@ class Visitor implements SymbolItemContext {
 		if (quickInfo === undefined) {
 			return undefined;
 		}
-		let lspHover = Converter.asHover(sourceFile, quickInfo);
-		return this.vertex.hoverResult(lspHover.contents);
+		return Converter.asHover(sourceFile, quickInfo);
 	}
 
 	private get program(): ts.Program {
@@ -2095,11 +2045,11 @@ class Visitor implements SymbolItemContext {
 		this.emitter.emit(element);
 	}
 
-	private get currentDocumentPartition(): DocumentData {
-		if (this._currentDocumentPartition === undefined) {
+	private get currentDocumentData(): DocumentData {
+		if (this._currentDocumentData === undefined) {
 			throw new Error(`No current document partition`);
 		}
-		return this._currentDocumentPartition;
+		return this._currentDocumentData;
 	}
 
 	private get currentRecordDocumentSymbol(): boolean {
