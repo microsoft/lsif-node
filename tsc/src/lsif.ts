@@ -154,8 +154,13 @@ interface EmitContext {
 	emit(element: Vertex | Edge): void;
 }
 
-abstract class DataPartition {
-	protected constructor(private context: EmitContext) {
+interface SymbolDataContext extends EmitContext {
+	getDocumentData(fileName: string): DocumentData | undefined;
+	manageLifeCycle(node: ts.Node, symbolData: SymbolData): void;
+}
+
+abstract class LSIFData {
+	protected constructor(protected context: SymbolDataContext) {
 	}
 
 	public abstract begin(): void;
@@ -175,12 +180,12 @@ abstract class DataPartition {
 	}
 }
 
-class ProjectData extends DataPartition {
+class ProjectData extends LSIFData {
 
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: EmitContext, private project: Project) {
+	public constructor(context: SymbolDataContext, private project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -217,14 +222,15 @@ class ProjectData extends DataPartition {
 	}
 }
 
-class DocumentData extends DataPartition {
+class DocumentData extends LSIFData {
 
 	private ranges: Range[];
 	private diagnostics: lsp.Diagnostic[] | undefined;
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: EmitContext, public document: Document) {
+	public constructor(context: SymbolDataContext, public document: Document, public packageInfo?: PackageInformation,
+		public monikerKind?: MonikerKind, public monikerPath?: string) {
 		super(context);
 		this.ranges = [];
 	}
@@ -272,16 +278,161 @@ class DocumentData extends DataPartition {
 	}
 }
 
-class SymbolDataPerDocument extends DataPartition {
+abstract class SymbolData extends LSIFData {
 
-	public definitionResult: DefinitionResult | undefined;
+	private resultSet: ResultSet;
+	private definitionResult: DefinitionResult | undefined;
+	private referenceResult: ReferenceResult | undefined;
+
+	public constructor(context: SymbolDataContext, private id: string) {
+		super(context);
+		this.resultSet = this.vertex.resultSet();
+	}
+
+	public getId(): string {
+		return this.id;
+	}
+
+	public begin(): void {
+		this.emit(this.resultSet);
+	}
+
+	public linkRange(range: Range): void {
+		this.emit(this.edge.next(range, this.resultSet));
+	}
+
+	public getOrCreateDefinitionResult(): DefinitionResult {
+		if (this.definitionResult === undefined ) {
+			this.definitionResult = this.vertex.definitionResult();
+			this.emit(this.definitionResult);
+			this.emit(this.edge.definition(this.resultSet, this.definitionResult));
+		}
+		return this.definitionResult;
+	}
+
+	public getOrCreateReferenceResult(): ReferenceResult {
+		if (this.referenceResult === undefined) {
+			this.referenceResult = this.vertex.referencesResult();
+			this.emit(this.referenceResult);
+			this.emit(this.edge.references(this.resultSet, this.referenceResult));
+		}
+		return this.referenceResult;
+	}
+
+	public addHover(hover: lsp.Hover) {
+		let hr = this.vertex.hoverResult(hover);
+		this.emit(hr);
+		this.emit(this.edge.hover(this.resultSet, hr));
+	}
+
+	public abstract getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition;
+
+	public abstract nodeProcessed(node: ts.Node): boolean;
+}
+
+class LocalSymbolData extends SymbolData {
+
+	private partition: SymbolDataPartition | undefined | null;
+
+	public constructor(context: SymbolDataContext, id: string, private scope: ts.Node) {
+		super(context, id);
+	}
+
+	public getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition {
+		if (this.partition === null) {
+			throw new Error(`Partition has already been created and cleared`);
+		}
+		if (this.partition === undefined) {
+			let fileName = sourceFile.fileName;
+			let documentData = this.context.getDocumentData(fileName);
+			if (documentData === undefined) {
+				throw new Error(`No document data for ${fileName}`);
+			}
+			this.partition = new SymbolDataPartition(this.context, this, documentData.document);
+			this.partition.begin();
+		}
+		return this.partition;
+	}
+
+	public nodeProcessed(node: ts.Node): boolean {
+		if (node !== this.scope) {
+			throw new Error(`Life cycle called for wrong node`);
+		}
+		return true;
+	}
+
+	public end(): void {
+		if (this.partition === null) {
+			throw new Error(`Partion has already be cleared`);
+		}
+		if (this.partition !== undefined) {
+			this.partition.end();
+		}
+	}
+}
+
+class GlobalSymbolData extends SymbolData {
+
+	private partitions: Map<string /* filename */, SymbolDataPartition | null>;
+
+	public constructor(context: SymbolDataContext, id: string) {
+		super(context, id);
+		this.partitions = new Map();
+	}
+
+	public getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition {
+		let fileName = sourceFile.fileName;
+		let result = this.partitions.get(fileName);
+		if (result === null) {
+			throw new Error (`Partition for file ${fileName} has already been cleared.`);
+		}
+		if (result === undefined) {
+			let documentData = this.context.getDocumentData(fileName);
+			if (documentData === undefined) {
+				throw new Error(`No document data for ${fileName}`);
+			}
+			result = new SymbolDataPartition(this.context, this, documentData.document);
+			result.begin();
+			this.partitions.set(fileName, result);
+		}
+		return result;
+	}
+
+	public nodeProcessed(node: ts.Node): boolean {
+		if (!ts.isSourceFile(node)) {
+			throw new Error(`Life cycle node is not a source file`);
+		}
+		let fileName = node.fileName;
+		let partition = this.partitions.get(fileName);
+		if (partition === null) {
+			throw new Error (`Partition for file ${fileName} has already been cleared.`);
+		}
+		if (partition === undefined) {
+			throw new Error(`Symbol data doesn't manage a partition for ${fileName}`);
+		}
+		partition.end();
+		this.partitions.set(fileName, null);
+		return false;
+	}
+
+	public end(): void {
+		for (let entry of this.partitions.entries()) {
+			if (entry[1] !== null) {
+				entry[1].end();
+				this.partitions.set(entry[0], null);
+			}
+		}
+	}
+}
+
+class SymbolDataPartition extends LSIFData {
+
 	private definitionRanges: Range[] | undefined;
 
-	public referenceResult: ReferenceResult | undefined;
 	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]> | undefined;
 	private referenceResults: ReferenceResult[] | undefined;
 
-	public constructor(context: EmitContext, private document: Document) {
+	public constructor(context: SymbolDataContext, private symbolData: SymbolData, private document: Document) {
 		super(context);
 	}
 
@@ -290,9 +441,6 @@ class SymbolDataPerDocument extends DataPartition {
 	}
 
 	public addDefinition(value: DefinitionRange): void {
-		if (this.definitionResult === undefined) {
-			throw new Error(`Definition result not set`);
-		}
 		if (this.definitionRanges === undefined) {
 			this.definitionRanges = [];
 		}
@@ -303,9 +451,6 @@ class SymbolDataPerDocument extends DataPartition {
 	public addReference(value: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
 	public addReference(value: ReferenceResult): void;
 	public addReference(value: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		if (this.referenceResult === undefined) {
-			throw new Error(`Reference result not set`);
-		}
 		if (value.label === 'range' && property !== undefined) {
 			if (this.referenceRanges === undefined) {
 				this.referenceRanges = new Map();
@@ -325,34 +470,49 @@ class SymbolDataPerDocument extends DataPartition {
 	}
 
 	public end(): void {
-		if (this.definitionResult !== undefined && this.definitionRanges !== undefined) {
-			this.emit(this.edge.item(this.definitionResult, this.definitionRanges, this.document));
+		if (this.definitionRanges !== undefined) {
+			let definitionResult = this.symbolData.getOrCreateDefinitionResult();
+			this.emit(this.edge.item(definitionResult, this.definitionRanges, this.document));
 		}
-		if (this.referenceResult !== undefined) {
-			if (this.referenceRanges !== undefined) {
-				for (let property of this.referenceRanges.keys()) {
-					let values = this.referenceRanges.get(property)!;
-					this.emit(this.edge.item(this.referenceResult, values, this.document, property))
-				}
+		if (this.referenceRanges !== undefined) {
+			let referenceResult = this.symbolData.getOrCreateReferenceResult();
+			for (let property of this.referenceRanges.keys()) {
+				let values = this.referenceRanges.get(property)!;
+				this.emit(this.edge.item(referenceResult, values, this.document, property))
 			}
-			if (this.referenceResults !== undefined) {
-				this.emit(this.edge.item(this.referenceResult, this.referenceResults, this.document));
-			}
+		}
+		if (this.referenceResults !== undefined) {
+			let referenceResult = this.symbolData.getOrCreateReferenceResult();
+			this.emit(this.edge.item(referenceResult, this.referenceResults, this.document));
 		}
 	}
 }
 
-export class DataTable {
+export class DataTable implements SymbolDataContext {
 
 	private projectData: ProjectData;
 	private documentDatas: Map<string, DocumentData | null>;
-	private symbolDataPerDocuments: Map<string, Map<string, SymbolDataPerDocument> | null>;
+	private symbolDatas: Map<string, SymbolData | null>;
+	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
 	public constructor(private context: EmitContext, project: Project) {
-		this.projectData = new ProjectData(context, project);
+		this.projectData = new ProjectData(this, project);
 		this.projectData.begin();
 		this.documentDatas = new Map();
-		this.symbolDataPerDocuments = new Map();
+		this.symbolDatas = new Map();
+		this.clearOnNode = new Map();
+	}
+
+	public get vertex(): VertexBuilder {
+		return this.context.vertex;
+	}
+
+	public get edge(): EdgeBuilder {
+		return this.context.edge;
+	}
+
+	public emit(element: Vertex | Edge): void {
+		this.context.emit(element);
 	}
 
 	public getProjectData(): ProjectData {
@@ -360,8 +520,18 @@ export class DataTable {
 	}
 
 	public projectDone(): void {
+		for (let entry of this.symbolDatas.entries()) {
+			if (entry[1]) {
+				entry[1].end();
+				this.symbolDatas.set(entry[0], null);
+			}
+		}
+		for (let entry of this.documentDatas.entries()) {
+			if (entry[1]) {
+				entry[1].end();
+			}
+		}
 		this.projectData.end();
-		this.projectData;
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
@@ -372,54 +542,59 @@ export class DataTable {
 		return result;
 	}
 
-	public createDocumentData(fileName: string, document: Document): DocumentData {
-		let result = new DocumentData(this.context, document);
-		result.begin();
-		this.documentDatas.set(fileName, result);
-		return result;
-	}
-
-	public getSymbolDataPerDocument(fileName: string, symbolInfo: SymbolItem): SymbolDataPerDocument | undefined {
-		let symbols = this.symbolDataPerDocuments.get(fileName);
-		if (symbols === null) {
-			throw new Error(`There was already a managed symbol date per document for file: ${fileName}`);
-		}
-		if (symbols === undefined) {
-			symbols = new Map();
-			this.symbolDataPerDocuments.set(fileName, symbols);
-		}
-		let result = symbols.get(symbolInfo.id);
+	public getOrCreateDocumentData(fileName: string, document: Document, packageInfo?: PackageInformation,
+		monikerKind?: MonikerKind, monikerPath?: string): DocumentData {
+		let result = this.getDocumentData(fileName);
 		if (result === undefined) {
-			let documentData = this.getDocumentData(fileName);
-			if (documentData === undefined) {
-				throw new Error(`No document available for '${fileName}`);
-			}
-			result = new SymbolDataPerDocument(this.context, documentData.document);
-			symbols.set(fileName, result);
+			result = new DocumentData(this, document, packageInfo, monikerKind, monikerPath);
+			this.documentDatas.set(fileName, result);
+			result.begin();
 		}
 		return result;
 	}
 
-	public documentDone(fileName: string): void {
-		let result = this.documentDatas.get(fileName);
+
+	public getSymbolData(symbolInfo: SymbolItem): SymbolData | undefined {
+		let result = this.symbolDatas.get(symbolInfo.id);
 		if (result === null) {
-			throw new Error(`Managed document data for file '${fileName}' is already closed.`);
+			throw new Error(`There was already a managed symbol data for id: ${symbolInfo.id}`);
 		}
+		return result;
+	}
+
+	public getOrCreateSymbolData(symbolInfo: SymbolItem, scope?: ts.Node): SymbolData {
+		let result = this.getSymbolData(symbolInfo);
 		if (result === undefined) {
-			throw new Error(`There is not document data for file '${fileName}`);
-		}
-		result.end();
-		this.documentDatas.set(fileName, null);
-		let symbols = this.symbolDataPerDocuments.get(fileName);
-		if (symbols === null) {
-			throw new Error(`Managed symbol data per document for file '${fileName}' is already closed.`);
-		}
-		if (symbols !== undefined) {
-			for (let item of symbols.values()) {
-				item.end();
+			if (scope !== undefined) {
+				result = new LocalSymbolData(this, symbolInfo.id, scope);
+			} else {
+				result = new GlobalSymbolData(this, symbolInfo.id);
 			}
+			this.symbolDatas.set(result.getId(), result);
+			result.begin();
 		}
-		this.symbolDataPerDocuments.set(fileName, null);
+		return result;
+	}
+
+	public manageLifeCycle(node: ts.Node, symbolData: SymbolData): void {
+		let datas = this.clearOnNode.get(node);
+		if (datas === undefined) {
+			datas = [];
+			this.clearOnNode.set(node, datas);
+		}
+		datas.push(symbolData);
+	}
+
+	public nodeProcessed(node: ts.Node): void {
+		let datas = this.clearOnNode.get(node);
+		if (datas !== undefined) {
+			for (let symbolData of datas) {
+				if (symbolData.nodeProcessed(node)) {
+					this.symbolDatas.delete(symbolData.getId());
+				}
+			}
+			this.clearOnNode.delete(node);
+		}
 	}
 }
 
@@ -427,7 +602,7 @@ interface SymbolItemContext extends EmitContext {
 
 	typeChecker: ts.TypeChecker;
 	getDocumentAndEmitIfNecessary(file: ts.SourceFile): DocumentInformation;
-	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPerDocument;
+	getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPartition;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): HoverResult | undefined;
 	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
 	getTypeDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
@@ -918,7 +1093,7 @@ abstract class SymbolItem {
 		}
 	}
 
-	public addReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
+	public addReference(symbolItemCluster: SymbolDataPartition, reference: ReferenceRange): void {
 		this.recordReference(symbolItemCluster, reference);
 	}
 
@@ -959,7 +1134,7 @@ abstract class SymbolItem {
 		return undefined;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPartition, definition: DefinitionRange): void {
 		this.context.emit(this.context.edge.next(definition, this.resultSet));
 		symbolItemCluster.addDefinition(definition);
 		// If this is not an interface, each declaration is an implementation result
@@ -977,7 +1152,7 @@ abstract class SymbolItem {
 		// }
 	}
 
-	protected recordReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
+	protected recordReference(symbolItemCluster: SymbolDataPartition, reference: ReferenceRange): void {
 		this.context.emit(this.context.edge.next(reference, this.resultSet));
 		symbolItemCluster.addReference(reference, ItemEdgeProperties.references);
 	}
@@ -1031,7 +1206,7 @@ abstract class MemberContainerItem extends SymbolItem {
 		this.baseSymbols = baseSymbols;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPartition, definition: DefinitionRange): void {
 		super.recordDeclaration(symbolItemCluster, definition);
 
 		// If we have base symbols, add our declaration to their implementation results
@@ -1267,7 +1442,7 @@ class MethodSymbolItem extends SymbolItem {
 		return memberContainer;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPartition, definition: DefinitionRange): void {
 		super.recordDeclaration(symbolItemCluster, definition);
 		// if (this.baseReferenceResults !== undefined) {
 		// 	this.baseReferenceResults.forEach(result =>  {
@@ -1276,7 +1451,7 @@ class MethodSymbolItem extends SymbolItem {
 		// }
 	}
 
-	protected recordReference(symbolItemCluster: SymbolDataPerDocument, reference: ReferenceRange): void {
+	protected recordReference(symbolItemCluster: SymbolDataPartition, reference: ReferenceRange): void {
 		super.recordReference(symbolItemCluster, reference);
 		// if (this.baseReferenceResults !== undefined) {
 		// 	this.baseReferenceResults.forEach(result => {
@@ -1316,7 +1491,7 @@ class AliasSymbolItem extends SymbolItem  {
 		return undefined;
 	}
 
-	protected recordDeclaration(symbolItemCluster: SymbolDataPerDocument, definition: DefinitionRange): void {
+	protected recordDeclaration(symbolItemCluster: SymbolDataPartition, definition: DefinitionRange): void {
 		// this.context.emit(this.context.edge.next(definition, this.resultSet));
 		// symbolItemCluster.
 		// if (this.referenceResult === undefined) {
@@ -1365,7 +1540,7 @@ class Visitor implements SymbolItemContext {
 	private recordDocumentSymbol: boolean[];
 	private documents: Map<string, DocumentInformation | null>;
 	private packageInfos: Map<string, PackageInformation>;
-	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolDataPerDocument>>;
+	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolDataPartition>>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 	private _emitOnEndVisit: Map<ts.Node, (Vertex | Edge)[]>;
 
@@ -1874,7 +2049,7 @@ class Visitor implements SymbolItemContext {
 		return result;
 	}
 
-	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPerDocument {
+	public getSymbolItemPartition(document: Document, symbolItem: SymbolItem): SymbolDataPartition {
 		let symbolMap = this.resultPartitions.get(document.uri);
 		if (symbolMap === undefined) {
 			symbolMap = new Map();
@@ -1882,7 +2057,7 @@ class Visitor implements SymbolItemContext {
 		}
 		let result = symbolMap.get(symbolItem.id);
 		if (result === undefined) {
-			result = new SymbolDataPerDocument(this, document);
+			result = new SymbolDataPartition(this, document);
 			symbolMap.set(symbolItem.id, result);
 		}
 		return result;
