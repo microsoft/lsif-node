@@ -5,7 +5,6 @@
 import * as fse from 'fs-extra';
 import * as LSIF from 'lsif-protocol';
 import * as path from 'path';
-import { exit } from 'process';
 import * as readline from 'readline';
 import * as yargs from 'yargs';
 import { getFilteredIds, IFilter } from './filter';
@@ -14,7 +13,8 @@ import { visualize } from './visualize';
 
 function readInput(format: string, inputPath: string, callback: (input: LSIF.Element[]) => void): void {
     let inputStream: NodeJS.ReadStream | fse.ReadStream = process.stdin;
-    if (inputPath !== undefined) {
+
+    if (inputPath !== '--stdin') {
         inputStream = fse.createReadStream(inputPath);
     }
 
@@ -47,31 +47,41 @@ export function main(): void {
     // Validation tool
     .command('validate [file]', '', (argv: yargs.Argv) => argv
         .positional('file', {
-            default: './lsif.json',
-            describe: 'input file',
+            describe: 'Path to input file or --stdin',
         }),  (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string }>) => {
-            readInput(argv.inputFormat, argv.stdin ? undefined : argv.file, (input: LSIF.Element[]) => {
-                const filter: IFilter = argv as unknown as IFilter;
-                process.exitCode = validate(input, getFilteredIds(filter, input),
-                                            path.join(path.dirname(process.argv[1]),
-                                                      '../node_modules/lsif-protocol/lib/protocol.d.ts'));
-            });
+            if (!argv.stdin && argv.file === undefined) {
+                yargs.showHelp('log');
+                console.error('\nError: Missing input file. Did you forget --stdin?');
+                process.exitCode = 1;
+            } else {
+                readInput(argv.inputFormat, argv.stdin ? '--stdin' : argv.file, (input: LSIF.Element[]) => {
+                    const filter: IFilter = argv as unknown as IFilter;
+                    process.exitCode = validate(input, getFilteredIds(filter, input),
+                                                path.join(path.dirname(process.argv[1]),
+                                                        '../node_modules/lsif-protocol/lib/protocol.d.ts'));
+                });
+            }
         })
 
     // Visualization tool
     .command('visualize [file]', '', (argv: yargs.Argv) => argv
         .positional('file', {
-            default: './lsif.json',
-            describe: 'input file',
+            describe: 'Path to input file or --stdin',
         })
         .option('distance', {
             default: 1,
             describe: 'Max distance between any vertex and the filtered input',
         }),  (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string; distance: number }>) => {
-            readInput(argv.inputFormat, argv.stdin ? undefined : argv.file, (input: LSIF.Element[]) => {
-                const filter: IFilter = argv as unknown as IFilter;
-                process.exitCode = visualize(input, getFilteredIds(filter, input), argv.distance);
-            });
+            if (!argv.stdin && argv.file === undefined) {
+                yargs.showHelp('log');
+                console.error('\nError: Missing input file. Did you forget --stdin?');
+                process.exitCode = 1;
+            } else {
+                readInput(argv.inputFormat, argv.stdin ? '--stdin' : argv.file, (input: LSIF.Element[]) => {
+                    const filter: IFilter = argv as unknown as IFilter;
+                    process.exitCode = visualize(input, getFilteredIds(filter, input), argv.distance);
+                });
+            }
         })
 
     // One and only one command should be specified
@@ -95,7 +105,7 @@ export function main(): void {
         }
         yargs.showHelp('log');
         console.error(`\nError: ${message}`);
-        process.exit(1);
+        process.exitCode = 1;
     })
 
     // Auto-generated help
