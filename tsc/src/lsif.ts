@@ -158,7 +158,7 @@ type SymbolId = string;
 
 interface SymbolDataContext extends EmitContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
-	getOrCreateSymbolData(symbolId: SymbolId, scope?: ts.Node): SymbolData;
+	getOrCreateSymbolData(symbolId: SymbolId, create: () => SymbolData): SymbolData;
 	manageLifeCycle(node: ts.Node, symbolData: SymbolData): void;
 }
 
@@ -285,6 +285,8 @@ class DocumentData extends LSIFData {
 
 abstract class SymbolData extends LSIFData {
 
+	private declarationInfo: tss.DeclarationInfo | tss.DeclarationInfo[] | undefined;
+
 	protected resultSet: ResultSet;
 
 	public constructor(context: SymbolDataContext, private id: SymbolId) {
@@ -300,8 +302,30 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.resultSet);
 	}
 
-	public recordDeclarationNode(node: ts.Node): void {
-		node.getStart
+	public recordDeclarationInfo(info: tss.DeclarationInfo): void {
+		if (this.declarationInfo === undefined) {
+			this.declarationInfo = info;
+		} else if (Array.isArray(this.declarationInfo)) {
+			this.declarationInfo.push(info);
+		} else {
+			this.declarationInfo = [this.declarationInfo];
+			this.declarationInfo.push(info);
+		}
+	}
+
+	public hasDeclarationInfo(info: tss.DeclarationInfo): boolean {
+		if (this.declarationInfo === undefined) {
+			return false;
+		} else if (Array.isArray(this.declarationInfo)) {
+			for (let item of this.declarationInfo) {
+				if (info.file === item.file && info.start === item.start && info.end === item.end) {
+					return true;
+				}
+			}
+			return false;
+		} else {
+			return this.declarationInfo === info;
+		}
 	}
 
 	public addHover(hover: lsp.Hover) {
@@ -310,11 +334,13 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(path: string | undefined, prefix: string | undefined, name: string): void {
-		let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
-		let moniker = this.vertex.moniker(MonikerKind.export, 'tsc', tss.createMonikerIdentifier(path, fullName));
+	public addMoniker(kind: MonikerKind, identifier: string, packageInfo?: PackageInformation): void {
+		let moniker = this.vertex.moniker(kind, 'tsc', identifier);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
+		if (packageInfo !== undefined) {
+			this.emit(this.edge.packageInformation(moniker, packageInfo));
+		}
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -468,6 +494,10 @@ class AliasedSymbolData extends SymbolData {
 	public nodeProcessed(node: ts.Node): boolean {
 		return this.aliased.nodeProcessed(node);
 	}
+
+	public end(): void {
+		this.aliased.end();
+	}
 }
 
 class SymbolDataPartition extends LSIFData {
@@ -533,48 +563,45 @@ class SymbolDataPartition extends LSIFData {
 	}
 }
 
-interface ResolverContext extends SymbolDataContext {
-	typeChecker: ts.TypeChecker;
+interface ResolverContext {
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
 
 abstract class SymbolDataResolver {
 
-	constructor(protected context: ResolverContext) {
+	constructor(protected typeChecker: ts.TypeChecker, protected resolverContext: ResolverContext, protected symbolDataContext: SymbolDataContext) {
 	}
 
-	public abstract resolve(symbol: ts.Symbol, scope?: ts.Node): SymbolData;
+	public abstract resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
 
 }
 
 class StandardResolver extends SymbolDataResolver {
 
-	constructor(context: ResolverContext) {
-		super(context);
+	constructor(typeChecker: ts.TypeChecker, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, resolverContext, symbolDataContext);
 	}
 
-	public resolve(symbol: ts.Symbol, scope?: ts.Node): SymbolData {
-		let id = tss.createSymbolKey(this.context.typeChecker, symbol);
-		return new StandardSymbolData(this.context, id, scope);
+	public resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+		return new StandardSymbolData(this.symbolDataContext, id, scope);
 	}
 }
 
 class TypeAliasResolver extends SymbolDataResolver {
 
-	constructor(context: ResolverContext) {
-		super(context);
+	constructor(typeChecker: ts.TypeChecker, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, resolverContext, symbolDataContext);
 	}
 
-	public resolve(symbol: ts.Symbol, scope?: ts.Node): SymbolData {
-		let id = tss.createSymbolKey(this.context.typeChecker, symbol);
-		let aliased = this.context.typeChecker.getAliasedSymbol(symbol);
+	public resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+		let aliased = this.typeChecker.getAliasedSymbol(symbol);
 		if (aliased !== undefined) {
-			let aliasedId = tss.createSymbolKey(this.context.typeChecker, aliased);
-			this.context.getOrCreateSymbolData(aliasedId, )
-			let aliasedSymbolItem = this.get(context, aliased);
-			if (aliasedSymbolItem !== undefined) {
-				result = new AliasSymbolItem(key, context, symbol, aliasedSymbolItem);
+			let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
+			if (aliasedSymbolData !== undefined) {
+				return new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData);
 			}
 		}
+		return new StandardSymbolData(this.symbolDataContext, id);
 	}
 }
 
@@ -660,10 +687,10 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateSymbolData(symbolId: SymbolId, resolver: SymbolDataResolver, scope?: ts.Node): SymbolData {
+	public getOrCreateSymbolData(symbolId: SymbolId, create: () => SymbolData): SymbolData {
 		let result = this.getSymbolData(symbolId);
 		if (result === undefined) {
-			result = resolver.resolve() new StandardSymbolData(this, symbolInfo.id, scope);
+			result = create();
 			this.symbolDatas.set(result.getId(), result);
 			result.begin();
 		}
@@ -696,6 +723,7 @@ interface SymbolItemContext extends EmitContext {
 
 	typeChecker: ts.TypeChecker;
 	getOrCreateDocumentData(file: ts.SourceFile): DocumentData;
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData
 	getOrCreateSymbolData(symbolInfo: SymbolItem, scope?: ts.Node): SymbolData;
 	getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined;
 	getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined;
@@ -1598,7 +1626,7 @@ export interface Options {
 	noContents: boolean;
 }
 
-class Visitor implements SymbolItemContext {
+class Visitor implements ResolverContext {
 
 	private builder: Builder;
 	private project: Project;
@@ -1649,8 +1677,8 @@ class Visitor implements SymbolItemContext {
 		}
 		this.dataManager = new DataManager(this, this.project);
 		this.symbolDataResolvers = new Map();
-		this.symbolDataResolvers.set(0, new StandardResolver(this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.dataManager));
+		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, this, this.dataManager));
 		// if (this.isClass(symbol)) {
 		// 	result = new ClassSymbolItem(key, context, symbol);
 		// } else if (this.isInterface(symbol)) {
@@ -1859,11 +1887,10 @@ class Visitor implements SymbolItemContext {
 
 	private emitExportMonikers(path: string | undefined, prefix: string | undefined, symbol: ts.Symbol): void  {
 		const name  = symbol.getName();
-		let symbolItem = this.getSymbolInfo(symbol);
-		if (symbolItem !== undefined) {
-			let symbolData = this.dataManager.getSymbolData(symbolItem)!;
-			symbolData.addMoniker(path, prefix, name);
-		}
+		let symbolId: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
+		let symbolData = this.dataManager.getSymbolData(symbolId)!;
+		let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
+		symbolData.addMoniker(MonikerKind.export, tss.createMonikerIdentifier(path, fullName));
 		if (symbol.exports !== undefined && symbol.exports.size > 0) {
 			symbol.exports.forEach(item => this.emitExportMonikers(path, name, item));
 		}
@@ -2000,11 +2027,11 @@ class Visitor implements SymbolItemContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return false;
 		}
-		let symbolInfo = this.getSymbolInfo(symbol);
-		if (symbolInfo === undefined) {
+		let symbolData = this.dataManager.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		if (symbolData === undefined) {
 			return false;
 		}
-		let declaration = symbolInfo.getDeclaration(rangeNode);
+		let declaration = symbolData.getDeclaration(rangeNode);
 		if (declaration === undefined) {
 			return false;
 		}
@@ -2025,18 +2052,17 @@ class Visitor implements SymbolItemContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return;
 		}
-		let symbolInfo = this.getSymbolInfo(symbol);
-		if (symbolInfo === undefined) {
+		let symbolData = this.dataManager.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		if (symbolData === undefined) {
 			return;
 		}
-		if (symbolInfo.hasDeclaration(node)) {
+		let sourceFile = this.currentSourceFile!;
+		if (symbolData.hasDeclarationInfo(tss.createDeclarationInfo(sourceFile, node))) {
 			return;
 		}
 
-		let sourceFile = this.currentSourceFile!;
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.currentDocumentData.addRange(reference);
-		let symbolData = this.dataManager.getOrCreateSymbolData(symbolInfo, node);
 		symbolData.getOrCreatePartition(sourceFile).addReference(reference, ItemEdgeProperties.references);
 	}
 
@@ -2101,13 +2127,13 @@ class Visitor implements SymbolItemContext {
 		return result;
 	}
 
-	public _getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
+	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		let id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			return result;
 		}
-		let hover: boolean = false;
+		let hover: lsp.Hover | undefined;
 		let declarations: ts.Declaration[] = symbol.declarations;
 		const monikerName = tss.computeMoniker(declarations);
 		let monikers: { definition: DefinitionRange; identifier: string; kind: MonikerKind, packageInfo: PackageInformation | undefined }[] = [];
@@ -2126,19 +2152,25 @@ class Visitor implements SymbolItemContext {
 				let resolver = this.getResolver(symbol);
 				let scope =  this.resolveEmittingNode(symbol);
 
-				let symbolData = this.getOrCreateSymbolData(id, () => resolver.resolve(symbol, scope));
-				symbolData.addDefinition(sourceFile, definition);
+				result = this.dataManager.getOrCreateSymbolData(id, () => resolver.resolve(id, symbol, scope));
+				result.addDefinition(sourceFile, definition);
+				result.recordDeclarationInfo(tss.createDeclarationInfo(sourceFile, identifierNode));
 				if (monikerName !== undefined && documentData.monikerPath !== undefined && documentData.monikerKind !== undefined) {
 					const mi = tss.createMonikerIdentifier(documentData.monikerPath, monikerName);
 					monikers.push({ definition, identifier: mi, kind: documentData.monikerKind, packageInfo: documentData.packageInfo });
 				}
-				this.storeDefinitionAndRange(definition, rangeNode);
-				if (!hover && tss.isNamedDeclaration(declaration)) {
-					hover = this.handleHover(sourceFile, declaration.name, symbolData);
+				if (hover === undefined && tss.isNamedDeclaration(declaration)) {
+					hover = this.getHover(declaration.name, sourceFile);
+					if (hover) {
+						result.addHover(hover);
+					}
 				}
 			} else {
 				// We should log this somewhere to improve the tool.
 			}
+		}
+		if (result === undefined) {
+			throw new Error(`No symbol datat created for ${symbol.name}`);
 		}
 		if (monikers.length > 0) {
 			let last: typeof monikers[0] | undefined;
@@ -2155,12 +2187,7 @@ class Visitor implements SymbolItemContext {
 			}
 			if (same) {
 				const item = monikers[0];
-				const moniker = this.vertex.moniker(item.kind, 'tsc', item.identifier);
-				this.emit(moniker);
-				if (item.packageInfo) {
-					this.emit(this.edge.packageInformation(moniker, item.packageInfo));
-				}
-				this.emit(this.edge.moniker(this.resultSet, moniker));
+				result.addMoniker(item.kind, item.identifier, item.packageInfo);
 			} else {
 				for (let item of monikers) {
 					const moniker = this.vertex.moniker(item.kind, 'tsc', item.identifier);
@@ -2258,7 +2285,7 @@ class Visitor implements SymbolItemContext {
 		// }
 	}
 
-	public getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
+	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
@@ -2298,10 +2325,6 @@ class Visitor implements SymbolItemContext {
 
 	private get currentRecordDocumentSymbol(): boolean {
 		return this.recordDocumentSymbol[this.recordDocumentSymbol.length - 1];
-	}
-
-	private getSymbolInfo(tsSymbol: ts.Symbol): SymbolItem | undefined {
-		return SymbolItem.get(this, tsSymbol);
 	}
 }
 

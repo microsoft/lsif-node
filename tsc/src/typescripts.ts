@@ -153,6 +153,20 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 	return result;
 }
 
+export interface DeclarationInfo {
+	file: string;
+	start: number;
+	end: number
+}
+
+export function createDeclarationInfo(sourceFile: ts.SourceFile, node: ts.Node): DeclarationInfo {
+	return {
+		file: sourceFile.fileName,
+		start: node.getStart(),
+		end: node.getEnd()
+	};
+}
+
 export function isFunction(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Function) !== 0;
 }
