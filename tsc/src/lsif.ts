@@ -22,6 +22,7 @@ import {
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
 import { Emitter } from './emitters/emitter';
+import { LRUCache } from './utils/linkedMap';
 
 namespace Converter {
 
@@ -148,13 +149,13 @@ namespace Converter {
 	}
 }
 
+type SymbolId = string;
+
 interface EmitContext {
 	vertex: VertexBuilder;
 	edge: EdgeBuilder;
 	emit(element: Vertex | Edge): void;
 }
-
-type SymbolId = string;
 
 interface SymbolDataContext extends EmitContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
@@ -535,6 +536,49 @@ class AliasedSymbolData extends StandardSymbolData {
 	}
 }
 
+class MethodSymbolData extends StandardSymbolData {
+
+	private sourceFile: ts.SourceFile | undefined;
+	private bases: SymbolData[] | undefined;
+
+	constructor(context: SymbolDataContext, id: string, sourceFile: ts.SourceFile, bases: SymbolData[] | undefined, scope: ts.Node | undefined = undefined) {
+		super(context, id, scope);
+		this.sourceFile = sourceFile;
+		if (bases !== undefined && bases.length === 0) {
+			this.bases = undefined;
+		} else {
+			this.bases = bases;
+		}
+	}
+
+	public begin(): void {
+		super.begin();
+		if (this.bases !== undefined) {
+			for (let base of this.bases) {
+				super.addReference(this.sourceFile!, base.getOrCreateReferenceResult());
+			}
+		}
+		this.sourceFile = undefined;
+	}
+
+	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+		super.addDefinition(sourceFile, definition);
+	}
+
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (this.bases !== undefined) {
+			if (reference.label === 'range') {
+				this.emit(this.edge.next(reference, this.resultSet));
+			}
+			for (let base of this.bases) {
+				base.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
+			}
+		} else {
+			super.addReference(sourceFile, reference as any, property as any);
+		}
+	}
+}
+
 class SymbolDataPartition extends LSIFData {
 
 	private definitionRanges: DefinitionRange[] | undefined;
@@ -613,37 +657,156 @@ class SymbolDataPartition extends LSIFData {
 	}
 }
 
+class Symbols {
+
+	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
+	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
+
+	constructor(private typeChecker: ts.TypeChecker) {
+		this.baseSymbolCache = new LRUCache(2048);
+		this.baseMemberCache = new LRUCache(2048);
+	}
+
+	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
+		let key = tss.createSymbolKey(this.typeChecker, symbol);
+		let result = this.baseSymbolCache.get(key);
+		if (result === undefined) {
+			if (tss.isInterface(symbol)) {
+				result = this.computeBaseSymbolsForInterface(symbol);
+			} else if (tss.isClass(symbol)) {
+				result = this.computeBaseSymbolsForClass(symbol);
+			}
+			if (result !== undefined) {
+				this.baseSymbolCache.set(key, result);
+			}
+		}
+		return result;
+	}
+
+	private computeBaseSymbolsForClass(symbol: ts.Symbol): ts.Symbol[] | undefined {
+		let result: ts.Symbol[] = [];
+		let declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			return undefined;
+		}
+		let typeChecker = this.typeChecker;
+		for (let declaration of declarations) {
+			if (ts.isClassDeclaration(declaration)) {
+				let heritageClauses = declaration.heritageClauses;
+				if (heritageClauses) {
+					for (let heritageClause of heritageClauses) {
+						for (let type of heritageClause.types) {
+							let tsType = typeChecker.getTypeAtLocation(type.expression);
+							if (tsType !== undefined) {
+								let symbol = tsType.getSymbol();
+								if (symbol) {
+									result.push(symbol);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return result.length === 0 ? undefined : result;
+	}
+
+	private computeBaseSymbolsForInterface(symbol: ts.Symbol): ts.Symbol[] | undefined {
+		let result: ts.Symbol[] = [];
+		let tsType = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
+		if (tsType === undefined) {
+			return undefined;
+		}
+		let baseTypes = tsType.getBaseTypes();
+		if (baseTypes !== undefined) {
+			for (let base of baseTypes) {
+				let symbol = base.getSymbol();
+				if (symbol) {
+					result.push(symbol);
+				}
+			}
+		}
+		return result.length === 0 ? undefined : result;
+	}
+
+
+	public findBaseMembers(symbol: ts.Symbol, memberName: string): ts.Symbol[] | undefined {
+		let key = tss.createSymbolKey(this.typeChecker, symbol);
+		let cache = this.baseMemberCache.get(key);
+		if (cache === undefined) {
+			cache = new LRUCache(64);
+			this.baseMemberCache.set(key, cache);
+		}
+		let result: ts.Symbol[] | undefined = cache.get(memberName);
+		if (result === undefined) {
+			let baseSymbols = this.getBaseSymbols(symbol);
+			if (baseSymbols !== undefined) {
+				for (let base of baseSymbols) {
+					if (!base.members) {
+						continue;
+					}
+					let method = base.members.get(memberName as ts.__String);
+					if (method !== undefined) {
+						if (result === undefined) {
+							result = [method];
+						} else {
+							result.push(method);
+						}
+					} else {
+						let baseResult = this.findBaseMembers(base, memberName);
+						if (baseResult !== undefined) {
+							if (result === undefined) {
+								result = baseResult;
+							} else {
+								result.push(...baseResult);
+							}
+						}
+					}
+				}
+			}
+			if (result !== undefined) {
+				cache.set(memberName, result);
+			} else {
+				cache.set(memberName, []);
+			}
+		} else if (result.length === 0) {
+			return undefined;
+		}
+		return result;
+	}
+}
+
 interface ResolverContext {
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
 
 abstract class SymbolDataResolver {
 
-	constructor(protected typeChecker: ts.TypeChecker, protected resolverContext: ResolverContext, protected symbolDataContext: SymbolDataContext) {
+	constructor(protected typeChecker: ts.TypeChecker, protected symbols: Symbols, protected resolverContext: ResolverContext, protected symbolDataContext: SymbolDataContext) {
 	}
 
-	public abstract resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
+	public abstract resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
 
 }
 
 class StandardResolver extends SymbolDataResolver {
 
-	constructor(typeChecker: ts.TypeChecker, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
-		super(typeChecker, resolverContext, symbolDataContext);
+	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
 		return new StandardSymbolData(this.symbolDataContext, id, scope);
 	}
 }
 
 class TypeAliasResolver extends SymbolDataResolver {
 
-	constructor(typeChecker: ts.TypeChecker, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
-		super(typeChecker, resolverContext, symbolDataContext);
+	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
 		let aliased = this.typeChecker.getAliasedSymbol(symbol);
 		if (aliased !== undefined) {
 			let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
@@ -652,6 +815,26 @@ class TypeAliasResolver extends SymbolDataResolver {
 			}
 		}
 		return new StandardSymbolData(this.symbolDataContext, id);
+	}
+}
+
+class MethodResolver extends SymbolDataResolver {
+
+	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, symbols, resolverContext, symbolDataContext);
+	}
+
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+		let container = tss.getSymbolParent(symbol);
+		if (container === undefined) {
+			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
+		}
+		let baseMembers = this.symbols.findBaseMembers(container, symbol.getName());
+		if (baseMembers === undefined || baseMembers.length === 0) {
+			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
+		}
+		let baseSymbolData = baseMembers.map(member => this.resolverContext.getOrCreateSymbolData(member));
+		return new MethodSymbolData(this.symbolDataContext, id, sourceFile, baseSymbolData, scope);
 	}
 }
 
@@ -806,14 +989,6 @@ abstract class SymbolItem {
 				result = new MethodSymbolItem(key, context, symbol);
 			} else if (this.isFunction(symbol)) {
 				result = new FunctionSymbolItem(key, context, symbol);
-			} else if (this.isAliasSymbol(symbol)) {
-				let aliased = context.typeChecker.getAliasedSymbol(symbol);
-				if (aliased !== undefined) {
-					let aliasedSymbolItem = this.get(context, aliased);
-					if (aliasedSymbolItem !== undefined) {
-						result = new AliasSymbolItem(key, context, symbol, aliasedSymbolItem);
-					}
-				}
 			}
 			if (result === undefined) {
 				result = new GenericSymbolItem(key, context, symbol);
@@ -1623,50 +1798,6 @@ class MethodSymbolItem extends SymbolItem {
 	}
 }
 
-class AliasSymbolItem extends SymbolItem  {
-	public constructor(id: string, context: SymbolItemContext, tsSymbol: ts.Symbol, private aliased: SymbolItem) {
-		super(id, context, tsSymbol);
-	}
-
-	protected initialize(): void {
-		this.ensureResultSet();
-		this._referenceResult = this.aliased.referenceResult;
-		this.definitionResult = this.aliased.definitionResult;
-
-		// Wire the reference and definition result to aliased Symbol
-		if (this.definitionResult !== undefined) {
-			this.context.emit(this.context.edge.definition(this.resultSet, this.definitionResult));
-		}
-		this.emitEdgeToForeignReferenceResult(this.resultSet, this.referenceResult);
-		let declarations = this.tsSymbol.getDeclarations();
-		if (declarations !== undefined && declarations.length > 0) {
-			this.initializeDeclarations(declarations);
-		} else {
-			// An aliased symbol without a declaration is not valid.
-			// We should log this @log
-		}
-	}
-
-	protected getDefinitionResultValues(): RangeId[] | undefined {
-		// This is handled in recordDeclaration which forwards to the aliased set.
-		return undefined;
-	}
-
-	protected recordDeclaration(symbolItemCluster: SymbolDataPartition, definition: DefinitionRange): void {
-		// this.context.emit(this.context.edge.next(definition, this.resultSet));
-		// symbolItemCluster.
-		// if (this.referenceResult === undefined) {
-		// 	return;
-		// }
-		// // Alias declarations are recorded as references on the aliased set.
-		// if (this.referenceResult.references === undefined) {
-		// 	this.context.emit(this.context.edge.item(this.referenceResult, definition, ItemEdgeProperties.references));
-		// } else {
-		// 	this.referenceResult.references.push(definition.id);
-		// }
-	}
-}
-
 export interface ProjectInfo {
 	rootDir: string;
 	outDir: string;
@@ -1725,9 +1856,11 @@ class Visitor implements ResolverContext {
 			// Try to compute the root directories.
 		}
 		this.dataManager = new DataManager(this, this.project);
+		let symbols = new Symbols(this.typeChecker);
 		this.symbolDataResolvers = new Map();
-		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, this, this.dataManager));
+		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, symbols, this, this.dataManager));
 		// if (this.isClass(symbol)) {
 		// 	result = new ClassSymbolItem(key, context, symbol);
 		// } else if (this.isInterface(symbol)) {
@@ -2192,7 +2325,7 @@ class Visitor implements ResolverContext {
 				let resolver = this.getResolver(symbol);
 				let scope =  this.resolveEmittingNode(symbol);
 
-				result = this.dataManager.getOrCreateSymbolData(id, () => resolver.resolve(id, symbol, scope));
+				result = this.dataManager.getOrCreateSymbolData(id, () => resolver.resolve(sourceFile, id, symbol, scope));
 				result.addDefinition(sourceFile, definition);
 				result.recordDeclarationInfo(tss.createDeclarationInfo(sourceFile, identifierNode));
 				if (monikerName !== undefined && documentData.monikerPath !== undefined && documentData.monikerKind !== undefined) {
@@ -2303,29 +2436,10 @@ class Visitor implements ResolverContext {
 		if (tss.isAliasSymbol(symbol)) {
 			return this.symbolDataResolvers.get(ts.SymbolFlags.Alias)!;
 		}
+		if (tss.isMethodSymbol(symbol)) {
+			return this.symbolDataResolvers.get(ts.SymbolFlags.Method)!;
+		}
 		return this.symbolDataResolvers.get(0)!;
-		// if (this.isClass(symbol)) {
-		// 	result = new ClassSymbolItem(key, context, symbol);
-		// } else if (this.isInterface(symbol)) {
-		// 	result = new InterfaceSymbolItem(key, context, symbol);
-		// } else if (this.isTypeLiteral(symbol)) {
-		// 	result = new TypeLiteralSymbolItem(key, context, symbol);
-		// } else if (this.isMethodSymbol(symbol)) {
-		// 	result = new MethodSymbolItem(key, context, symbol);
-		// } else if (this.isFunction(symbol)) {
-		// 	result = new FunctionSymbolItem(key, context, symbol);
-		// } else if (this.isAliasSymbol(symbol)) {
-		// 	let aliased = context.typeChecker.getAliasedSymbol(symbol);
-		// 	if (aliased !== undefined) {
-		// 		let aliasedSymbolItem = this.get(context, aliased);
-		// 		if (aliasedSymbolItem !== undefined) {
-		// 			result = new AliasSymbolItem(key, context, symbol, aliasedSymbolItem);
-		// 		}
-		// 	}
-		// }
-		// if (result === undefined) {
-		// 	result = new GenericSymbolItem(key, context, symbol);
-		// }
 	}
 
 	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {

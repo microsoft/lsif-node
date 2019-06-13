@@ -1,3 +1,11 @@
-import { foo as bar } from './provide';
+interface IDisposable {
+	dispose(): void;
+}
 
-bar();
+class A implements IDisposable {
+	dispose(): void {
+	}
+}
+
+let d: IDisposable = new A();
+d.dispose();
