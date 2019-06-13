@@ -298,6 +298,10 @@ abstract class SymbolData extends LSIFData {
 		return this.id;
 	}
 
+	public getResultSet(): ResultSet {
+		return this.resultSet;
+	}
+
 	public begin(): void {
 		this.emit(this.resultSet);
 	}
@@ -318,13 +322,13 @@ abstract class SymbolData extends LSIFData {
 			return false;
 		} else if (Array.isArray(this.declarationInfo)) {
 			for (let item of this.declarationInfo) {
-				if (info.file === item.file && info.start === item.start && info.end === item.end) {
+				if (tss.DeclarationInfo.equals(item, info)) {
 					return true;
 				}
 			}
 			return false;
 		} else {
-			return this.declarationInfo === info;
+			return tss.DeclarationInfo.equals(this.declarationInfo, info);
 		}
 	}
 
@@ -346,6 +350,7 @@ abstract class SymbolData extends LSIFData {
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
 
 	public abstract addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void;
+	public abstract findDefinition(sourceFile: ts.SourceFile, range: lsp.Range): DefinitionRange | undefined;
 
 	public abstract getOrCreateReferenceResult(): ReferenceResult;
 
@@ -362,16 +367,32 @@ class StandardSymbolData extends SymbolData {
 	private definitionResult: DefinitionResult | undefined;
 	private referenceResult: ReferenceResult | undefined;
 
-	private partitions: Map<string /* filename */, SymbolDataPartition | null> | null;
+	private partitions: Map<string /* filename */, SymbolDataPartition | null> | null | undefined;
 
 	public constructor(context: SymbolDataContext, id: SymbolId, private scope: ts.Node | undefined = undefined) {
 		super(context, id);
-		this.partitions = new Map();
 	}
 
-	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange, recordAsReference: boolean = true): void {
 		this.emit(this.edge.next(definition, this.resultSet));
-		this.getOrCreatePartition(sourceFile).addDefinition(definition);
+		this.getOrCreatePartition(sourceFile).addDefinition(definition, recordAsReference);
+	}
+
+	public findDefinition(sourceFile: ts.SourceFile, range: lsp.Range): DefinitionRange | undefined {
+		if (this.partitions === undefined) {
+			return undefined;
+		}
+		if (this.partitions === null) {
+			throw new Error(`The symbol data has already been cleared`);
+		}
+		let partition = this.partitions.get(sourceFile.fileName);
+		if (partition === null) {
+			throw new Error(`The partition for source file ${sourceFile.fileName}`);
+		}
+		if (partition === undefined) {
+			return undefined;
+		}
+		return partition.findDefinition(range);
 	}
 
 	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
@@ -404,6 +425,9 @@ class StandardSymbolData extends SymbolData {
 		if (this.partitions === null) {
 			throw new Error (`Partition for symbol ${this.getId()} have already been cleared`);
 		}
+		if (this.partitions === undefined) {
+			this.partitions = new Map();
+		}
 		let result = this.partitions.get(fileName);
 		if (result === null) {
 			throw new Error (`Partition for file ${fileName} has already been cleared.`);
@@ -422,10 +446,23 @@ class StandardSymbolData extends SymbolData {
 	}
 
 	public nodeProcessed(node: ts.Node): boolean {
+		if (this.partitions === undefined) {
+			return true;
+		}
 		if (this.partitions === null) {
 			throw new Error (`Partition for symbol ${this.getId()} have already been cleared`);
 		}
-		if (ts.isSourceFile(node)) {
+		if (node === this.scope) {
+			if (this.partitions.size !== 1) {
+				throw new Error(`Local Symbol data has more than one partition.`);
+			}
+			let parition = this.partitions.values().next().value;
+			if (parition !== null) {
+				parition.end();
+			}
+			this.partitions = null;
+			return true;
+		} else if (ts.isSourceFile(node)) {
 			let fileName = node.fileName;
 			let partition = this.partitions.get(fileName);
 			if (partition === null) {
@@ -437,22 +474,15 @@ class StandardSymbolData extends SymbolData {
 			partition.end();
 			this.partitions.set(fileName, null);
 			return false;
-		} else if (node === this.scope) {
-			if (this.partitions.size !== 1) {
-				throw new Error(`Local Symbol data has more than one partition.`);
-			}
-			let parition = this.partitions.values().next().value;
-			if (parition !== null) {
-				parition.end();
-			}
-			this.partitions = null;
-			return true;
 		} else {
 			throw new Error(`Node is neither a source file nor does it match the scope`);
 		}
 	}
 
 	public end(): void {
+		if (this.partitions === undefined) {
+			return;
+		}
 		if (this.partitions === null) {
 			throw new Error (`Partition for symbol ${this.getId()} have already been cleared`);
 		}
@@ -465,44 +495,49 @@ class StandardSymbolData extends SymbolData {
 	}
 }
 
-class AliasedSymbolData extends SymbolData {
+class AliasedSymbolData extends StandardSymbolData {
 
-	constructor(context: SymbolDataContext, id: string, private aliased: SymbolData) {
-		super(context, id);
+	constructor(context: SymbolDataContext, id: string, private aliased: SymbolData, scope: ts.Node | undefined = undefined, private rename: boolean = false) {
+		super(context, id, scope);
+	}
+
+	public begin(): void {
+		super.begin();
+		this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
 	}
 
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
-		this.aliased.addDefinition(sourceFile, definition);
+		if (this.rename) {
+			super.addDefinition(sourceFile, definition, false);
+		} else {
+			this.emit(this.edge.next(definition, this.resultSet));
+			this.aliased.getOrCreatePartition(sourceFile).addReference(definition, ItemEdgeProperties.references);
+		}
+	}
+
+	public findDefinition(sourceFile: ts.SourceFile, range: lsp.Range): DefinitionRange | undefined {
+		if (this.rename) {
+			return super.findDefinition(sourceFile, range);
+		} else {
+			return this.aliased.findDefinition(sourceFile, range);
+		}
 	}
 
 	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		this.aliased.addReference(sourceFile, reference as any, property as any);
-	}
-
-	public getOrCreateDefinitionResult(): DefinitionResult {
-		return this.aliased.getOrCreateDefinitionResult();
+		if (reference.label === 'range') {
+			this.emit(this.edge.next(reference, this.resultSet));
+		}
+		this.aliased.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
 	}
 
 	public getOrCreateReferenceResult(): ReferenceResult {
-		return this.aliased.getOrCreateReferenceResult();
-	}
-
-	public getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition {
-		return this.aliased.getOrCreatePartition(sourceFile);
-	}
-
-	public nodeProcessed(node: ts.Node): boolean {
-		return this.aliased.nodeProcessed(node);
-	}
-
-	public end(): void {
-		this.aliased.end();
+		throw new Error(`Shouldn't be called`);
 	}
 }
 
 class SymbolDataPartition extends LSIFData {
 
-	private definitionRanges: Range[] | undefined;
+	private definitionRanges: DefinitionRange[] | undefined;
 
 	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]> | undefined;
 	private referenceResults: ReferenceResult[] | undefined;
@@ -515,12 +550,27 @@ class SymbolDataPartition extends LSIFData {
 		// Do nothing.
 	}
 
-	public addDefinition(value: DefinitionRange): void {
+	public addDefinition(value: DefinitionRange, recordAsReference: boolean = true): void {
 		if (this.definitionRanges === undefined) {
 			this.definitionRanges = [];
 		}
 		this.definitionRanges.push(value);
-		this.addReference(value, ItemEdgeProperties.definitions);
+		if (recordAsReference) {
+			this.addReference(value, ItemEdgeProperties.definitions);
+		}
+	}
+
+	public findDefinition(range: lsp.Range): DefinitionRange | undefined {
+		if (this.definitionRanges === undefined) {
+			return undefined;
+		}
+		for (let definitionRange of this.definitionRanges) {
+			if (definitionRange.start.line === range.start.line && definitionRange.start.character === range.start.character &&
+				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character) {
+					return definitionRange;
+			}
+		}
+		return undefined;
 	}
 
 	public addReference(value: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
@@ -598,7 +648,7 @@ class TypeAliasResolver extends SymbolDataResolver {
 		if (aliased !== undefined) {
 			let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
 			if (aliasedSymbolData !== undefined) {
-				return new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData);
+				return new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData, scope, symbol.getName() !== aliased.getName());
 			}
 		}
 		return new StandardSymbolData(this.symbolDataContext, id);
@@ -636,7 +686,7 @@ export class DataManager implements SymbolDataContext {
 		return this.projectData;
 	}
 
-	public projectDone(): void {
+	public projectProcessed(): void {
 		for (let entry of this.symbolDatas.entries()) {
 			if (entry[1]) {
 				entry[1].end();
@@ -665,12 +715,13 @@ export class DataManager implements SymbolDataContext {
 		if (result === undefined) {
 			result = new DocumentData(this, document, packageInfo, monikerKind, monikerPath);
 			this.documentDatas.set(fileName, result);
+			this.projectData.addDocument(document);
 			result.begin();
 		}
 		return result;
 	}
 
-	public documentDone(fileName: string): void {
+	public documemntProcessed(fileName: string): void {
 		let data = this.getDocumentData(fileName);
 		if (data === undefined) {
 			throw new Error(`No document data for file ${fileName}`);
@@ -1642,7 +1693,6 @@ class Visitor implements ResolverContext {
 	private dataManager: DataManager;
 	private symbolDataResolvers: Map<number, SymbolDataResolver>;
 	private packageInfos: Map<string, PackageInformation>;
-	private resultPartitions: Map<string /*document*/, Map<string /* Symbol */, SymbolDataPartition>>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
@@ -1654,7 +1704,6 @@ class Visitor implements ResolverContext {
 		this.recordDocumentSymbol = [];
 		this.externalLibraryImports = new Map();
 		this.packageInfos = new Map();
-		this.resultPartitions = new Map();
 		this.dependentOutDirs = [];
 		for (let info of dependsOn) {
 			this.dependentOutDirs.push(info.outDir);
@@ -1734,7 +1783,7 @@ class Visitor implements ResolverContext {
 	}
 
 	public endVisitProgram(): void {
-		this.dataManager.projectDone();
+		this.dataManager.projectProcessed();
 	}
 
 	protected visit(node: ts.Node): void {
@@ -1781,8 +1830,8 @@ class Visitor implements ResolverContext {
 		if (visit.call(this, node)) {
 			node.forEachChild(child => this.visit(child));
 		}
-		endVisit.call(this, node);
 		this.dataManager.nodeProcessed(node);
+		endVisit.call(this, node);
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
@@ -1818,16 +1867,6 @@ class Visitor implements ResolverContext {
 	private endVisitSourceFile(sourceFile: ts.SourceFile): void {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return;
-		}
-
-		// emit partial result if present
-		let key = URI.file(sourceFile.fileName).toString(true);
-		let resultPartitions = this.resultPartitions.get(key);
-		if (resultPartitions !== undefined) {
-			this.resultPartitions.delete(key);
-			for (let partition of resultPartitions.values()) {
-				partition.end();
-			}
 		}
 
 		let path = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir!, this.outDir!));
@@ -1879,7 +1918,7 @@ class Visitor implements ResolverContext {
 
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
-		this.dataManager.documentDone(sourceFile.fileName);
+		this.dataManager.documemntProcessed(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
@@ -2031,12 +2070,13 @@ class Visitor implements ResolverContext {
 		if (symbolData === undefined) {
 			return false;
 		}
-		let declaration = symbolData.getDeclaration(rangeNode);
-		if (declaration === undefined) {
+		let sourceFile = this.currentSourceFile!;
+		let definition = symbolData.findDefinition(sourceFile, Converter.rangeFromNode(sourceFile, rangeNode));
+		if (definition === undefined) {
 			return false;
 		}
 		let currentContainer = this.symbolContainer[this.symbolContainer.length - 1];
-		let child: RangeBasedDocumentSymbol = { id: declaration.id };
+		let child: RangeBasedDocumentSymbol = { id: definition.id };
 		if (currentContainer.children === undefined) {
 			currentContainer.children = [ child ];
 		} else {
@@ -2052,7 +2092,7 @@ class Visitor implements ResolverContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return;
 		}
-		let symbolData = this.dataManager.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		let symbolData = this.getOrCreateSymbolData(symbol);
 		if (symbolData === undefined) {
 			return;
 		}
@@ -2063,7 +2103,7 @@ class Visitor implements ResolverContext {
 
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.currentDocumentData.addRange(reference);
-		symbolData.getOrCreatePartition(sourceFile).addReference(reference, ItemEdgeProperties.references);
+		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
@@ -2242,7 +2282,10 @@ class Visitor implements ResolverContext {
 		if (tss.isValueModule(symbol) && declaration.kind === ts.SyntaxKind.SourceFile) {
 			return undefined;
 		}
-
+		if (tss.isAliasSymbol(symbol)) {
+			let sourceFile = declaration.getSourceFile();
+			return this.isFullContentIgnored(sourceFile) ? undefined : sourceFile;
+		}
 		if (ts.isSourceFile(declaration)) {
 			return this.isFullContentIgnored(declaration) ? undefined : declaration;
 		}

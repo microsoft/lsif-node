@@ -159,6 +159,12 @@ export interface DeclarationInfo {
 	end: number
 }
 
+export namespace DeclarationInfo {
+	export function equals(a: DeclarationInfo, b: DeclarationInfo): boolean {
+		return a.file === b.file && a.start === b.start && a.end === b.end;
+	}
+}
+
 export function createDeclarationInfo(sourceFile: ts.SourceFile, node: ts.Node): DeclarationInfo {
 	return {
 		file: sourceFile.fileName,

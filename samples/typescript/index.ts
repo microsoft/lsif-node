@@ -1,3 +1,3 @@
-import { foo as bar} from './provide';
+import { foo as bar } from './provide';
 
 bar();
