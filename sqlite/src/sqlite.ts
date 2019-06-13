@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as Sqlite from 'better-sqlite3';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains, PackageInformation, item } from 'lsif-protocol';
-import { itemPropertyShortForms } from './compress';
+// import { itemPropertyShortForms } from './compress';
 
 class Inserter {
 
@@ -54,7 +54,7 @@ export class Database {
 	private insertContentStmt: Sqlite.Statement;
 	private vertexInserter: Inserter;
 	private edgeInserter: Inserter;
-	private itemInserter: Inserter;
+	// private itemInserter: Inserter;
 	private rangeInserter: Inserter;
 	private documentInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
@@ -72,7 +72,7 @@ export class Database {
 		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
 		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
-		this.itemInserter = new Inserter(this.db, 'Insert Into items (id, outV, inV, property)', 4, 128);
+		// this.itemInserter = new Inserter(this.db, 'Insert Into items (id, outV, inV, property)', 4, 128);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
 	}
@@ -189,27 +189,27 @@ export class Database {
 	}
 
 	private insertEdge(edge: Edge): void {
-		let label = this.shortForm(edge);
-		this.edgeInserter.do(edge.id, label, edge.outV, edge.inV);
+		// let label = this.shortForm(edge);
+		// this.edgeInserter.do(edge.id, label, edge.outV, edge.inV);
 	}
 
 	private insertContains(contains: contains): void {
-		const range = this.pendingRanges.get(contains.inV);
-		if (range === undefined) {
-			this.insertEdge(contains);
-		} else {
-			this.pendingRanges.delete(contains.inV);
-			this.insertEdge(contains);
-			this.rangeInserter.do(range.id, contains.outV, range.start.line, range.start.character, range.end.line, range.end.character);
-		}
+		// const range = this.pendingRanges.get(contains.inV);
+		// if (range === undefined) {
+		// 	this.insertEdge(contains);
+		// } else {
+		// 	this.pendingRanges.delete(contains.inV);
+		// 	this.insertEdge(contains);
+		// 	this.rangeInserter.do(range.id, contains.outV, range.start.line, range.start.character, range.end.line, range.end.character);
+		// }
 	}
 
 	private insertItem(item: item): void {
-		if (item.property !== undefined) {
-			this.itemInserter.do(item.id, item.outV, item.inV, itemPropertyShortForms.get(item.property));
-		} else {
-			this.itemInserter.do(item.id, item.outV, item.inV, null);
-		}
+		// if (item.property !== undefined) {
+		// 	this.itemInserter.do(item.id, item.outV, item.inV, itemPropertyShortForms.get(item.property));
+		// } else {
+		// 	this.itemInserter.do(item.id, item.outV, item.inV, null);
+		// }
 	}
 
 	public close(): void {

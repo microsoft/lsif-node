@@ -10,7 +10,7 @@ import * as minimist from 'minimist';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
-import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edgeCompressor, itemEdgeCompressor } from './compress';
+import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
 import * as sql from './sqlite';
 
 const __out = process.stdout;
@@ -127,6 +127,7 @@ export function main(): void {
 		input = fs.createReadStream(options.file, { encoding: 'utf8'});
 	}
 	let db: sql.Database | undefined;
+	options.db = '';
 	if (options.db) {
 		let filename = options.db;
 		if (!filename.endsWith('.db')) {
@@ -195,7 +196,7 @@ export function main(): void {
 					let compressMetaData: MetaData = element as MetaData;
 					compressMetaData.compressors = {
 						vertexCompressor: vertexCompressor.id,
-						edgeCompressor: edgeCompressor.id,
+						edgeCompressor: edge11Compressor.id,
 						itemEdgeCompressor: itemEdgeCompressor.id,
 						all: []
 					};

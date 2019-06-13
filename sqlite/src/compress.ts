@@ -10,7 +10,7 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, Event, EventScope, EventKind
 } from 'lsif-protocol';
 
 namespace Is {
@@ -323,6 +323,7 @@ export const vertexShortForms = function() {
 	let shortCounter: number = 1;
 	return new Map<VertexLabels, number>([
 		[VertexLabels.metaData, shortCounter++],
+		[VertexLabels.event, shortCounter++],
 		[VertexLabels.project, shortCounter++],
 		[VertexLabels.range, shortCounter++],
 		[VertexLabels.location, shortCounter++],
@@ -587,35 +588,14 @@ const documentLinkResultCompressor = new GenericCompressor<DocumentLinkResult>(v
 Compressor.registerVertexCompressor(VertexLabels.documentLinkResult, documentLinkResultCompressor);
 
 const declarationResultCompressor = new GenericCompressor<DeclarationResult>(vertexCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.any('result', next(), (value) => {
-		if (Is.number(value)) {
-			return noopCompressor;
-		} else {
-			return lspLocationCompressor;
-		}
-	})
 ]);
 Compressor.registerVertexCompressor(VertexLabels.declarationResult, declarationResultCompressor);
 
 const definitionResultCompressor = new GenericCompressor<DefinitionResult>(vertexCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.any('result', next(), (value) => {
-		if (Is.number(value)) {
-			return noopCompressor;
-		} else {
-			return lspLocationCompressor;
-		}
-	})
 ]);
 Compressor.registerVertexCompressor(VertexLabels.definitionResult, definitionResultCompressor);
 
 const typeDefinitionResultCompressor = new GenericCompressor<TypeDefinitionResult>(vertexCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.any('result', next(), (value) => {
-		if (Is.number(value)) {
-			return noopCompressor;
-		} else {
-			return lspLocationCompressor;
-		}
-	})
 ]);
 Compressor.registerVertexCompressor(VertexLabels.typeDefinitionResult, typeDefinitionResultCompressor);
 
@@ -650,35 +630,42 @@ const hoverResultCompressor = new GenericCompressor<HoverResult>(vertexCompresso
 ]);
 Compressor.registerVertexCompressor(VertexLabels.hoverResult, hoverResultCompressor);
 
-const rangeIdLocationDispatcher = (value: any) => {
-	if (Is.string(value) || Is.number(value)) {
-		return noopCompressor;
-	} else {
-		return lspLocationCompressor;
-	}
-};
-const referenceResultCompressor = new GenericCompressor<ReferenceResult>(vertexCompressor, Compressor.nextId(), (next) => {
-	return [
-		GenericCompressorProperty.array('declarations', next(), rangeIdLocationDispatcher),
-		GenericCompressorProperty.array('definitions', next(), rangeIdLocationDispatcher),
-		GenericCompressorProperty.array('references', next(), rangeIdLocationDispatcher),
-		GenericCompressorProperty.array('referenceResults', next())
-	]
-});
+const referenceResultCompressor = new GenericCompressor<ReferenceResult>(vertexCompressor, Compressor.nextId(), (next) => [
+]);
 Compressor.registerVertexCompressor(VertexLabels.referenceResult, referenceResultCompressor);
 
 const implementationResultCompressor = new GenericCompressor<ImplementationResult>(vertexCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.array('result', next(), rangeIdLocationDispatcher),
-	GenericCompressorProperty.array('implementationResults', next())
 ]);
 Compressor.registerVertexCompressor(VertexLabels.implementationResult, implementationResultCompressor);
+
+const kindShortForm = function() {
+	let shortCounter: number = 1;
+	return new Map<EventKind, number>([
+		[EventKind.begin, shortCounter++],
+		[EventKind.end, shortCounter++]
+	]);
+}();
+
+const scopeShortForm = function() {
+	let shortCounter: number = 1;
+	return new Map<EventScope, number>([
+		[EventScope.project, shortCounter++],
+		[EventScope.document, shortCounter++]
+	]);
+}();
+
+const eventCompressor = new GenericCompressor<Event>(vertexCompressor, Compressor.nextId(), (next) => [
+	GenericCompressorProperty.scalar('kind', next(), kindShortForm),
+	GenericCompressorProperty.scalar('scope', next(), scopeShortForm)
+]);
+Compressor.registerVertexCompressor(VertexLabels.event, eventCompressor);
 
 export const edgeShortForms = function() {
 	let shortCounter: number = 1;
 	return new Map<EdgeLabels, number>([
 		[EdgeLabels.contains, shortCounter++],
 		[EdgeLabels.item, shortCounter++],
-		[EdgeLabels.refersTo, shortCounter++],
+		[EdgeLabels.next, shortCounter++],
 		[EdgeLabels.moniker, shortCounter++],
 		[EdgeLabels.packageInformation, shortCounter++],
 		[EdgeLabels.textDocument_documentSymbol, shortCounter++],
@@ -694,53 +681,60 @@ export const edgeShortForms = function() {
 	]);
 }();
 
-export const edgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(elementCompressor, Compressor.nextId(), (next) => [
+export const edge11Compressor = new GenericCompressor<E11<V, V, EdgeLabels>>(elementCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('label', next(), edgeShortForms),
 	GenericCompressorProperty.scalar('outV', next()),
 	GenericCompressorProperty.scalar('inV', next())
 ]);
-Compressor.addCompressor(edgeCompressor);
+Compressor.addCompressor(edge11Compressor);
 
-export const containsCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const edge1nCompressor = new GenericCompressor<E1N<V, V, EdgeLabels>>(elementCompressor, Compressor.nextId(), (next) => [
+	GenericCompressorProperty.scalar('label', next(), edgeShortForms),
+	GenericCompressorProperty.scalar('outV', next()),
+	GenericCompressorProperty.array('inVs', next())
+]);
+Compressor.addCompressor(edge1nCompressor);
+
+export const containsCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.contains, containsCompressor);
 
-export const refersToCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
-Compressor.registerEdgeCompressor(EdgeLabels.refersTo, refersToCompressor);
+export const nextCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+Compressor.registerEdgeCompressor(EdgeLabels.next, nextCompressor);
 
-export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.moniker, monikerEdgeCompressor);
 
-export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.packageInformation, packageInformationEdgeCompressor);
 
-export const textDocumentDocumentSymbolCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentDocumentSymbolCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_documentSymbol, textDocumentDocumentSymbolCompressor);
 
-export const textDocumentFoldingRangeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentFoldingRangeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_foldingRange, textDocumentFoldingRangeCompressor);
 
-export const textDocumentDocumentLinkCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentDocumentLinkCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_documentLink, textDocumentDocumentLinkCompressor);
 
-export const textDocumentDiagnosticCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentDiagnosticCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_diagnostic, textDocumentDiagnosticCompressor);
 
-export const textDocumentDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_definition, textDocumentDefinitionCompressor);
 
-export const textDocumentDeclarationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentDeclarationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_declaration, textDocumentDeclarationCompressor);
 
-export const textDocumentTypeDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentTypeDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_typeDefinition, textDocumentTypeDefinitionCompressor);
 
-export const textDocumentHoverCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentHoverCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_hover, textDocumentHoverCompressor);
 
-export const textDocumentReferencesCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentReferencesCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_references, textDocumentReferencesCompressor);
 
-export const textDocumentImplementationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edgeCompressor, Compressor.nextId(), (next) => []);
+export const textDocumentImplementationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_implementation, textDocumentImplementationCompressor);
 
 export const itemPropertyShortForms = function() {
@@ -753,7 +747,7 @@ export const itemPropertyShortForms = function() {
 	]);
 }();
 
-export const itemEdgeCompressor = new GenericCompressor<ItemEdge<V, V>>(edgeCompressor, Compressor.nextId(), (next) => [
+export const itemEdgeCompressor = new GenericCompressor<ItemEdge<V, V>>(edge1nCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('property', next(), itemPropertyShortForms)
 ]);
 Compressor.registerEdgeCompressor(EdgeLabels.item, itemEdgeCompressor);
