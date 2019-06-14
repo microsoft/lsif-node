@@ -414,7 +414,7 @@ export interface Moniker extends V {
 	identifier: string;
 
 	/**
-	 * The moniker kind if unknown.
+	 * The moniker kind if known.
 	 */
 	kind?: MonikerKind;
 }

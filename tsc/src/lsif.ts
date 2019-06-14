@@ -5,7 +5,6 @@
 import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
-import * as fs from 'fs';
 
 import URI from 'vscode-uri';
 import * as ts from 'typescript';
@@ -14,7 +13,7 @@ import * as tss from './typescripts';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
-	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, PackageInformation, ItemEdgeProperties,
+	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
 	Version, Range, EventKind
 } from 'lsif-protocol';
 
@@ -232,8 +231,7 @@ class DocumentData extends LSIFData {
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: SymbolDataContext, public document: Document, public packageInfo?: PackageInformation,
-		public monikerKind?: MonikerKind, public monikerPath?: string) {
+	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public externalLibrary: boolean) {
 		super(context);
 		this.ranges = [];
 	}
@@ -338,13 +336,10 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(kind: MonikerKind, identifier: string, packageInfo?: PackageInformation): void {
+	public addMoniker(kind: MonikerKind, identifier: string): void {
 		let moniker = this.vertex.moniker(kind, 'tsc', identifier);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
-		if (packageInfo !== undefined) {
-			this.emit(this.edge.packageInformation(moniker, packageInfo));
-		}
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -791,8 +786,9 @@ abstract class SymbolDataResolver {
 	constructor(protected typeChecker: ts.TypeChecker, protected symbols: Symbols, protected resolverContext: ResolverContext, protected symbolDataContext: SymbolDataContext) {
 	}
 
-	public abstract resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
+	public abstract requiresSourceFile: boolean;
 
+	public abstract resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
 }
 
 class StandardResolver extends SymbolDataResolver {
@@ -801,7 +797,11 @@ class StandardResolver extends SymbolDataResolver {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public get requiresSourceFile(): boolean {
+		return false;
+	}
+
+	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
 		return new StandardSymbolData(this.symbolDataContext, id, scope);
 	}
 }
@@ -812,7 +812,11 @@ class TypeAliasResolver extends SymbolDataResolver {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public get requiresSourceFile(): boolean {
+		return false;
+	}
+
+	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
 		let aliased = this.typeChecker.getAliasedSymbol(symbol);
 		if (aliased !== undefined) {
 			let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
@@ -828,6 +832,10 @@ class MethodResolver extends SymbolDataResolver {
 
 	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
+	}
+
+	public get requiresSourceFile(): boolean {
+		return true;
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
@@ -898,11 +906,10 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateDocumentData(fileName: string, document: Document, packageInfo?: PackageInformation,
-		monikerKind?: MonikerKind, monikerPath?: string): DocumentData {
+	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, externalLibrary: boolean): DocumentData {
 		let result = this.getDocumentData(fileName);
 		if (result === undefined) {
-			result = new DocumentData(this, document, packageInfo, monikerKind, monikerPath);
+			result = new DocumentData(this, document, monikerPath, externalLibrary);
 			this.documentDatas.set(fileName, result);
 			this.projectData.addDocument(document);
 			result.begin();
@@ -984,7 +991,6 @@ class Visitor implements ResolverContext {
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
 	private symbolDataResolvers: Map<number, SymbolDataResolver>;
-	private packageInfos: Map<string, PackageInformation>;
 	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
@@ -995,7 +1001,6 @@ class Visitor implements ResolverContext {
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
 		this.externalLibraryImports = new Map();
-		this.packageInfos = new Map();
 		this.dependentOutDirs = [];
 		for (let info of dependsOn) {
 			this.dependentOutDirs.push(info.outDir);
@@ -1022,28 +1027,6 @@ class Visitor implements ResolverContext {
 		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, symbols, this, this.dataManager));
 		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, symbols, this, this.dataManager));
 		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, symbols, this, this.dataManager));
-		// if (this.isClass(symbol)) {
-		// 	result = new ClassSymbolItem(key, context, symbol);
-		// } else if (this.isInterface(symbol)) {
-		// 	result = new InterfaceSymbolItem(key, context, symbol);
-		// } else if (this.isTypeLiteral(symbol)) {
-		// 	result = new TypeLiteralSymbolItem(key, context, symbol);
-		// } else if (this.isMethodSymbol(symbol)) {
-		// 	result = new MethodSymbolItem(key, context, symbol);
-		// } else if (this.isFunction(symbol)) {
-		// 	result = new FunctionSymbolItem(key, context, symbol);
-		// } else if (this.isAliasSymbol(symbol)) {
-		// 	let aliased = context.typeChecker.getAliasedSymbol(symbol);
-		// 	if (aliased !== undefined) {
-		// 		let aliasedSymbolItem = this.get(context, aliased);
-		// 		if (aliasedSymbolItem !== undefined) {
-		// 			result = new AliasSymbolItem(key, context, symbol, aliasedSymbolItem);
-		// 		}
-		// 	}
-		// }
-		// if (result === undefined) {
-		// 	result = new GenericSymbolItem(key, context, symbol);
-		// }
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1163,17 +1146,6 @@ class Visitor implements ResolverContext {
 			return;
 		}
 
-		let path = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir!, this.outDir!));
-
-		// Exported symbols.
-		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);
-		if (symbol !== undefined) {
-			if (symbol.exports !== undefined && symbol.exports.size > 0) {
-				symbol.exports.forEach(item => this.emitExportMonikers(path, undefined, item));
-			}
-		}
-		this._currentExports = undefined;
-
 		let documentData = this.currentDocumentData;
 		// Diagnostics
 		let diagnostics: lsp.Diagnostic[] = [];
@@ -1212,27 +1184,10 @@ class Visitor implements ResolverContext {
 
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
+		this._currentExports = undefined;
 		this.dataManager.documemntProcessed(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
-		}
-	}
-
-	private emitExportMonikers(path: string | undefined, prefix: string | undefined, symbol: ts.Symbol): void  {
-		const name  = symbol.getName();
-		let symbolId: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
-		let symbolData = this.dataManager.getSymbolData(symbolId)!;
-		let fullName = prefix !== undefined ? `${prefix}.${name}` : name;
-		symbolData.addMoniker(MonikerKind.export, tss.createMonikerIdentifier(path, fullName));
-		if (symbol.exports !== undefined && symbol.exports.size > 0) {
-			symbol.exports.forEach(item => this.emitExportMonikers(path, name, item));
-		}
-		if (symbol.members !== undefined && symbol.members.size > 0) {
-			symbol.members.forEach(item => {
-				if (!tss.isPrivate(item)) {
-					this.emitExportMonikers(path, name, item);
-				}
-			});
 		}
 	}
 
@@ -1410,9 +1365,11 @@ class Visitor implements ResolverContext {
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
 		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
+			// A real source file inside this project.
 			if (!sourceFile.isDeclarationFile) {
-				return undefined;
+				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir!, this.outDir!));
 			}
+			// This can come from a dependent project.
 			let fileName = sourceFile.fileName;
 			for (let outDir of this.dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
@@ -1431,33 +1388,15 @@ class Visitor implements ResolverContext {
 
 		let resolvedModule = this.externalLibraryImports.get(sourceFile.fileName);
 		let monikerPath: string | undefined;
-		let packageInfo: PackageInformation | undefined;
+		let library: boolean = false;
 		if (resolvedModule !== undefined) {
-			if (resolvedModule.packageId !== undefined) {
-				let packageId = resolvedModule.packageId;
-				let key: string = JSON.stringify([packageId.name, 'npm', packageId.version]);
-				packageInfo = this.packageInfos.get(key);
-				if (packageInfo === undefined) {
-					packageInfo = this.vertex.packageInformation(packageId.name, 'npm');
-					packageInfo.version = packageId.version;
-					let modulePart = `node_modules/${packageId.name}`;
-					let index = sourceFile.fileName.lastIndexOf(modulePart);
-					if (index !== -1) {
-						let packageFile = path.join(sourceFile.fileName.substring(0, index + modulePart.length), 'package.json');
-						if (fs.existsSync(packageFile)) {
-							packageInfo.uri = URI.file(packageFile).toString(true);
-						}
-					}
-					this.emit(packageInfo);
-					this.packageInfos.set(key, packageInfo);
-				}
-			}
+			library = true;
 			monikerPath = tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
 		} else {
 			monikerPath = computeMonikerPath(sourceFile);
 		}
 
-		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, packageInfo, MonikerKind.import, monikerPath);
+		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, library);
 		return result;
 	}
 
@@ -1467,10 +1406,45 @@ class Visitor implements ResolverContext {
 		if (result !== undefined) {
 			return result;
 		}
-		let hover: lsp.Hover | undefined;
-		let declarations: ts.Declaration[] = symbol.declarations;
+		let resolver = this.getResolver(symbol);
+		let scope =  this.resolveEmittingNode(symbol);
+		let declarations: ts.Declaration[] | undefined = symbol.getDeclarations();
+		let sourceFiles = tss.getUniqueSourceFiles(declarations);
+		if (resolver.requiresSourceFile && sourceFiles.size !== 1) {
+			throw new Error(`Resolver requires source file but no uniqque source file found.`);
+		}
+		// Make sure we create all document data before we create the symbol.
+		let monikerPath: string | undefined | null;
+		let externalLibrary: boolean = false;
+		for (let sourceFile of sourceFiles.values()) {
+			let documentData = this.getOrCreateDocumentData(sourceFile);
+			if (monikerPath === undefined) {
+				monikerPath = documentData.monikerPath;
+				externalLibrary = documentData.externalLibrary;
+			} else if (monikerPath !== documentData.monikerPath) {
+				monikerPath = null;
+			}
+		}
+		if (monikerPath === null) {
+			monikerPath = undefined;
+			externalLibrary = false;
+		}
+		result = this.dataManager.getOrCreateSymbolData(id, () => {
+			return resolver.requiresSourceFile ? resolver.resolve(sourceFiles.values().next().value, id, symbol, scope) : resolver.resolve(undefined, id, symbol, scope);
+		});
+		if (declarations === undefined || declarations.length === 0) {
+			return result;
+		}
 		const monikerName = tss.computeMoniker(declarations);
-		let monikers: { definition: DefinitionRange; identifier: string; kind: MonikerKind, packageInfo: PackageInformation | undefined }[] = [];
+		if (monikerName !== undefined) {
+			let monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
+			if (externalLibrary === true) {
+				result.addMoniker(MonikerKind.import, monikerIdentifer);
+			} else if (this.isExported(symbol) && !tss.isPrivate(symbol)) {
+				result.addMoniker(MonikerKind.export, monikerIdentifer);
+			}
+		}
+		let hover: lsp.Hover | undefined;
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
 			let [identifierNode, identifierText] = this.getIdentifierInformation(sourceFile, symbol, declaration);
@@ -1483,53 +1457,13 @@ class Visitor implements ResolverContext {
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
 				});
 				documentData.addRange(definition);
-				let resolver = this.getResolver(symbol);
-				let scope =  this.resolveEmittingNode(symbol);
-
-				result = this.dataManager.getOrCreateSymbolData(id, () => resolver.resolve(sourceFile, id, symbol, scope));
 				result.addDefinition(sourceFile, definition);
 				result.recordDeclarationInfo(tss.createDeclarationInfo(sourceFile, identifierNode));
-				if (monikerName !== undefined && documentData.monikerPath !== undefined && documentData.monikerKind !== undefined) {
-					const mi = tss.createMonikerIdentifier(documentData.monikerPath, monikerName);
-					monikers.push({ definition, identifier: mi, kind: documentData.monikerKind, packageInfo: documentData.packageInfo });
-				}
 				if (hover === undefined && tss.isNamedDeclaration(declaration)) {
 					hover = this.getHover(declaration.name, sourceFile);
 					if (hover) {
 						result.addHover(hover);
 					}
-				}
-			} else {
-				// We should log this somewhere to improve the tool.
-			}
-		}
-		if (result === undefined) {
-			throw new Error(`No symbol datat created for ${symbol.name}`);
-		}
-		if (monikers.length > 0) {
-			let last: typeof monikers[0] | undefined;
-			let same = true;
-			for (let item of monikers) {
-				if (last === undefined) {
-					last = item;
-				} else {
-					if (last.identifier !== item.identifier || last.kind !== item.kind || last.packageInfo !== item.packageInfo) {
-						same = false;
-						break;
-					}
-				}
-			}
-			if (same) {
-				const item = monikers[0];
-				result.addMoniker(item.kind, item.identifier, item.packageInfo);
-			} else {
-				for (let item of monikers) {
-					const moniker = this.vertex.moniker(item.kind, 'tsc', item.identifier);
-					this.emit(moniker);
-					if (item.packageInfo) {
-						this.emit(this.edge.packageInformation(moniker, item.packageInfo));
-					}
-					this.emit(this.edge.moniker(item.definition, moniker));
 				}
 			}
 		}

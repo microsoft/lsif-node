@@ -231,6 +231,17 @@ export function isStatic(symbol: ts.Symbol): boolean {
 	return true;
 }
 
+export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined): Set<ts.SourceFile> {
+	let result: Set<ts.SourceFile> = new Set();
+	if (declarations === undefined || declarations.length === 0) {
+		return result;
+	}
+	for (let declaration of declarations) {
+		result.add(declaration.getSourceFile());
+	}
+	return result;
+}
+
 const stopKinds: Set<number> = new Set([ts.SyntaxKind.Block, ts.SyntaxKind.ClassExpression, ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.ArrowFunction]);
 function doComputeMoniker(node: ts.Node): string | undefined {
 	function getName(node: ts.Node): string | undefined {
@@ -265,22 +276,23 @@ function doComputeMoniker(node: ts.Node): string | undefined {
 	return buffer.join('.');
 }
 
-export function computeMoniker(nodes: ts.Node[]): string | undefined {
-	if (nodes.length === 0) {
+export function computeMoniker(nodes: ts.Node[] | undefined): string | undefined {
+	if (nodes === undefined || nodes.length === 0) {
 		return undefined;
 	}
 	if (nodes.length === 1) {
 		return doComputeMoniker(nodes[0]);
 	}
-	let result: Set<string> = new Set<string>();
-	for (let node of nodes) {
-		let part = doComputeMoniker(node);
-		if (part === undefined) {
+	let result: string | undefined = doComputeMoniker(nodes[0]);
+	if (result === undefined) {
+		return undefined;
+	}
+	for (let i = 1; i < nodes.length; i++) {
+		if (result !== doComputeMoniker(nodes[i])) {
 			return undefined;
 		}
-		result.add(part);
 	}
-	return Array.from(result).join('|');
+	return result;
 }
 
 export const EmitBoundaries: Set<number> = new Set<number>([
