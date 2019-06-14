@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as Sqlite from 'better-sqlite3';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains, PackageInformation, item } from 'lsif-protocol';
-// import { itemPropertyShortForms } from './compress';
+import { itemPropertyShortForms } from './compress';
 
 class Inserter {
 
@@ -39,7 +39,11 @@ class Inserter {
 			let elem: any[] = [];
 			for (let e = 0; e < this.numberOfArgs; e++) {
 				let param = this.batch[i + e];
-				elem.push(typeof param === 'string' ? `'${param}'` : param);
+				if (param === null) {
+					elem.push('NULL');
+				} else {
+					elem.push(typeof param === 'string' ? `'${param}'` : param);
+				}
 			}
 			values.push(`(${elem.join(',')})`);
 		}
@@ -54,7 +58,7 @@ export class Database {
 	private insertContentStmt: Sqlite.Statement;
 	private vertexInserter: Inserter;
 	private edgeInserter: Inserter;
-	// private itemInserter: Inserter;
+	private itemInserter: Inserter;
 	private rangeInserter: Inserter;
 	private documentInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
@@ -69,27 +73,32 @@ export class Database {
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
 		this.createTables();
-		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
-		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
-		// this.itemInserter = new Inserter(this.db, 'Insert Into items (id, outV, inV, property)', 4, 128);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
+		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
+
+		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
+		this.itemInserter = new Inserter(this.db, 'Insert Into items (id, outV, inV, document, property)', 5, 128);
 	}
 
 	private createTables(): void {
+		// Vertex information
 		this.db.exec('Create Table vertices (id Integer Unique Primary Key, label Integer Not Null, value Text Not Null)');
-		this.db.exec('Create Table edges (id Integer Unique Primary Key, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
+		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
 		this.db.exec('Create Table documents (uri Text Unique Primary Key, id Integer Not Null)');
 		this.db.exec('Create Table contents (id Integer Unique Primary Key, content Blob Not Null)');
-		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
-		this.db.exec('Create Table items (id Integer Unique Primary Key, outV Integer Not Null, inV Integer Not Null, property Integer)');
+
+		// Edge information
+		this.db.exec('Create Table edges (id Integer Not Null, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
+		this.db.exec('Create Table items (id Integer Not Null, outV Integer Not Null, inV Integer Not Null, document Integer Not Null, property Integer)');
 	}
 
 	private createIndices(): void {
-		this.db.exec('Create Index edges_outv on edges (outV)');
-		this.db.exec('Create Index edges_inv on edges (inV)');
+		// Index label, outV and inV on edges
+		this.db.exec('Create Index edges_outv on edges (outV, label)');
+		this.db.exec('Create Index edges_inv on edges (inV, label)');
 		this.db.exec('Create Index ranges_index on ranges (belongsTo, startLine, endLine, startCharacter, endCharacter)',);
 		this.db.exec('Create Index items_outv on items (outV)');
 		this.db.exec('Create Index items_inv on items (inV)');
@@ -189,27 +198,37 @@ export class Database {
 	}
 
 	private insertEdge(edge: Edge): void {
-		// let label = this.shortForm(edge);
-		// this.edgeInserter.do(edge.id, label, edge.outV, edge.inV);
+		let label = this.shortForm(edge);
+		if (Edge.is11(edge)) {
+			this.edgeInserter.do(edge.id, label, edge.outV, edge.inV);
+		} else if (Edge.is1N(edge)) {
+			for (let inV of edge.inVs) {
+				this.edgeInserter.do(edge.id, label, edge.outV, inV);
+			}
+		}
 	}
 
 	private insertContains(contains: contains): void {
-		// const range = this.pendingRanges.get(contains.inV);
-		// if (range === undefined) {
-		// 	this.insertEdge(contains);
-		// } else {
-		// 	this.pendingRanges.delete(contains.inV);
-		// 	this.insertEdge(contains);
-		// 	this.rangeInserter.do(range.id, contains.outV, range.start.line, range.start.character, range.end.line, range.end.character);
-		// }
+		let label = this.shortForm(contains);
+		for (let inV of contains.inVs) {
+			const range = this.pendingRanges.get(inV);
+			if (range === undefined) {
+				this.edgeInserter.do(contains.id, label, contains.outV, inV);
+			} else {
+				this.pendingRanges.delete(inV);
+				this.rangeInserter.do(range.id, contains.outV, range.start.line, range.start.character, range.end.line, range.end.character);
+			}
+		}
 	}
 
 	private insertItem(item: item): void {
-		// if (item.property !== undefined) {
-		// 	this.itemInserter.do(item.id, item.outV, item.inV, itemPropertyShortForms.get(item.property));
-		// } else {
-		// 	this.itemInserter.do(item.id, item.outV, item.inV, null);
-		// }
+		for (let inV of item.inVs) {
+			if (item.property !== undefined) {
+				this.itemInserter.do(item.id, item.outV, inV, item.document, itemPropertyShortForms.get(item.property));
+			} else {
+				this.itemInserter.do(item.id, item.outV, inV, item.document, null);
+			}
+		}
 	}
 
 	public close(): void {
@@ -217,6 +236,7 @@ export class Database {
 		this.edgeInserter.finish();
 		this.rangeInserter.finish();
 		this.documentInserter.finish();
+		this.itemInserter.finish();
 		if(this.pendingRanges.size > 0) {
 			console.error(`Pending ranges exists before DB is closed.`);
 		}

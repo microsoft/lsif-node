@@ -127,7 +127,6 @@ export function main(): void {
 		input = fs.createReadStream(options.file, { encoding: 'utf8'});
 	}
 	let db: sql.Database | undefined;
-	options.db = '';
 	if (options.db) {
 		let filename = options.db;
 		if (!filename.endsWith('.db')) {

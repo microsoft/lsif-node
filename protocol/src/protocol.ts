@@ -697,18 +697,6 @@ export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Ele
 
 export type E<S extends V, T extends V, K extends EdgeLabels> = E11<S, T, K> | E1N<S, T, K>;
 
-export namespace E {
-	export function is11<S extends V, T extends V, K extends EdgeLabels>(value: E<S, T, K>): value is E11<S, T, K> {
-		let candidate = value as E11<S, T, K>;
-		return candidate && candidate.inV !== undefined;
-	}
-
-	export function is1N<S extends V, T extends V, K extends EdgeLabels>(value: E<S, T, K>): value is E1N<S, T, K> {
-		let candidate = value as E1N<S, T, K>;
-		return candidate && Array.isArray(candidate.inVs);
-	}
-}
-
 export enum ItemEdgeProperties {
 	declarations = 'declarations',
 	definitions = 'definitions',
@@ -876,3 +864,16 @@ export type Edge =
 	textDocument_hover |
 	textDocument_references |
 	textDocument_implementation;
+
+export namespace Edge {
+	export function is11(edge: Edge): edge is (Edge & { inV: Id }) {
+		let candidate = edge as E11<any, any, any>;
+		return candidate && candidate.inV !== undefined;
+	}
+
+	export function is1N(edge: Edge): edge is (Edge & {inVs: Id[]}) {
+		let candidate = edge as E1N<any, any, any>;
+		return candidate && Array.isArray(candidate.inVs);
+
+	}
+}
