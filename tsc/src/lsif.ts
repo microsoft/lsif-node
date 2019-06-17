@@ -61,7 +61,12 @@ namespace Converter {
 	}
 
 	export function rangeFromNode(this: void, file: ts.SourceFile, node: ts.Node, includeJsDocComment?: boolean): lsp.Range {
-		let start = file.getLineAndCharacterOfPosition(node.getStart(file, includeJsDocComment));
+		let start: ts.LineAndCharacter;
+		if (file === node) {
+			start = { line: 0, character: 0 };
+		} else {
+			start = file.getLineAndCharacterOfPosition(node.getStart(file, includeJsDocComment));
+		}
 		let end = file.getLineAndCharacterOfPosition(node.getEnd());
 		return {
 			start: { line: start.line, character: start.character },
@@ -660,10 +665,12 @@ class Symbols {
 
 	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
+	private exportedPaths: LRUCache<ts.Symbol, string | null>;
 
 	constructor(private typeChecker: ts.TypeChecker) {
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
+		this.exportedPaths = new LRUCache(2048);
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -774,6 +781,47 @@ class Symbols {
 			return undefined;
 		}
 		return result;
+	}
+
+	public getExportPath(symbol: ts.Symbol): string | null {
+		let result = this.exportedPaths.get(symbol);
+		if (result !== undefined) {
+			return result;
+		}
+		if (tss.isSourceFile(symbol)) {
+			this.exportedPaths.set(symbol, '');
+			return '';
+		}
+		let parent = tss.getSymbolParent(symbol);
+		if (parent === undefined) {
+			this.exportedPaths.set(symbol, null);
+			return null;
+		} else {
+			let parentValue = this.getExportPath(parent);
+			// The parent is not exported so any member isn't either
+			if (parentValue === null) {
+				this.exportedPaths.set(symbol, null);
+				return null;
+			} else {
+				if (tss.isInterface(parent) || tss.isClass(parent)) {
+					result = `${parentValue}.${symbol.getName()}`;
+					this.exportedPaths.set(symbol, result);
+					return result;
+				} else if (parent.exports !== undefined) {
+					if (parent.exports.has(symbol.getName() as ts.__String)) {
+						result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
+						this.exportedPaths.set(symbol, result);
+						return result;
+					} else {
+						this.exportedPaths.set(symbol, null);
+						return null;
+					}
+				} else {
+					this.exportedPaths.set(symbol, null);
+					return null;
+				}
+			}
+		}
 	}
 }
 
@@ -986,7 +1034,7 @@ class Visitor implements ResolverContext {
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
-	private _currentExports: Set<ts.Symbol> | undefined;
+	private symbols: Symbols;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
@@ -1022,11 +1070,11 @@ class Visitor implements ResolverContext {
 			// Try to compute the root directories.
 		}
 		this.dataManager = new DataManager(this, this.project);
-		let symbols = new Symbols(this.typeChecker);
+		this.symbols = new Symbols(this.typeChecker);
 		this.symbolDataResolvers = new Map();
-		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, symbols, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, symbols, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, this.symbols, this, this.dataManager));
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1123,22 +1171,7 @@ class Visitor implements ResolverContext {
 		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
 
-		// Exported Symbols
-		let symbol = this.program.getTypeChecker().getSymbolAtLocation(sourceFile);
-		let symbols: Set<ts.Symbol> = new Set();
-		if (symbol !== undefined) {
-			this.collectExportedSymbols(symbols, symbol);
-		}
-		this._currentExports = symbols;
-
 		return true;
-	}
-
-	private collectExportedSymbols(symbols: Set<ts.Symbol>, symbol: ts.Symbol): void {
-		symbols.add(symbol);
-		if (symbol.exports !== undefined && symbol.exports.size > 0) {
-			symbol.exports.forEach(item => this.collectExportedSymbols(symbols, item));
-		}
 	}
 
 	private endVisitSourceFile(sourceFile: ts.SourceFile): void {
@@ -1184,7 +1217,6 @@ class Visitor implements ResolverContext {
 
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
-		this._currentExports = undefined;
 		this.dataManager.documemntProcessed(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
@@ -1212,13 +1244,6 @@ class Visitor implements ResolverContext {
 			parent = path.dirname(dirName);
 		} while (parent !== dirName)
 		return false;
-	}
-
-	public isExported(symbol: ts.Symbol): boolean {
-		if (this._currentExports === undefined) {
-			return false;
-		}
-		return this._currentExports.has(symbol);
 	}
 
 	private visitModuleDeclaration(node: ts.ModuleDeclaration): boolean {
@@ -1435,15 +1460,16 @@ class Visitor implements ResolverContext {
 		if (declarations === undefined || declarations.length === 0) {
 			return result;
 		}
-		const monikerName = tss.computeMoniker(declarations);
-		if (monikerName !== undefined) {
+		const monikerName = this.symbols.getExportPath(symbol);
+		if (monikerName !== null) {
 			let monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
 			if (externalLibrary === true) {
 				result.addMoniker(MonikerKind.import, monikerIdentifer);
-			} else if (this.isExported(symbol) && !tss.isPrivate(symbol)) {
+			} else {
 				result.addMoniker(MonikerKind.export, monikerIdentifer);
 			}
 		}
+
 		let hover: lsp.Hover | undefined;
 		for (let declaration of declarations) {
 			let sourceFile = declaration.getSourceFile();
@@ -1498,8 +1524,11 @@ class Visitor implements ResolverContext {
 	}
 
 	private resolveEmittingNode(symbol: ts.Symbol): ts.Node | undefined {
-		// The symbol is exported So we can't optimize any emitting.
-		if (this.isExported(symbol)) {
+		// The symbol has a export path so we can't bind this to a node
+		// Note that we even treat private class members like this. Reason being
+		// is that they can be referenced but it would only be a compile error
+		// since JS in fact has not visibility.
+		if (this.symbols.getExportPath(symbol) !== null) {
 			return undefined;
 		}
 		let declarations = symbol.getDeclarations();

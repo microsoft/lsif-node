@@ -6,7 +6,7 @@ export interface IDisposable {
 	dispose(): void;
 }
 
-export class A implements IDisposable {
+class A implements IDisposable {
 	public dispose(): void {
 	}
 	private local(): void {

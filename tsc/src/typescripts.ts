@@ -69,6 +69,9 @@ export function createMonikerIdentifier(path: string | undefined, symbol: string
 	if (path === undefined) {
 		return symbol;
 	}
+	if (symbol.length === 0) {
+		return path;
+	}
 	return `${path.replace(/\:/g, '::')}:${symbol}`;
 }
 
@@ -171,6 +174,11 @@ export function createDeclarationInfo(sourceFile: ts.SourceFile, node: ts.Node):
 		start: node.getStart(),
 		end: node.getEnd()
 	};
+}
+
+export function isSourceFile(symbol: ts.Symbol): boolean  {
+	let declarations = symbol.getDeclarations();
+	return declarations !== undefined && declarations.length === 1 && ts.isSourceFile(declarations[0]);
 }
 
 export function isFunction(symbol: ts.Symbol): boolean {
