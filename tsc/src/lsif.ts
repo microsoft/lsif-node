@@ -288,7 +288,7 @@ class DocumentData extends LSIFData {
 
 abstract class SymbolData extends LSIFData {
 
-	private declarationInfo: tss.DeclarationInfo | tss.DeclarationInfo[] | undefined;
+	private declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined;
 
 	protected resultSet: ResultSet;
 
@@ -309,7 +309,7 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.resultSet);
 	}
 
-	public recordDeclarationInfo(info: tss.DeclarationInfo): void {
+	public recordDefinitionInfo(info: tss.DefinitionInfo): void {
 		if (this.declarationInfo === undefined) {
 			this.declarationInfo = info;
 		} else if (Array.isArray(this.declarationInfo)) {
@@ -320,18 +320,18 @@ abstract class SymbolData extends LSIFData {
 		}
 	}
 
-	public hasDeclarationInfo(info: tss.DeclarationInfo): boolean {
+	public hasDefinitionInfo(info: tss.DefinitionInfo): boolean {
 		if (this.declarationInfo === undefined) {
 			return false;
 		} else if (Array.isArray(this.declarationInfo)) {
 			for (let item of this.declarationInfo) {
-				if (tss.DeclarationInfo.equals(item, info)) {
+				if (tss.DefinitionInfo.equals(item, info)) {
 					return true;
 				}
 			}
 			return false;
 		} else {
-			return tss.DeclarationInfo.equals(this.declarationInfo, info);
+			return tss.DefinitionInfo.equals(this.declarationInfo, info);
 		}
 	}
 
@@ -554,6 +554,8 @@ class MethodSymbolData extends StandardSymbolData {
 		super.begin();
 		if (this.bases !== undefined) {
 			for (let base of this.bases) {
+				// We take the first source file to cluster this. We might want to find a source
+				// file that has already changed to make the diff minimal.
 				super.addReference(this.sourceFile!, base.getOrCreateReferenceResult());
 			}
 		}
@@ -579,6 +581,44 @@ class MethodSymbolData extends StandardSymbolData {
 			}
 		} else {
 			super.addReference(sourceFile, reference as any, property as any);
+		}
+	}
+}
+
+class UnionOrIntersectionSymbolData extends StandardSymbolData {
+
+	private sourceFile: ts.SourceFile | undefined;
+	private elements: SymbolData[];
+
+	constructor(context: SymbolDataContext, id: string, sourceFile: ts.SourceFile, elements: SymbolData[]) {
+		super(context, id, undefined);
+		this.elements = elements;
+		this.sourceFile = sourceFile;
+	}
+
+	public begin(): void {
+		super.begin();
+		for (let element of this.elements) {
+			// We take the first source file to cluster this. We might want to find a source
+			// file that has already changed to make the diff minimal.
+			super.addReference(this.sourceFile!, element.getOrCreateReferenceResult());
+		}
+		this.sourceFile = undefined;
+	}
+
+	public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+	}
+
+	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+		// We don't do anoything for definitions since they a transient anyways.
+	}
+
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (reference.label === 'range') {
+			this.emit(this.edge.next(reference, this.resultSet));
+		}
+		for (let element of this.elements) {
+			element.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
 		}
 	}
 }
@@ -826,7 +866,7 @@ class Symbols {
 }
 
 interface ResolverContext {
-	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+	getOrCreateSymbolData(symbol: ts.Symbol, location?: ts.Node): SymbolData;
 }
 
 abstract class SymbolDataResolver {
@@ -836,7 +876,26 @@ abstract class SymbolDataResolver {
 
 	public abstract requiresSourceFile: boolean;
 
-	public abstract resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData;
+	public getDeclarationNodes(symbol: ts.Symbol, location?: ts.Node): ts.Node[] | undefined {
+		return symbol.getDeclarations();
+	}
+
+	public getSourceFiles(symbol: ts.Symbol, location?: ts.Node): ts.SourceFile[] {
+		let sourceFiles = tss.getUniqueSourceFiles(symbol.getDeclarations());
+		if (sourceFiles.size === 0) {
+			return [];
+		}
+		return Array.from(sourceFiles.values());
+	}
+
+	public getPartitionScope(sourceFiles: ts.SourceFile[]): ts.SourceFile {
+		if (sourceFiles.length === 0) {
+			throw new Error(`No soure file selection provided`);
+		}
+		return sourceFiles[0];
+	}
+
+	public abstract resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData;
 }
 
 class StandardResolver extends SymbolDataResolver {
@@ -849,7 +908,7 @@ class StandardResolver extends SymbolDataResolver {
 		return false;
 	}
 
-	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
 		return new StandardSymbolData(this.symbolDataContext, id, scope);
 	}
 }
@@ -864,7 +923,7 @@ class TypeAliasResolver extends SymbolDataResolver {
 		return false;
 	}
 
-	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
 		let aliased = this.typeChecker.getAliasedSymbol(symbol);
 		if (aliased !== undefined) {
 			let aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
@@ -886,7 +945,7 @@ class MethodResolver extends SymbolDataResolver {
 		return true;
 	}
 
-	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, scope?: ts.Node): SymbolData {
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
 		let container = tss.getSymbolParent(symbol);
 		if (container === undefined) {
 			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
@@ -897,6 +956,48 @@ class MethodResolver extends SymbolDataResolver {
 		}
 		let baseSymbolData = baseMembers.map(member => this.resolverContext.getOrCreateSymbolData(member));
 		return new MethodSymbolData(this.symbolDataContext, id, sourceFile, baseSymbolData, scope);
+	}
+}
+
+class TransientResolver extends SymbolDataResolver {
+
+	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, symbols, resolverContext, symbolDataContext);
+	}
+
+	public get requiresSourceFile(): boolean {
+		return true;
+	}
+
+	public getDeclarationNodes(symbol: ts.Symbol, location?: ts.Node): ts.Node[] | undefined {
+		if (location === undefined) {
+			throw new Error(`Transient resolver needs declaration node`);
+		}
+
+		return [location];
+	}
+
+	public getSourceFiles(symbol: ts.Symbol, location?: ts.Node): ts.SourceFile[] {
+		if (location === undefined) {
+			throw new Error(`Transient resolver needs declaration node`);
+		}
+		return [location.getSourceFile()];
+	}
+
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
+		if (location === undefined) {
+			throw new Error(`Transient resolver needs declaration node`);
+		}
+		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		if (type.isUnionOrIntersection() && type.types.length > 0) {
+			let datas: SymbolData[] = [];
+			for (let typeElem of type.types) {
+				datas.push(this.resolverContext.getOrCreateSymbolData(typeElem.symbol));
+			}
+			return new UnionOrIntersectionSymbolData(this.symbolDataContext, id, sourceFile, datas);
+		} else {
+			return new StandardSymbolData(this.symbolDataContext, id, undefined);
+		}
 	}
 }
 
@@ -1075,6 +1176,7 @@ class Visitor implements ResolverContext {
 		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager));
 		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager));
 		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, this.symbols, this, this.dataManager));
+		this.symbolDataResolvers.set(ts.SymbolFlags.Transient, new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager));
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1340,7 +1442,7 @@ class Visitor implements ResolverContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return false;
 		}
-		let symbolData = this.dataManager.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		let symbolData = this.getOrCreateSymbolData(symbol, rangeNode);
 		if (symbolData === undefined) {
 			return false;
 		}
@@ -1366,12 +1468,12 @@ class Visitor implements ResolverContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol);
+		let symbolData = this.getOrCreateSymbolData(symbol, node);
 		if (symbolData === undefined) {
 			return;
 		}
 		let sourceFile = this.currentSourceFile!;
-		if (symbolData.hasDeclarationInfo(tss.createDeclarationInfo(sourceFile, node))) {
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
 			return;
 		}
 
@@ -1425,7 +1527,7 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
+	public getOrCreateSymbolData(symbol: ts.Symbol, location?: ts.Node): SymbolData {
 		let id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
@@ -1433,10 +1535,10 @@ class Visitor implements ResolverContext {
 		}
 		let resolver = this.getResolver(symbol);
 		let scope =  this.resolveEmittingNode(symbol);
-		let declarations: ts.Declaration[] | undefined = symbol.getDeclarations();
-		let sourceFiles = tss.getUniqueSourceFiles(declarations);
-		if (resolver.requiresSourceFile && sourceFiles.size !== 1) {
-			throw new Error(`Resolver requires source file but no uniqque source file found.`);
+		let declarations: ts.Node[] | undefined = resolver.getDeclarationNodes(symbol, location);
+		let sourceFiles: ts.SourceFile[] = resolver.getSourceFiles(symbol, location);
+		if (resolver.requiresSourceFile && sourceFiles.length === 0) {
+			throw new Error(`Resolver requires source file but no source file can be found.`);
 		}
 		// Make sure we create all document data before we create the symbol.
 		let monikerPath: string | undefined | null;
@@ -1455,7 +1557,7 @@ class Visitor implements ResolverContext {
 			externalLibrary = false;
 		}
 		result = this.dataManager.getOrCreateSymbolData(id, () => {
-			return resolver.requiresSourceFile ? resolver.resolve(sourceFiles.values().next().value, id, symbol, scope) : resolver.resolve(undefined, id, symbol, scope);
+			return resolver.requiresSourceFile ? resolver.resolve(resolver.getPartitionScope(sourceFiles), id, symbol, location, scope) : resolver.resolve(undefined, id, symbol, location, scope);
 		});
 		if (declarations === undefined || declarations.length === 0) {
 			return result;
@@ -1484,7 +1586,7 @@ class Visitor implements ResolverContext {
 				});
 				documentData.addRange(definition);
 				result.addDefinition(sourceFile, definition);
-				result.recordDeclarationInfo(tss.createDeclarationInfo(sourceFile, identifierNode));
+				result.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
 				if (hover === undefined && tss.isNamedDeclaration(declaration)) {
 					hover = this.getHover(declaration.name, sourceFile);
 					if (hover) {
@@ -1512,7 +1614,7 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	private getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Declaration): [ts.Node, string] | [undefined, undefined] {
+	private getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
 		if (tss.isNamedDeclaration(declaration)) {
 			let name = declaration.name;
 			return [name, name.getText()];
@@ -1562,6 +1664,9 @@ class Visitor implements ResolverContext {
 		}
 		if (tss.isMethodSymbol(symbol)) {
 			return this.symbolDataResolvers.get(ts.SymbolFlags.Method)!;
+		}
+		if (tss.isTransient(symbol)) {
+			return this.symbolDataResolvers.get(ts.SymbolFlags.Transient)!;
 		}
 		return this.symbolDataResolvers.get(0)!;
 	}

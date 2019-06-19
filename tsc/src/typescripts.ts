@@ -14,7 +14,7 @@ import * as Is from './utils/is';
 export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
 	ts.MethodSignature | ts.ParameterDeclaration;
 
-export function isNamedDeclaration(node: ts.Declaration): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
+export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
 	let candidate = node as ts.NamedDeclaration;
 	return candidate !== undefined && candidate.name !== undefined;
 }
@@ -156,19 +156,19 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 	return result;
 }
 
-export interface DeclarationInfo {
+export interface DefinitionInfo {
 	file: string;
 	start: number;
 	end: number
 }
 
-export namespace DeclarationInfo {
-	export function equals(a: DeclarationInfo, b: DeclarationInfo): boolean {
+export namespace DefinitionInfo {
+	export function equals(a: DefinitionInfo, b: DefinitionInfo): boolean {
 		return a.file === b.file && a.start === b.start && a.end === b.end;
 	}
 }
 
-export function createDeclarationInfo(sourceFile: ts.SourceFile, node: ts.Node): DeclarationInfo {
+export function createDefinitionInfo(sourceFile: ts.SourceFile, node: ts.Node): DefinitionInfo {
 	return {
 		file: sourceFile.fileName,
 		start: node.getStart(),
@@ -211,6 +211,10 @@ export function isValueModule(symbol: ts.Symbol): boolean {
 
 export function isBlockScopedVariable(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
+}
+
+export function isTransient(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Transient) !== 0;
 }
 
 export function isPrivate(symbol: ts.Symbol): boolean {
