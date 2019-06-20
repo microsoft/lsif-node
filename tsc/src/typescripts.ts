@@ -65,12 +65,17 @@ export function computeMonikerPath(from: string, to: string): string {
 	}
 }
 
-export function createMonikerIdentifier(path: string | undefined, symbol: string): string {
+export function createMonikerIdentifier(path: string, symbol: string | undefined): string;
+export function createMonikerIdentifier(path: string | undefined, symbol: string): string;
+export function createMonikerIdentifier(path: string | undefined, symbol: string | undefined): string {
 	if (path === undefined) {
+		if (symbol === undefined || symbol.length === 0) {
+			throw new Error(`Either path or symbol must be provided.`);
+		}
 		return symbol;
 	}
-	if (symbol.length === 0) {
-		return path;
+	if (symbol === undefined || symbol.length === 0) {
+		return `${path.replace(/\:/g, '::')}:`;
 	}
 	return `${path.replace(/\:/g, '::')}:${symbol}`;
 }

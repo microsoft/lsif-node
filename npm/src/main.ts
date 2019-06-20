@@ -183,8 +183,8 @@ class ExportLinker extends Linker {
 			}
 			let npmMoniker = this.createMoniker(npmIdentifier, moniker.kind, NpmMoniker.scheme);
 			emit(npmMoniker);
-			emit(this.createNextEdge(moniker.id, npmMoniker.id));
 			emit(this.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id));
+			emit(this.createNextEdge(moniker.id, npmMoniker.id));
 		}
 	}
 
@@ -248,6 +248,7 @@ class ImportLinker extends Linker {
 					packageJson: packageJson
 				};
 				emit(packageData.packageInfo);
+				this.packageData.set(packagePath, packageData);
 			}
 		}
 		if (packageData !== null && packageData !== undefined) {

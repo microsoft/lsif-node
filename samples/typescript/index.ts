@@ -16,3 +16,7 @@
 import * as mobx from 'mobx';
 
 let x: mobx.ObservableMap;
+
+export function foo(): void {
+
+}

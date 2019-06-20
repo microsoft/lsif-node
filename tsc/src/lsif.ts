@@ -1565,9 +1565,17 @@ class Visitor implements ResolverContext {
 		if (declarations === undefined || declarations.length === 0) {
 			return result;
 		}
-		const monikerName = this.symbols.getExportPath(symbol);
-		if (monikerName !== null) {
-			let monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
+		// The symbol represents a source file
+		let monikerIdentifer: string | undefined;
+		if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
+			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined);
+		} else {
+			const monikerName = this.symbols.getExportPath(symbol);
+			if (monikerName !== null) {
+				monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
+			}
+		}
+		if (monikerIdentifer !== undefined) {
 			if (externalLibrary === true) {
 				result.addMoniker(MonikerKind.import, monikerIdentifer);
 			} else {
