@@ -1064,8 +1064,8 @@ export class DataManager implements SymbolDataContext {
 		if (result === undefined) {
 			result = new DocumentData(this, document, monikerPath, externalLibrary);
 			this.documentDatas.set(fileName, result);
-			this.projectData.addDocument(document);
 			result.begin();
+			this.projectData.addDocument(document);
 		}
 		return result;
 	}
