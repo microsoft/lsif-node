@@ -64,8 +64,8 @@
 			"program": "${workspaceFolder}/npm/lib/main.js",
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"args": [
-				 "-p", "./tsconfig.json",
-				 "--file", "lsif.json"
+				 "--package", "./package.json",
+				 "--file", "test.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

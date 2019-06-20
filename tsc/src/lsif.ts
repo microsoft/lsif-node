@@ -992,7 +992,11 @@ class TransientResolver extends SymbolDataResolver {
 		if (type.isUnionOrIntersection() && type.types.length > 0) {
 			let datas: SymbolData[] = [];
 			for (let typeElem of type.types) {
-				datas.push(this.resolverContext.getOrCreateSymbolData(typeElem.symbol));
+				let symbol = typeElem.symbol;
+				// This happens for base types like undefined, number, ....
+				if (symbol !== undefined) {
+					datas.push(this.resolverContext.getOrCreateSymbolData(symbol));
+				}
 			}
 			return new UnionOrIntersectionSymbolData(this.symbolDataContext, id, sourceFile, datas);
 		} else {
@@ -1464,8 +1468,7 @@ class Visitor implements ResolverContext {
 
 	private visitIdentifier(node: ts.Identifier): void {
 		let symbol = this.program.getTypeChecker().getSymbolAtLocation(node);
-		let declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
-		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
+		if (symbol === undefined) {
 			return;
 		}
 		let symbolData = this.getOrCreateSymbolData(symbol, node);
