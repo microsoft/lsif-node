@@ -352,7 +352,7 @@ export namespace Program {
 	export function isSourceFileFromExternalLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
 		let interal: InternalProgram = program as InternalProgram;
 		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
-			throw new Error(`Program is missing getCommonSourceDirectory`);
+			throw new Error(`Program is missing isSourceFileFromExternalLibrary`);
 		}
 		return interal.isSourceFileFromExternalLibrary(sourceFile);
 	}
@@ -360,7 +360,7 @@ export namespace Program {
 	export function isSourceFileDefaultLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
 		let interal: InternalProgram = program as InternalProgram;
 		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
-			throw new Error(`Program is missing getCommonSourceDirectory`);
+			throw new Error(`Program is missing isSourceFileDefaultLibrary`);
 		}
 		return interal.isSourceFileDefaultLibrary(sourceFile);
 	}
