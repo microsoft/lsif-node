@@ -1,6 +1,6 @@
 {
-	"name": "language-server-index-format",
-	"version": "0.1.0",
+	"name": "lsif-node",
+	"version": "0.4.0",
 	"description": "",
 	"repository": {
 		"type": "git",
@@ -14,9 +14,9 @@
 	"homepage": "https://github.com/Microsoft/language-server-index-format#readme",
 	"devDependencies": {
 		"@types/node": "^10.14.3",
-		"typescript": "^3.5.1",
+		"typescript": "^3.5.2",
 		"shelljs": "^0.8.3",
-		"rimraf": "^2.6.2"
+		"rimraf": "^2.6.3"
 	},
 	"scripts": {
 		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",

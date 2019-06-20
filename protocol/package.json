@@ -16,9 +16,6 @@
 	"dependencies": {
 		"vscode-languageserver-protocol": "^3.14.1"
 	},
-	"devDependencies": {
-		"@types/node": "^10.14.3"
-	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
 		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",

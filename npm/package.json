@@ -24,7 +24,6 @@
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
-		"@types/node": "^10.9.2",
 		"@types/uuid": "^3.4.4"
 	},
 	"scripts": {

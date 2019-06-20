@@ -1,22 +1,33 @@
 {
-  "compilerOptions": {
-    "target": "es5",
-    "module": "commonjs",
-    "sourceMap": true,
-    "outDir": "./lib",
-    "rootDir": "./src",
-    "alwaysStrict": true,
-    "noImplicitAny": false,
-    "esModuleInterop": true
-  },
-  "exclude": [
-    "node_modules"
-  ],
-  "plugins": [
-    {
-      "name": "typescript-tslint-plugin",
-      "configFile": "./tslint.json",
-      "suppressWhileTypeErrorsPresent": false
-    }
-  ]
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+        "sourceMap": true,
+		"declaration": true,
+		"composite": true,
+		"sourceRoot": "../src",
+		"rootDir": "./src",
+		"outDir": "./lib",
+		"tsBuildInfoFile":"./lib/tsconfig.tsbuildInfo",
+		"baseUrl": "./src",
+		"paths": {
+			"lsif-protocol": ["../../protocol/lib/main"],
+			"lsif-protocol/*": ["../../protocol/lib"]
+		}
+	},
+	"include": [
+		"src/**/*.ts"
+	],
+	"references": [
+		{ "path": "../protocol/tsconfig.json"}
+	],
+	"exclude": [
+		"node_modules"
+	],
+	"plugins": [
+		{
+			"name": "typescript-tslint-plugin",
+			"configFile": "./tslint.json",
+			"suppressWhileTypeErrorsPresent": false
+		}
+	]
 }
