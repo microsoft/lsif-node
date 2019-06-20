@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 'use strict';
 
-import URI from 'vscode-uri';
+import { URI } from 'vscode-uri';
 
 import {
 	lsp, Id, Vertex, E,

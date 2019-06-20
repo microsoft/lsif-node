@@ -6,7 +6,7 @@ import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
 
-import URI from 'vscode-uri';
+import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
 import * as tss from './typescripts';
