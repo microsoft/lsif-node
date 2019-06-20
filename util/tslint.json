@@ -1,0 +1,21 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "no-console": false,
+        "no-increment-decrement": false,
+        "no-unsafe-any": false,
+        "completed-docs": false,
+        "no-floating-promises": false,
+        "linebreak-style": [true, "CRLF"],
+        "no-relative-imports": false,
+        "no-unused-expression": false,
+        "no-reserved-keywords": false,
+        "ban-comma-operator": false,
+        "quotemark": [true, "single"],
+        "max-classes-per-file": false
+    }
+}

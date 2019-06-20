@@ -6,7 +6,7 @@ A first draft specification can be found [here](https://github.com/Microsoft/lan
 
 ## How to Run the tools
 
-- `> npm installl -g lsif-tsc` install the tsc LSIF tool.
+- `> npm install -g lsif-tsc` install the tsc LSIF tool.
 - `> lsif-tsc -p .\tsconfig.json` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
 
 If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so run
@@ -20,6 +20,10 @@ Please note that the tools are work in progress and that we have not done any ex
 1. Go to Type Declaration is not fully implement
 1. Document link support and go to implementation is completely  missing
 1. Reference results are not always inlined when possible
+
+## LSIF utility tools
+
+You can validate or visualize LSIF output using the [LSIF utility tools](util/README.md).
 
 ## LSIF extension
 

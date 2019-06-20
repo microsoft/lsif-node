@@ -8,3 +8,4 @@ npm-debug.log
 tsc-lsif/src/shared
 npm-lsif/src/shared
 lsif.json
+util/junit.xml

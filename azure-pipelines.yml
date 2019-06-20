@@ -17,3 +17,13 @@ steps:
 - script: |
     npm run compile
   displayName: 'Compile client'
+
+- script: |
+    npm run test
+  displayName: 'Run unit tests'
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: 'util/junit.xml'
+    testRunTitle: 'Run unit tests'
