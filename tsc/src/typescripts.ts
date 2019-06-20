@@ -333,3 +333,35 @@ export const EmitBoundaries: Set<number> = new Set<number>([
 	ts.SyntaxKind.ModuleDeclaration,
 	ts.SyntaxKind.SourceFile
 ]);
+
+interface InternalProgram extends ts.Program {
+	getCommonSourceDirectory(): string;
+	isSourceFileFromExternalLibrary(sourceFile: ts.SourceFile): boolean;
+	isSourceFileDefaultLibrary(sourceFile: ts.SourceFile): boolean;
+}
+
+export namespace Program {
+	export function getCommonSourceDirectory(program: ts.Program): string {
+		let interal: InternalProgram = program as InternalProgram;
+		if (typeof interal.getCommonSourceDirectory !== 'function') {
+			throw new Error(`Program is missing getCommonSourceDirectory`);
+		}
+		return interal.getCommonSourceDirectory();
+	}
+
+	export function isSourceFileFromExternalLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
+		let interal: InternalProgram = program as InternalProgram;
+		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
+			throw new Error(`Program is missing getCommonSourceDirectory`);
+		}
+		return interal.isSourceFileFromExternalLibrary(sourceFile);
+	}
+
+	export function isSourceFileDefaultLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
+		let interal: InternalProgram = program as InternalProgram;
+		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
+			throw new Error(`Program is missing getCommonSourceDirectory`);
+		}
+		return interal.isSourceFileDefaultLibrary(sourceFile);
+	}
+}

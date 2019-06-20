@@ -1166,13 +1166,15 @@ class Visitor implements ResolverContext {
 		this.project = this.vertex.project();
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
-		if (compilerOptions.outDir !== undefined) {
-			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
-		}
 		if (compilerOptions.rootDir !== undefined) {
 			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
 		} else {
-			// Try to compute the root directories.
+			this.rootDir = tss.Program.getCommonSourceDirectory(this.program);
+		}
+		if (compilerOptions.outDir !== undefined) {
+			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
+		} else {
+			this.outDir = this.rootDir;
 		}
 		this.dataManager = new DataManager(this, this.project);
 		this.symbols = new Symbols(this.typeChecker);
@@ -1516,10 +1518,10 @@ class Visitor implements ResolverContext {
 
 		let document = this.vertex.document(sourceFile.fileName, sourceFile.text)
 
-		let resolvedModule = this.externalLibraryImports.get(sourceFile.fileName);
+		// let resolvedModule = this.externalLibraryImports.get(sourceFile.fileName);
 		let monikerPath: string | undefined;
 		let library: boolean = false;
-		if (resolvedModule !== undefined) {
+		if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
 			library = true;
 			monikerPath = tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
 		} else {
@@ -1726,7 +1728,7 @@ class Visitor implements ResolverContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo {
+export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo | undefined {
 	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
