@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path';
 
-import URI from 'vscode-uri';
+import { URI } from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge } from 'lsif-protocol';
@@ -86,7 +86,7 @@ export const create: Create = (): Emitter => {
 				// }
 				let edge: VisEdge = {
 					from: element.outV as number,
-					to: element.inV as number,
+					to: 10, //element.inV as number,
 					label: element.label
 				}
 				data.edges.push(edge)

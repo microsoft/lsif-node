@@ -37,6 +37,60 @@
 				"showReuseMessage": true,
 				"clear": true
 			}
+		},
+		{
+			"type": "npm",
+			"script": "watch",
+			"path": "protocol/",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "never",
+				"focus": false,
+				"panel": "dedicated",
+				"showReuseMessage": true,
+				"clear": true
+			}
+		},
+		{
+			"type": "npm",
+			"script": "watch",
+			"path": "tsc/",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "never",
+				"focus": false,
+				"panel": "dedicated",
+				"showReuseMessage": true,
+				"clear": true
+			}
+		},
+		{
+			"type": "npm",
+			"script": "watch",
+			"path": "sqlite/",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "never",
+				"focus": false,
+				"panel": "dedicated",
+				"showReuseMessage": true,
+				"clear": true
+			}
 		}
 	]
 }

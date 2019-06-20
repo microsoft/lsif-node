@@ -51,7 +51,7 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 	const labelMap: Map<EdgeLabels, string> = new Map<EdgeLabels, string>([
 		[EdgeLabels.item, 'item'],
 		[EdgeLabels.contains, 'contains'],
-		[EdgeLabels.refersTo, 'refersTo'],
+		[EdgeLabels.next, 'next'],
 		[EdgeLabels.textDocument_documentSymbol, 'textDocument.documentSymbol'],
 		[EdgeLabels.textDocument_foldingRange, 'textDocument.foldingRange'],
 		[EdgeLabels.textDocument_diagnostic, 'textDocument.diagnostic'],
@@ -185,10 +185,10 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 					case 'definitionResult':
 						gs = {
 							id: element.id,
-							label: element.label,
+							label: element.label /*,
 							properties: {
 								result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0)}]
-							}
+							}*/
 						};
 						vertices.set(gs.id, gs);
 						break;
@@ -196,9 +196,9 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 						gs = {
 							id: element.id,
 							label: element.label,
-							properties: {
-								result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0) }]
-							}
+							// properties: {
+							// 	result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0) }]
+							// }
 						};
 						vertices.set(gs.id, gs);
 						break;
@@ -208,15 +208,15 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 							label: element.label,
 							properties: {}
 						};
-						if (element.declarations) {
-							gs.properties!.declarations = [ { id: idGenerator(), value: JSON.stringify(element.declarations, undefined, 0) }];
-						}
-						if (element.references) {
-							gs.properties!.references = [ { id: idGenerator(), value: JSON.stringify(element.references, undefined, 0) }];
-						}
-						if (element.referenceResults) {
-							gs.properties!.referenceResults = [ { id: idGenerator(), value: JSON.stringify(element.referenceResults, undefined, 0) }];
-						}
+						// if (element.declarations) {
+						// 	gs.properties!.declarations = [ { id: idGenerator(), value: JSON.stringify(element.declarations, undefined, 0) }];
+						// }
+						// if (element.references) {
+						// 	gs.properties!.references = [ { id: idGenerator(), value: JSON.stringify(element.references, undefined, 0) }];
+						// }
+						// if (element.referenceResults) {
+						// 	gs.properties!.referenceResults = [ { id: idGenerator(), value: JSON.stringify(element.referenceResults, undefined, 0) }];
+						// }
 						vertices.set(gs.id, gs);
 						break;
 					case 'implementationResult':
@@ -224,17 +224,17 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 							id: element.id,
 							label: element.label,
 						};
-						if (element.result) {
-							gs.properties =  {
-								result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0) }]
-							};
-						}
+						// if (element.result) {
+						// 	gs.properties =  {
+						// 		result: [ { id: idGenerator(), value: JSON.stringify(element.result, undefined, 0) }]
+						// 	};
+						// }
 						vertices.set(gs.id, gs);
 						break;
 				}
 			} else {
 				let from: GraphSonVertex | undefined = vertices.get(element.outV);
-				let to: GraphSonVertex | undefined = vertices.get(element.inV);
+				let to: GraphSonVertex | undefined; // = vertices.get(element.inV);
 
 				if (from === undefined || to === undefined) {
 					// throw new Error(`Outgoing vertex for ${JSON.stringify(element, undefined, 0)} not found.`);
@@ -263,7 +263,7 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 				}
 				let outEdge: GraphSonOutEdge = {
 					id: element.id,
-					inV: element.inV
+					inV: 10 // element.inV as any
 				};
 				if (properties) {
 					outEdge.properties = properties;

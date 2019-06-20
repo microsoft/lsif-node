@@ -4,16 +4,17 @@
  * ------------------------------------------------------------------------------------------ */
 'use strict';
 
-import URI from 'vscode-uri';
+import { URI } from 'vscode-uri';
 
 import {
 	lsp, Id, Vertex, E,
 	Project, Document, HoverResult, ReferenceResult,
-	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult, Range, RangeTag, RangeId,
-	DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag, UnknownTag, DefinitionResult, ReferenceResultId,
-	ImplementationResult, ImplementationResultId, textDocument_implementation, textDocument_typeDefinition,
-	TypeDefinitionResult, FoldingRangeResult, textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, refersTo, MetaData,
-	Location, ElementTypes, VertexLabels, EdgeLabels, Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties
+	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
+	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
+	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
+	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
+	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
+	DeclarationResult, textDocument_declaration, next
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -47,6 +48,20 @@ export class VertexBuilder {
 			version,
 			projectRoot
 		}
+	}
+
+	public event(kind: EventKind, scope: Project): ProjectEvent;
+	public event(kind: EventKind, scope: Document): DocumentEvent;
+	public event(kind: EventKind, scope: Project | Document): Event {
+		let result: ProjectEvent | DocumentEvent = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.event,
+			kind,
+			scope: scope.label === 'project' ? EventScope.project : EventScope.document,
+			data: scope.id
+		};
+		return result;
 	}
 
 	public project(contents?: string): Project {
@@ -185,55 +200,44 @@ export class VertexBuilder {
 		}
 	}
 
-	public definitionResult(values: RangeId[]): DefinitionResult {
+	public declarationResult(): DeclarationResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
-			label: VertexLabels.definitionResult,
-			result: values
+			label: VertexLabels.declarationResult
 		};
 	}
 
-	public typeDefinitionResult(values: RangeId[]): TypeDefinitionResult {
+	public definitionResult(): DefinitionResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
-			label: VertexLabels.typeDefinitionResult,
-			result: values
+			label: VertexLabels.definitionResult
 		};
 	}
 
-	public referencesResult(): ReferenceResult;
-	public referencesResult(referenceResults: ReferenceResultId[]): ReferenceResult;
-	public referencesResult(declarations: (RangeId | lsp.Location)[], definitions: (RangeId | lsp.Location)[], references: (RangeId | lsp.Location)[]): ReferenceResult;
-	public referencesResult(arg0?: any, arg1?: any, arg2?: any) {
-		let result: ReferenceResult = {
+	public typeDefinitionResult(): TypeDefinitionResult {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.typeDefinitionResult
+		};
+	}
+
+	public referencesResult(): ReferenceResult {
+		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.referenceResult
 		};
-		if (arg2 !== undefined) {
-			result.declarations = arg0;
-			result.definitions = arg1;
-			result.references = arg2;
-		} else if (arg0 !== undefined) {
-			result.referenceResults = arg0;
-		}
-		return result;
 	}
 
-	public implementationResult(): ImplementationResult;
-	public implementationResult(implementationResults: ImplementationResultId[]): ImplementationResult;
-	public implementationResult(arg0?: ImplementationResultId[]): ImplementationResult {
-		let result: ImplementationResult = {
+	public implementationResult(): ImplementationResult {
+		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.implementationResult
 		};
-		if (arg0 !== undefined) {
-			result.implementationResults = arg0;
-		}
-		return result;
 	}
 
 	private encodeString(contents: string): string | undefined {
@@ -265,29 +269,33 @@ export class EdgeBuilder {
 		};
 	}
 
-	public contains(from: Project, to: Document): contains;
-	public contains(from: Document, to: Range): contains;
-	public contains(from: Vertex, to: Vertex): contains {
+	public contains(from: Project, to: Document[]): contains;
+	public contains(from: Document, to: Range[]): contains;
+	public contains(from: Vertex, to: Vertex[]): contains {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
 			label: EdgeLabels.contains,
 			outV: from.id,
-			inV: to.id
+			inVs: to.map(v => v.id)
 		};
 	}
 
-	public refersTo(from: Range, to: ResultSet): refersTo {
+	public next(from: Range, to: ResultSet): next;
+	public next(from: ResultSet, to: ResultSet): next;
+	public next(from: Range | ResultSet, to: ResultSet): next {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
-			label: EdgeLabels.refersTo,
+			label: EdgeLabels.next,
 			outV: from.id,
 			inV: to.id
 		};
 	}
 
-	public moniker(from: Range, to: Moniker): moniker {
+	public moniker(from: ResultSet, to: Moniker): moniker;
+	public moniker(from: Range, to: Moniker): moniker;
+	public moniker(from: Range | ResultSet, to: Moniker): moniker {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
@@ -327,7 +335,7 @@ export class EdgeBuilder {
 		};
 	}
 
-	public diagnostic(from: Document, to: DiagnosticResult): textDocument_diagnostic {
+	public diagnostic(from: Project | Document, to: DiagnosticResult): textDocument_diagnostic {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.edge,
@@ -347,6 +355,16 @@ export class EdgeBuilder {
 		};
 	}
 
+	public declaration(from: Range | ResultSet, to: DeclarationResult): textDocument_declaration {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.textDocument_declaration,
+			outV: from.id,
+			inV: to.id
+		};
+	}
+
 	public definition(from: Range | ResultSet, to: DefinitionResult): textDocument_definition {
 		return {
 			id: this.nextId(),
@@ -354,7 +372,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.textDocument_definition,
 			outV: from.id,
 			inV: to.id
-		}
+		};
 	}
 
 	public typeDefinition(from: Range | ResultSet, to: TypeDefinitionResult): textDocument_typeDefinition {
@@ -387,57 +405,55 @@ export class EdgeBuilder {
 		}
 	}
 
-	public item(from: ReferenceResult, to: ReferenceResult): item;
-	public item(from: ReferenceResult, to: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
-	public item(from: ImplementationResult, to: ImplementationResult): item;
-	public item(from: ImplementationResult, to: Range): item;
-	public item(from: ReferenceResult | ImplementationResult, to: Range | ReferenceResult | ImplementationResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
-		switch (from.label) {
-			case 'referenceResult':
-				switch (to.label) {
-					case 'range':
-						return {
-							id: this.nextId(),
-							type: ElementTypes.edge,
-							label: EdgeLabels.item,
-							property,
-							outV: from.id,
-							inV: to.id
-						}
-					case 'referenceResult': {
-						return {
-							id: this.nextId(),
-							type: ElementTypes.edge,
-							label: EdgeLabels.item,
-							property: ItemEdgeProperties.referenceResults,
-							outV: from.id,
-							inV: to.id
-						}
-					}
-				}
-			case 'implementationResult':
-				switch(to.label) {
-					case 'range':
-						return {
-							id: this.nextId(),
-							type: ElementTypes.edge,
-							label: EdgeLabels.item,
-							outV: from.id,
-							inV: to.id
-						}
-					case 'implementationResult': {
-						return {
-							id: this.nextId(),
-							type: ElementTypes.edge,
-							label: EdgeLabels.item,
-							property: ItemEdgeProperties.implementationResults,
-							outV: from.id,
-							inV: to.id
-						}
-					}
-				}
+	public item(from: DeclarationResult, to: Range[], document: Document): item;
+	public item(from: DefinitionResult, to: Range[], document: Document): item;
+	public item(from: TypeDefinitionResult, to: Range[], document: Document): item;
+	public item(from: ReferenceResult, to: ReferenceResult[], document: Document): item;
+	public item(from: ReferenceResult, to: Range[], document: Document, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
+	public item(from: ImplementationResult, to: Range[], document: Document): item;
+	public item(from: ImplementationResult, to: ImplementationResult[], document: Document): item;
+	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], document: Document, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
+		let result: item;
+		if (to.length === 0) {
+			let result: item = {
+				id: this.nextId(),
+				type: ElementTypes.edge,
+				label: EdgeLabels.item,
+				outV: from.id,
+				inVs: [],
+				document: document.id
+			};
+			if (from.label === 'referenceResult') {
+				result.property = property !== undefined ? property : ItemEdgeProperties.references;
+			}
+			return result;
 		}
-		throw new Error('Shouldn\'t happen');
+		let toKind = to[0].label;
+		result = {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.item,
+			outV: from.id,
+			inVs: to.map(v => v.id),
+			document: document.id
+		};
+		switch (from.label) {
+			case 'declarationResult':
+				break;
+			case 'definitionResult':
+				break;
+			case 'referenceResult':
+				result.property = property !== undefined ? property : ItemEdgeProperties.referenceResults;
+				break;
+			case 'implementationResult':
+				if (toKind === 'implementationResult') {
+					result.property = ItemEdgeProperties.implementationResults;
+				}
+				break;
+			default:
+				throw new Error('Shouldn\'t happen');
+		}
+		return result;
 	}
 }
 

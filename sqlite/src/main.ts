@@ -10,7 +10,7 @@ import * as minimist from 'minimist';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
-import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edgeCompressor, itemEdgeCompressor } from './compress';
+import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
 import * as sql from './sqlite';
 
 const __out = process.stdout;
@@ -21,6 +21,7 @@ interface Options {
 	version: boolean;
 	file: string | undefined;
 	db: string;
+	compressOnly: boolean;
 }
 
 interface OptionDescription {
@@ -37,7 +38,8 @@ export namespace Options {
 		help: false,
 		version: false,
 		file: undefined,
-		db: 'lisf.db'
+		db: 'lisf.db',
+		compressOnly: false
 	};
 
 	export const descriptions: OptionDescription[] = [
@@ -45,6 +47,7 @@ export namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'db', type: 'string', default: 'lsif.db', description: 'Specifies the name of the SQLite DB.'},
 		{ id: 'file', type: 'string', default: undefined, description: 'Reads the LSIF dump from file instead of stdin.'},
+		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No DB generation.'}
 	];
 }
 
@@ -127,7 +130,7 @@ export function main(): void {
 		input = fs.createReadStream(options.file, { encoding: 'utf8'});
 	}
 	let db: sql.Database | undefined;
-	if (options.db) {
+	if (options.db && !options.compressOnly) {
 		let filename = options.db;
 		if (!filename.endsWith('.db')) {
 			filename = filename + '.db';
@@ -195,7 +198,7 @@ export function main(): void {
 					let compressMetaData: MetaData = element as MetaData;
 					compressMetaData.compressors = {
 						vertexCompressor: vertexCompressor.id,
-						edgeCompressor: edgeCompressor.id,
+						edgeCompressor: edge11Compressor.id,
 						itemEdgeCompressor: itemEdgeCompressor.id,
 						all: []
 					};
