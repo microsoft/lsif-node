@@ -1158,7 +1158,6 @@ class Visitor implements ResolverContext {
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
 	private symbolDataResolvers: Map<number, SymbolDataResolver>;
-	private externalLibraryImports: Map<string, ts.ResolvedModuleFull>;
 
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.builder = new Builder({
@@ -1167,7 +1166,6 @@ class Visitor implements ResolverContext {
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
-		this.externalLibraryImports = new Map();
 		this.dependentOutDirs = [];
 		for (let info of dependsOn) {
 			this.dependentOutDirs.push(info.outDir);
@@ -1200,23 +1198,6 @@ class Visitor implements ResolverContext {
 	}
 
 	public visitProgram(): ProjectInfo {
-		// Make a first pass to collect all know external libray imports
-		for (let sourceFile of this.program.getSourceFiles()) {
-			let resolvedModules = tss.getResolvedModules(sourceFile);
-			if (resolvedModules !== undefined) {
-				resolvedModules.forEach((resolvedModule) => {
-					if (resolvedModule === undefined) {
-						return;
-					}
-					if (resolvedModule.isExternalLibraryImport === true) {
-						if (!this.externalLibraryImports.has(resolvedModule.resolvedFileName)) {
-							this.externalLibraryImports.set(resolvedModule.resolvedFileName, resolvedModule);
-						}
-					}
-				});
-			}
-		}
-
 		for (let sourceFile of this.program.getSourceFiles()) {
 			// let start = Date.now();
 			this.visit(sourceFile);
@@ -1346,26 +1327,8 @@ class Visitor implements ResolverContext {
 	}
 
 	public isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
-		if (sourceFile.isDeclarationFile) {
-			return true;
-		}
-		let fileName = sourceFile.fileName;
-		if (path.basename(fileName) === 'index.js') {
-			return false;
-		}
-		if (path.extname(fileName) !== '.js') {
-			return false;
-		}
-		let dirName: string;
-		let parent: string = path.dirname(fileName);
-		do {
-			dirName = parent;
-			if (path.basename(dirName) === 'node_modules') {
-				return true;
-			}
-			parent = path.dirname(dirName);
-		} while (parent !== dirName)
-		return false;
+		return tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
+			tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile);
 	}
 
 	private visitModuleDeclaration(node: ts.ModuleDeclaration): boolean {
@@ -1532,7 +1495,6 @@ class Visitor implements ResolverContext {
 
 		let document = this.vertex.document(sourceFile.fileName, sourceFile.text)
 
-		// let resolvedModule = this.externalLibraryImports.get(sourceFile.fileName);
 		let monikerPath: string | undefined;
 		let library: boolean = false;
 		if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {

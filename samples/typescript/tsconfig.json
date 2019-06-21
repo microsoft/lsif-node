@@ -1,8 +1,7 @@
 {
 	"compilerOptions": {
 		"module": "commonjs",
-		"outDir": "lib",
-		"rootDir": "."
+		"outDir": "lib"
 	},
 	"include": [
 		"./index.ts"
