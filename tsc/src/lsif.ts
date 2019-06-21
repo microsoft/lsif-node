@@ -623,6 +623,28 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 	}
 }
 
+class TransientSymbolData extends StandardSymbolData {
+
+	constructor(context: SymbolDataContext, id: string) {
+		super(context, id, undefined);
+	}
+
+	public begin(): void {
+		super.begin();
+	}
+
+	public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+	}
+
+	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+		// We don't do anoything for definitions since they a transient anyways.
+	}
+
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		super.addReference(sourceFile, reference, property);
+	}
+}
+
 class SymbolDataPartition extends LSIFData {
 
 	private definitionRanges: DefinitionRange[] | undefined;
@@ -777,7 +799,6 @@ class Symbols {
 		return result.length === 0 ? undefined : result;
 	}
 
-
 	public findBaseMembers(symbol: ts.Symbol, memberName: string): ts.Symbol[] | undefined {
 		let key = tss.createSymbolKey(this.typeChecker, symbol);
 		let cache = this.baseMemberCache.get(key);
@@ -823,10 +844,10 @@ class Symbols {
 		return result;
 	}
 
-	public getExportPath(symbol: ts.Symbol): string | null {
+	public getExportPath(symbol: ts.Symbol): string | undefined {
 		let result = this.exportedPaths.get(symbol);
 		if (result !== undefined) {
-			return result;
+			return result === null ? undefined : result;
 		}
 		if (tss.isSourceFile(symbol)) {
 			this.exportedPaths.set(symbol, '');
@@ -835,13 +856,13 @@ class Symbols {
 		let parent = tss.getSymbolParent(symbol);
 		if (parent === undefined) {
 			this.exportedPaths.set(symbol, null);
-			return null;
+			return undefined;
 		} else {
 			let parentValue = this.getExportPath(parent);
 			// The parent is not exported so any member isn't either
-			if (parentValue === null) {
+			if (parentValue === undefined) {
 				this.exportedPaths.set(symbol, null);
-				return null;
+				return undefined;
 			} else {
 				if (tss.isInterface(parent) || tss.isClass(parent)) {
 					result = `${parentValue}.${symbol.getName()}`;
@@ -854,11 +875,11 @@ class Symbols {
 						return result;
 					} else {
 						this.exportedPaths.set(symbol, null);
-						return null;
+						return undefined;
 					}
 				} else {
 					this.exportedPaths.set(symbol, null);
-					return null;
+					return undefined;
 				}
 			}
 		}
@@ -946,6 +967,7 @@ class MethodResolver extends SymbolDataResolver {
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
+		//console.log(`MethodResolver#resolve for symbol ${id}`);
 		let container = tss.getSymbolParent(symbol);
 		if (container === undefined) {
 			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
@@ -959,7 +981,7 @@ class MethodResolver extends SymbolDataResolver {
 	}
 }
 
-class TransientResolver extends SymbolDataResolver {
+class UnionOrIntersectionResolver extends SymbolDataResolver {
 
 	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
@@ -970,24 +992,28 @@ class TransientResolver extends SymbolDataResolver {
 	}
 
 	public getDeclarationNodes(symbol: ts.Symbol, location?: ts.Node): ts.Node[] | undefined {
-		if (this.isUnionOrIntersection(symbol, location)) {
-			return [location!]
-		} else {
-			return super.getDeclarationNodes(symbol, location);
+		if (location === undefined) {
+			throw new Error(`Union or intersection resolver requires a location`);
 		}
+		return [location];
 	}
 
 	public getSourceFiles(symbol: ts.Symbol, location?: ts.Node): ts.SourceFile[] {
-		if (this.isUnionOrIntersection(symbol, location)) {
-			return [location!.getSourceFile()];
-		} else {
-			return super.getSourceFiles(symbol, location);
+		if (location === undefined) {
+			throw new Error(`Union or intersection resolver requires a location`);
 		}
+		return [location.getSourceFile()];
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
-		let type = this.getUnionOrIntersectionType(symbol, location);
-		if (type !== undefined && type.types.length > 0) {
+		if (location === undefined) {
+			throw new Error(`Union or intersection resolver requires a location`);
+		}
+		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		if (!type.isUnionOrIntersection()) {
+			throw new Error(`Type is not a union or intersection type`);
+		}
+		if (type.types.length > 0) {
 			let datas: SymbolData[] = [];
 			for (let typeElem of type.types) {
 				let symbol = typeElem.symbol;
@@ -1001,21 +1027,37 @@ class TransientResolver extends SymbolDataResolver {
 			return new StandardSymbolData(this.symbolDataContext, id, undefined);
 		}
 	}
+}
 
-	private isUnionOrIntersection(symbol: ts.Symbol, location?: ts.Node): boolean {
-		if (location === undefined) {
-			return false;
-		}
-		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		return type.isUnionOrIntersection();
+class TransientResolver extends SymbolDataResolver {
+
+	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: ResolverContext, symbolDataContext: SymbolDataContext) {
+		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	private getUnionOrIntersectionType(symbol: ts.Symbol, location?: ts.Node): ts.UnionOrIntersectionType | undefined {
+	public get requiresSourceFile(): boolean {
+		return false;
+	}
+
+	public getDeclarationNodes(symbol: ts.Symbol, location?: ts.Node): ts.Node[] | undefined {
 		if (location === undefined) {
-			return undefined;
+			throw new Error(`TransientResolver requires a location`);
 		}
-		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		return type.isUnionOrIntersection() ? type : undefined;
+		return [location];
+	}
+
+	public getSourceFiles(symbol: ts.Symbol, location?: ts.Node): ts.SourceFile[] {
+		if (location === undefined) {
+			throw new Error(`TransientResolver requires a location`);
+		}
+		return [location.getSourceFile()];
+	}
+
+	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
+		if (location === undefined) {
+			throw new Error(`TransientResolver resolver requires a location`);
+		}
+		return new TransientSymbolData(this.symbolDataContext, id);
 	}
 }
 
@@ -1145,6 +1187,9 @@ export interface Options {
 
 class Visitor implements ResolverContext {
 
+	private program: ts.Program;
+	private typeChecker: ts.TypeChecker;
+
 	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
@@ -1157,9 +1202,17 @@ class Visitor implements ResolverContext {
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
-	private symbolDataResolvers: Map<number, SymbolDataResolver>;
+	private symbolDataResolvers: {
+		standard: StandardResolver;
+		alias: TypeAliasResolver;
+		method: MethodResolver;
+		unionOrIntersection: UnionOrIntersectionResolver;
+		transient: TransientResolver;
+	};
 
 	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+		this.program = languageService.getProgram()!
+		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
 			idGenerator,
 			emitSource: !options.noContents
@@ -1190,11 +1243,13 @@ class Visitor implements ResolverContext {
 		}
 		this.dataManager = new DataManager(this, this.project);
 		this.symbols = new Symbols(this.typeChecker);
-		this.symbolDataResolvers = new Map();
-		this.symbolDataResolvers.set(0, new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Alias, new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Method, new MethodResolver(this.typeChecker, this.symbols, this, this.dataManager));
-		this.symbolDataResolvers.set(ts.SymbolFlags.Transient, new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager));
+		this.symbolDataResolvers = {
+			standard: new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager),
+			alias: new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager),
+			method: new MethodResolver(this.typeChecker, this.symbols, this, this.dataManager),
+			unionOrIntersection: new UnionOrIntersectionResolver(this.typeChecker, this.symbols, this, this.dataManager),
+			transient: new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager)
+		}
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1245,12 +1300,21 @@ class Visitor implements ResolverContext {
 				break;
 			case ts.SyntaxKind.ClassExpression:
 				this.doVisit(this.visitClassExpression, this.endVisitClassExpression, node as ts.ClassExpression);
+				break;
+			case ts.SyntaxKind.ExportAssignment:
+				this.doVisit(this.visitExportAssignment, this.endVisitExportAssignment, node as ts.ExportAssignment);
+				break;
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
 				this.visitIdentifier(identifier);
 				break;
+			case ts.SyntaxKind.StringLiteral:
+				let literal = node as ts.StringLiteral;
+				this.visitStringLiteral(literal);
+				break;
 			default:
-				node.forEachChild(child => this.visit(child));
+				this.doVisit(this.visitGeneric, this.endVisitGeneric, node);
+				break;
 		}
 	}
 
@@ -1266,7 +1330,7 @@ class Visitor implements ResolverContext {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		// process.stderr.write('.');
+		process.stderr.write('.');
 
 		this.currentSourceFile = sourceFile;
 		let documentData = this.getOrCreateDocumentData(sourceFile);
@@ -1283,35 +1347,35 @@ class Visitor implements ResolverContext {
 		}
 
 		let documentData = this.currentDocumentData;
-		// Diagnostics
-		let diagnostics: lsp.Diagnostic[] = [];
-		let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
-		for (let element of syntactic) {
-			diagnostics.push(Converter.asDiagnostic(element));
-		}
-		let semantic = this.program.getSemanticDiagnostics(sourceFile);
-		for (let element of semantic) {
-			if (element.file !== undefined && element.start !== undefined && element.length !== undefined) {
-				diagnostics.push(Converter.asDiagnostic(element as ts.DiagnosticWithLocation));
-			}
-		}
-		if (diagnostics.length > 0) {
-			documentData.addDiagnostics(diagnostics);
-		}
+		// // Diagnostics
+		// let diagnostics: lsp.Diagnostic[] = [];
+		// let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
+		// for (let element of syntactic) {
+		// 	diagnostics.push(Converter.asDiagnostic(element));
+		// }
+		// let semantic = this.program.getSemanticDiagnostics(sourceFile);
+		// for (let element of semantic) {
+		// 	if (element.file !== undefined && element.start !== undefined && element.length !== undefined) {
+		// 		diagnostics.push(Converter.asDiagnostic(element as ts.DiagnosticWithLocation));
+		// 	}
+		// }
+		// if (diagnostics.length > 0) {
+		// 	documentData.addDiagnostics(diagnostics);
+		// }
 
-		// Folding ranges
-		let spans = this.languageService.getOutliningSpans(sourceFile.fileName);
-		if (ts.textSpanEnd.length > 0) {
-			let foldingRanges: lsp.FoldingRange[] = [];
-			for (let span of spans) {
-				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
-			}
-			if (foldingRanges.length > 0) {
-				documentData.addFoldingRanges(foldingRanges);
-			}
-		}
+		// // Folding ranges
+		// let spans = this.languageService.getOutliningSpans(sourceFile.fileName);
+		// if (ts.textSpanEnd.length > 0) {
+		// 	let foldingRanges: lsp.FoldingRange[] = [];
+		// 	for (let span of spans) {
+		// 		foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
+		// 	}
+		// 	if (foldingRanges.length > 0) {
+		// 		documentData.addFoldingRanges(foldingRanges);
+		// 	}
+		// }
 
-		// Document symbols.
+		// // Document symbols.
 		let values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
 		if (values !== undefined && values.length > 0) {
 			documentData.addDocumentSymbols(values);
@@ -1445,8 +1509,33 @@ class Visitor implements ResolverContext {
 		return true;
 	}
 
+	private visitExportAssignment(node: ts.ExportAssignment): boolean {
+		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
+		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+		if (symbol === undefined) {
+			return true;
+		}
+		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		if (symbolData === undefined) {
+			return true;
+		}
+		let sourceFile = this.currentSourceFile!;
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
+			return true;
+		}
+
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
+		this.currentDocumentData.addRange(reference);
+		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+		return true;
+	}
+
+	private endVisitExportAssignment(node: ts.ExportAssignment): void {
+		// Do nothing;
+	}
+
 	private visitIdentifier(node: ts.Identifier): void {
-		let symbol = this.program.getTypeChecker().getSymbolAtLocation(node);
+		let symbol = this.typeChecker.getSymbolAtLocation(node);
 		if (symbol === undefined) {
 			return;
 		}
@@ -1462,6 +1551,48 @@ class Visitor implements ResolverContext {
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+	}
+
+	private visitStringLiteral(node: ts.StringLiteral): void {
+		let symbol = this.typeChecker.getSymbolAtLocation(node);
+		if (symbol === undefined) {
+			return;
+		}
+		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		if (symbolData === undefined) {
+			return;
+		}
+		let sourceFile = this.currentSourceFile!;
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
+			return;
+		}
+
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
+		this.currentDocumentData.addRange(reference);
+		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+	}
+
+	private visitGeneric(node: ts.Node): boolean {
+		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+		if (symbol === undefined) {
+			return true;
+		}
+		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		if (symbolData === undefined) {
+			return true;
+		}
+		let sourceFile = this.currentSourceFile!;
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
+			return true;
+		}
+
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
+		this.currentDocumentData.addRange(reference);
+		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+		return true;
+	}
+
+	private endVisitGeneric(node: ts.Node): void {
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
@@ -1505,6 +1636,13 @@ class Visitor implements ResolverContext {
 		}
 
 		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, library);
+		// In TS source files have symbols and can be referenced in import statements with * imports.
+		// So even if we don't parse the source file we need to create a symbol data so that when
+		// referenced we have the data.
+		let symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
+		if (symbol !== undefined) {
+			this.getOrCreateSymbolData(symbol, sourceFile);
+		}
 		return result;
 	}
 
@@ -1514,7 +1652,7 @@ class Visitor implements ResolverContext {
 		if (result !== undefined) {
 			return result;
 		}
-		let resolver = this.getResolver(symbol);
+		let resolver = this.getResolver(symbol, location);
 		let scope =  this.resolveEmittingNode(symbol);
 		let declarations: ts.Node[] | undefined = resolver.getDeclarationNodes(symbol, location);
 		let sourceFiles: ts.SourceFile[] = resolver.getSourceFiles(symbol, location);
@@ -1549,7 +1687,7 @@ class Visitor implements ResolverContext {
 			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined);
 		} else {
 			const monikerName = this.symbols.getExportPath(symbol);
-			if (monikerName !== null) {
+			if (monikerName !== undefined && monikerName.length > 0) {
 				monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
 			}
 		}
@@ -1647,32 +1785,50 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	private getResolver(symbol: ts.Symbol): SymbolDataResolver {
+	private getResolver(symbol: ts.Symbol, location?: ts.Node): SymbolDataResolver {
+		if (location !== undefined && tss.isTransient(symbol)) {
+			let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+			if (type.isUnionOrIntersection()) {
+				return this.symbolDataResolvers.unionOrIntersection;
+			} else {
+				return this.symbolDataResolvers.transient;
+			}
+		}
 		if (tss.isAliasSymbol(symbol)) {
-			return this.symbolDataResolvers.get(ts.SymbolFlags.Alias)!;
+			return this.symbolDataResolvers.alias;
 		}
 		if (tss.isMethodSymbol(symbol)) {
-			return this.symbolDataResolvers.get(ts.SymbolFlags.Method)!;
+			return this.symbolDataResolvers.method;
 		}
-		if (tss.isTransient(symbol)) {
-			return this.symbolDataResolvers.get(ts.SymbolFlags.Transient)!;
-		}
-		return this.symbolDataResolvers.get(0)!;
+		return this.symbolDataResolvers.standard;
 	}
 
 	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
-		let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node.getStart());
-		if (quickInfo === undefined) {
-			return undefined;
-		}
-		return Converter.asHover(sourceFile, quickInfo);
-	}
-
-	private get program(): ts.Program {
-		return this.languageService.getProgram()!;
+		return undefined;
+		// ToDo@dbaeumer Crashes sometimes with.
+		// TypeError: Cannot read property 'kind' of undefined
+		// 	at pipelineEmitWithHint (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84783:39)
+		// 	at print (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84683:13)
+		// 	at Object.writeNode (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84543:13)
+		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109134:50
+		// 	at Object.mapToDisplayParts (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:97873:13)
+		// 	at Object.getSymbolDisplayPartsDocumentationAndSymbolKind (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109132:61)
+		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122472:41
+		// 	at Object.runWithCancellationToken (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:31637:28)
+		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
+		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
+		// try {
+		// 	let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node.getStart());
+		// 	if (quickInfo === undefined) {
+		// 		return undefined;
+		// 	}
+		// 	return Converter.asHover(sourceFile, quickInfo);
+		// } catch (err) {
+		// 	return undefined;
+		// }
 	}
 
 	public get vertex(): VertexBuilder {
@@ -1681,10 +1837,6 @@ class Visitor implements ResolverContext {
 
 	public get edge(): EdgeBuilder {
 		return this.builder.edge;
-	}
-
-	public get typeChecker(): ts.TypeChecker {
-		return this.languageService.getProgram()!.getTypeChecker();
 	}
 
 	public emit(element: Vertex | Edge): void {

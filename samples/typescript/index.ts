@@ -21,5 +21,18 @@
 
 // }
 
-let s: Set<string> = new Set();
-s.add('foo');
+// let s: Set<string> = new Set();
+// s.add('foo');
+
+// function foo(): number {
+// 	return 10;
+// }
+
+// export default foo();
+
+export const enum OutlineConfigKeys {
+	'icons' = 'outline.icons',
+	'problemsEnabled' = 'outline.problems.enabled',
+	'problemsColors' = 'outline.problems.colors',
+	'problemsBadges' = 'outline.problems.badges'
+}
