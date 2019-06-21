@@ -970,26 +970,24 @@ class TransientResolver extends SymbolDataResolver {
 	}
 
 	public getDeclarationNodes(symbol: ts.Symbol, location?: ts.Node): ts.Node[] | undefined {
-		if (location === undefined) {
-			throw new Error(`Transient resolver needs declaration node`);
+		if (this.isUnionOrIntersection(symbol, location)) {
+			return [location!]
+		} else {
+			return super.getDeclarationNodes(symbol, location);
 		}
-
-		return [location];
 	}
 
 	public getSourceFiles(symbol: ts.Symbol, location?: ts.Node): ts.SourceFile[] {
-		if (location === undefined) {
-			throw new Error(`Transient resolver needs declaration node`);
+		if (this.isUnionOrIntersection(symbol, location)) {
+			return [location!.getSourceFile()];
+		} else {
+			return super.getSourceFiles(symbol, location);
 		}
-		return [location.getSourceFile()];
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
-		if (location === undefined) {
-			throw new Error(`Transient resolver needs declaration node`);
-		}
-		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		if (type.isUnionOrIntersection() && type.types.length > 0) {
+		let type = this.getUnionOrIntersectionType(symbol, location);
+		if (type !== undefined && type.types.length > 0) {
 			let datas: SymbolData[] = [];
 			for (let typeElem of type.types) {
 				let symbol = typeElem.symbol;
@@ -1002,6 +1000,22 @@ class TransientResolver extends SymbolDataResolver {
 		} else {
 			return new StandardSymbolData(this.symbolDataContext, id, undefined);
 		}
+	}
+
+	private isUnionOrIntersection(symbol: ts.Symbol, location?: ts.Node): boolean {
+		if (location === undefined) {
+			return false;
+		}
+		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		return type.isUnionOrIntersection();
+	}
+
+	private getUnionOrIntersectionType(symbol: ts.Symbol, location?: ts.Node): ts.UnionOrIntersectionType | undefined {
+		if (location === undefined) {
+			return undefined;
+		}
+		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		return type.isUnionOrIntersection() ? type : undefined;
 	}
 }
 

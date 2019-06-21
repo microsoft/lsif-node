@@ -13,10 +13,13 @@
 // i2.get();
 
 
-import * as mobx from 'mobx';
+// import * as mobx from 'mobx';
 
-let x: mobx.ObservableMap;
+// let x: mobx.ObservableMap;
 
-export function foo(): void {
+// export function foo(): void {
 
-}
+// }
+
+let s: Set<string> = new Set();
+s.add('foo');
