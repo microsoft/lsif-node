@@ -30,7 +30,8 @@
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line",
-				 "--installTypings"
+				 "--installTypings",
+				 "--out", "test.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

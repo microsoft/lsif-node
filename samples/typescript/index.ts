@@ -1,34 +1,30 @@
-// interface I1 {
-// 	get(): void;
-// }
+interface I1 {
+	get(): void;
+}
 
-// interface I2 {
-// 	get(): void;
-// }
+interface I2 {
+	get(): void;
+}
 
-// let i: I1 | I2;
-// i.get();
+let i: I1 | I2;
+i.get();
 
-// let i2: I1;
-// i2.get();
+let i2: I1;
+i2.get();
 
 
-// import * as mobx from 'mobx';
+import * as mobx from 'mobx';
 
-// let x: mobx.ObservableMap;
+let x: mobx.ObservableMap;
 
-// export function foo(): void {
+let s: Set<string> = new Set();
+s.add('foo');
 
-// }
+function foo(): number {
+	return 10;
+}
 
-// let s: Set<string> = new Set();
-// s.add('foo');
-
-// function foo(): number {
-// 	return 10;
-// }
-
-// export default foo();
+export default foo();
 
 export const enum OutlineConfigKeys {
 	'icons' = 'outline.icons',

@@ -8,8 +8,7 @@ import { URI } from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge } from 'lsif-protocol';
-
-const __out = process.stdout;
+import { Writer } from '../utils/writer';
 
 interface VisNode {
 	id: number;
@@ -31,7 +30,7 @@ function baseName(uri: string): string {
 	return path.basename(URI.parse(uri).fsPath);
 }
 
-export const create: Create = (): Emitter => {
+export const create: Create = (writer: Writer): Emitter => {
 	let data: VisData = {
 		nodes: [],
 		edges: []
@@ -93,7 +92,7 @@ export const create: Create = (): Emitter => {
 			}
 		},
 		end: () => {
-			__out.write(JSON.stringify(data, undefined, 4));
+			writer.write(JSON.stringify(data, undefined, 4));
 		}
 	}
 }

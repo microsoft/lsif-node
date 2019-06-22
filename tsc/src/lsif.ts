@@ -967,7 +967,7 @@ class MethodResolver extends SymbolDataResolver {
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
-		//console.log(`MethodResolver#resolve for symbol ${id}`);
+		// console.log(`MethodResolver#resolve for symbol ${id} | ${symbol.getName()}`);
 		let container = tss.getSymbolParent(symbol);
 		if (container === undefined) {
 			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
@@ -1331,6 +1331,7 @@ class Visitor implements ResolverContext {
 			return false;
 		}
 		process.stderr.write('.');
+		// console.log(`File: ${sourceFile.fileName}`);
 
 		this.currentSourceFile = sourceFile;
 		let documentData = this.getOrCreateDocumentData(sourceFile);
@@ -1347,35 +1348,35 @@ class Visitor implements ResolverContext {
 		}
 
 		let documentData = this.currentDocumentData;
-		// // Diagnostics
-		// let diagnostics: lsp.Diagnostic[] = [];
-		// let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
-		// for (let element of syntactic) {
-		// 	diagnostics.push(Converter.asDiagnostic(element));
-		// }
-		// let semantic = this.program.getSemanticDiagnostics(sourceFile);
-		// for (let element of semantic) {
-		// 	if (element.file !== undefined && element.start !== undefined && element.length !== undefined) {
-		// 		diagnostics.push(Converter.asDiagnostic(element as ts.DiagnosticWithLocation));
-		// 	}
-		// }
-		// if (diagnostics.length > 0) {
-		// 	documentData.addDiagnostics(diagnostics);
-		// }
+		// Diagnostics
+		let diagnostics: lsp.Diagnostic[] = [];
+		let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
+		for (let element of syntactic) {
+			diagnostics.push(Converter.asDiagnostic(element));
+		}
+		let semantic = this.program.getSemanticDiagnostics(sourceFile);
+		for (let element of semantic) {
+			if (element.file !== undefined && element.start !== undefined && element.length !== undefined) {
+				diagnostics.push(Converter.asDiagnostic(element as ts.DiagnosticWithLocation));
+			}
+		}
+		if (diagnostics.length > 0) {
+			documentData.addDiagnostics(diagnostics);
+		}
 
-		// // Folding ranges
-		// let spans = this.languageService.getOutliningSpans(sourceFile.fileName);
-		// if (ts.textSpanEnd.length > 0) {
-		// 	let foldingRanges: lsp.FoldingRange[] = [];
-		// 	for (let span of spans) {
-		// 		foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
-		// 	}
-		// 	if (foldingRanges.length > 0) {
-		// 		documentData.addFoldingRanges(foldingRanges);
-		// 	}
-		// }
+		// Folding ranges
+		let spans = this.languageService.getOutliningSpans(sourceFile.fileName);
+		if (ts.textSpanEnd.length > 0) {
+			let foldingRanges: lsp.FoldingRange[] = [];
+			for (let span of spans) {
+				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
+			}
+			if (foldingRanges.length > 0) {
+				documentData.addFoldingRanges(foldingRanges);
+			}
+		}
 
-		// // Document symbols.
+		// Document symbols.
 		let values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
 		if (values !== undefined && values.length > 0) {
 			documentData.addDocumentSymbols(values);
@@ -1511,22 +1512,7 @@ class Visitor implements ResolverContext {
 
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
 		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
-		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
-		if (symbol === undefined) {
-			return true;
-		}
-		let symbolData = this.getOrCreateSymbolData(symbol, node);
-		if (symbolData === undefined) {
-			return true;
-		}
-		let sourceFile = this.currentSourceFile!;
-		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
-			return true;
-		}
-
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
-		this.currentDocumentData.addRange(reference);
-		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node), node);
 		return true;
 	}
 
@@ -1535,64 +1521,59 @@ class Visitor implements ResolverContext {
 	}
 
 	private visitIdentifier(node: ts.Identifier): void {
-		let symbol = this.typeChecker.getSymbolAtLocation(node);
-		if (symbol === undefined) {
-			return;
-		}
-		let symbolData = this.getOrCreateSymbolData(symbol, node);
-		if (symbolData === undefined) {
-			return;
-		}
-		let sourceFile = this.currentSourceFile!;
-		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
-			return;
-		}
-
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
-		this.currentDocumentData.addRange(reference);
-		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
+		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
 	}
 
 	private visitStringLiteral(node: ts.StringLiteral): void {
-		let symbol = this.typeChecker.getSymbolAtLocation(node);
+		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
+	}
+
+	private handleSymbol(symbol: ts.Symbol | undefined, location: ts.Node): void {
 		if (symbol === undefined) {
 			return;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		let symbolData = this.getOrCreateSymbolData(symbol, location);
 		if (symbolData === undefined) {
 			return;
 		}
 		let sourceFile = this.currentSourceFile!;
-		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
 			return;
 		}
 
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
 	}
 
 	private visitGeneric(node: ts.Node): boolean {
+		return true;
+	}
+
+	private endVisitGeneric(node: ts.Node): void {
 		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
 		if (symbol === undefined) {
-			return true;
+			return;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		let id = tss.createSymbolKey(this.typeChecker, symbol);
+		let symbolData = this.dataManager.getSymbolData(id);
+		if (symbolData !== undefined) {
+			// Todo@dbaeumer thinks about whether we should add a reference here.
+			return;
+		}
+		symbolData = this.getOrCreateSymbolData(symbol);
 		if (symbolData === undefined) {
-			return true;
+			return;
 		}
 		let sourceFile = this.currentSourceFile!;
 		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
-			return true;
+			return;
 		}
 
 		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile, reference, ItemEdgeProperties.references);
-		return true;
-	}
-
-	private endVisitGeneric(node: ts.Node): void {
+		return;
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
@@ -1807,7 +1788,6 @@ class Visitor implements ResolverContext {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
-		return undefined;
 		// ToDo@dbaeumer Crashes sometimes with.
 		// TypeError: Cannot read property 'kind' of undefined
 		// 	at pipelineEmitWithHint (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84783:39)
@@ -1820,15 +1800,15 @@ class Visitor implements ResolverContext {
 		// 	at Object.runWithCancellationToken (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:31637:28)
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
-		// try {
-		// 	let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node.getStart());
-		// 	if (quickInfo === undefined) {
-		// 		return undefined;
-		// 	}
-		// 	return Converter.asHover(sourceFile, quickInfo);
-		// } catch (err) {
-		// 	return undefined;
-		// }
+		try {
+			let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node.getStart());
+			if (quickInfo === undefined) {
+				return undefined;
+			}
+			return Converter.asHover(sourceFile, quickInfo);
+		} catch (err) {
+			return undefined;
+		}
 	}
 
 	public get vertex(): VertexBuilder {

@@ -4,6 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path';
 import * as uuid from 'uuid';
+import * as fs from 'fs';
 
 import * as minimist from 'minimist';
 
@@ -14,6 +15,7 @@ import { Id } from 'lsif-protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
+import { Writer, StdoutWriter, FileWriter } from './utils/writer';
 
 interface Options {
 	help: boolean;
@@ -23,6 +25,8 @@ interface Options {
 	projectRoot: string | undefined;
 	noContents: boolean;
 	inferTypings: boolean;
+	out: string | undefined;
+	stdout: boolean;
 }
 
 interface OptionDescription {
@@ -43,6 +47,8 @@ namespace Options {
 		projectRoot: undefined,
 		noContents: false,
 		inferTypings: false,
+		out: undefined,
+		stdout: false
 	};
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
@@ -51,7 +57,9 @@ namespace Options {
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
-		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'}
+		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
+		{ id: 'out', type: 'string', default: undefined, description: 'The out file the dump is save to.'},
+		{ id: 'stdout', type: 'boolean', default: false, description: 'Prints the dump to stdout.'}
 	];
 }
 
@@ -73,7 +81,7 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
 	return result;
 }
 
-function createEmitter(options: Options, idGenerator: () => Id): Emitter {
+function createEmitter(options: Options, writer: Writer, idGenerator: () => Id): Emitter {
 	let emitterModule: EmitterModule;
 	switch (options.outputFormat) {
 		case 'json':
@@ -91,7 +99,7 @@ function createEmitter(options: Options, idGenerator: () => Id): Emitter {
 		default:
 			emitterModule = require('./emitters/json');
 	}
-	return emitterModule.create(idGenerator);
+	return emitterModule.create(writer, idGenerator);
 }
 
 function createIdGenerator(options: Options): () => Id {
@@ -256,9 +264,22 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
+	let writer: Writer | undefined;
+	if (options.out) {
+		writer = new FileWriter(fs.openSync(options.out, 'w'));
+	} else if (options.stdout) {
+		writer = new StdoutWriter();
+	}
+
+	if (writer === undefined) {
+		console.log(`Either a out file or --stdout must be specified.`);
+		process.exitCode = -1;
+		return;
+	}
+
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
-	const emitter = createEmitter(options, idGenerator);
+	const emitter = createEmitter(options, writer, idGenerator);
 	let projectRoot = options.projectRoot;
 	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
 		projectRoot = path.join(process.cwd(), projectRoot);
