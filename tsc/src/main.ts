@@ -154,7 +154,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	// Bind all symbols
-
+	let scriptSnapshots: Map<string, ts.IScriptSnapshot> = new Map();
 	const host: ts.LanguageServiceHost = {
 		getScriptFileNames: () => {
 			return config.fileNames;
@@ -172,14 +172,19 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		// The project is immutable
 		getProjectVersion: () => "0",
 		getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
-			if (!ts.sys.fileExists(fileName)) {
-				return undefined;
+			let result: ts.IScriptSnapshot | undefined = scriptSnapshots.get(fileName);
+			if (result === undefined) {
+				if (!ts.sys.fileExists(fileName)) {
+					return undefined;
+				}
+				let content = ts.sys.readFile(fileName);
+				if (content === undefined) {
+					return undefined;
+				}
+				result = ts.ScriptSnapshot.fromString(content);
+				scriptSnapshots.set(fileName, result);
 			}
-			let content = ts.sys.readFile(fileName);
-			if (content === undefined) {
-				return undefined;
-			}
-			return ts.ScriptSnapshot.fromString(content);
+			return result;
 		},
 		getCurrentDirectory: () => {
 			if (tsconfigFileName !== undefined) {
