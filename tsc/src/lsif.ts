@@ -768,9 +768,9 @@ class Symbols {
 						for (let type of heritageClause.types) {
 							let tsType = typeChecker.getTypeAtLocation(type.expression);
 							if (tsType !== undefined) {
-								let symbol = tsType.getSymbol();
-								if (symbol) {
-									result.push(symbol);
+								let baseSymbol = tsType.getSymbol();
+								if (baseSymbol !== undefined && baseSymbol !== symbol) {
+									result.push(baseSymbol);
 								}
 							}
 						}
@@ -1061,16 +1061,26 @@ class TransientResolver extends SymbolDataResolver {
 	}
 }
 
+export interface Options {
+	projectRoot: string;
+	noContents: boolean;
+	stdout: boolean;
+}
+
 export class DataManager implements SymbolDataContext {
 
 	private projectData: ProjectData;
+	private documentStats: number;
 	private documentDatas: Map<string, DocumentData | null>;
+	private symbolStats: number;
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, project: Project) {
+	public constructor(private context: EmitContext, project: Project, private options: Options) {
 		this.projectData = new ProjectData(this, project);
 		this.projectData.begin();
+		this.documentStats = 0;
+		this.symbolStats = 0;
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.clearOnNode = new Map();
@@ -1105,6 +1115,10 @@ export class DataManager implements SymbolDataContext {
 			}
 		}
 		this.projectData.end();
+		if (!this.options.stdout) {
+			console.log('')
+			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+		}
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
@@ -1122,6 +1136,7 @@ export class DataManager implements SymbolDataContext {
 			this.documentDatas.set(fileName, result);
 			result.begin();
 			this.projectData.addDocument(document);
+			this.documentStats++;
 		}
 		return result;
 	}
@@ -1149,6 +1164,7 @@ export class DataManager implements SymbolDataContext {
 			result = create();
 			this.symbolDatas.set(result.getId(), result);
 			result.begin();
+			this.symbolStats++;
 		}
 		return result;
 	}
@@ -1180,11 +1196,6 @@ export interface ProjectInfo {
 	outDir: string;
 }
 
-export interface Options {
-	projectRoot: string;
-	noContents: boolean;
-}
-
 class Visitor implements ResolverContext {
 
 	private program: ts.Program;
@@ -1210,7 +1221,7 @@ class Visitor implements ResolverContext {
 		transient: TransientResolver;
 	};
 
-	constructor(private languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.program = languageService.getProgram()!
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
@@ -1241,7 +1252,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, this.project);
+		this.dataManager = new DataManager(this, this.project, options);
 		this.symbols = new Symbols(this.typeChecker);
 		this.symbolDataResolvers = {
 			standard: new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager),
@@ -1330,8 +1341,9 @@ class Visitor implements ResolverContext {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		process.stderr.write('.');
-		// console.log(`File: ${sourceFile.fileName}`);
+		if (!this.options.stdout) {
+			process.stdout.write('.');
+		}
 
 		this.currentSourceFile = sourceFile;
 		let documentData = this.getOrCreateDocumentData(sourceFile);
@@ -1365,7 +1377,7 @@ class Visitor implements ResolverContext {
 		}
 
 		// Folding ranges
-		let spans = this.languageService.getOutliningSpans(sourceFile.fileName);
+		let spans = this.languageService.getOutliningSpans(sourceFile as any);
 		if (ts.textSpanEnd.length > 0) {
 			let foldingRanges: lsp.FoldingRange[] = [];
 			for (let span of spans) {
@@ -1627,6 +1639,9 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
+	private hoverCalls: number = 0;
+	private hoverTotal: number = 0;
+
 	public getOrCreateSymbolData(symbol: ts.Symbol, location?: ts.Node): SymbolData {
 		let id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
@@ -1696,9 +1711,18 @@ class Visitor implements ResolverContext {
 				result.addDefinition(sourceFile, definition);
 				result.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
 				if (hover === undefined && tss.isNamedDeclaration(declaration)) {
+					let start = Date.now();
 					hover = this.getHover(declaration.name, sourceFile);
+					this.hoverCalls++;
+					let diff = Date.now() - start;
+					this.hoverTotal += diff;
+					if (diff > 100) {
+						console.log(`Computing hover took ${diff} ms for symbol ${id} | ${symbol.getName()} | ${this.hoverCalls} | ${this.hoverTotal}`)
+					}
 					if (hover) {
 						result.addHover(hover);
+					} else {
+						// console.log(`Hover returned undefined for $symbol ${id} | ${symbol.getName()}`);
 					}
 				}
 			}
@@ -1784,7 +1808,7 @@ class Visitor implements ResolverContext {
 		return this.symbolDataResolvers.standard;
 	}
 
-	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
+	public getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
@@ -1801,7 +1825,7 @@ class Visitor implements ResolverContext {
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
 		try {
-			let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node.getStart());
+			let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node as any);
 			if (quickInfo === undefined) {
 				return undefined;
 			}
