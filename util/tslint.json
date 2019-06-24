@@ -16,6 +16,7 @@
 		"no-reserved-keywords": false,
 		"ban-comma-operator": false,
 		"quotemark": [true, "single"],
-		"max-classes-per-file": false
+		"max-classes-per-file": false,
+		"indent": [true, "tabs"]
 	}
 }

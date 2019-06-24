@@ -45,44 +45,56 @@ export function main(): void {
 	.usage('Usage: $0 [validate|visualize] [file] --inputFormat=[line|json] [filters]')
 
 	// Validation tool
-	.command('validate [file]', '', (argv: yargs.Argv) => argv
-		.positional('file', {
+	.command('validate [file]', '',
+	{
+		file: {
 			describe: 'Path to input file or --stdin',
-		}) as any /* ToDo@jumattos */,  (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string }>) => {
-			if (!argv.stdin && argv.file === undefined) {
-				yargs.showHelp('log');
-				console.error('\nError: Missing input file. Did you forget --stdin?');
-				process.exitCode = 1;
-			} else {
-				readInput(argv.inputFormat, argv.stdin ? '--stdin' : argv.file, (input: LSIF.Element[]) => {
+			type: 'string',
+		},
+	}, (argv: yargs.Arguments) => {
+		if (!argv.stdin && argv.file === undefined) {
+			yargs.showHelp('log');
+			console.error('\nError: Missing input file. Did you forget --stdin?');
+			process.exitCode = 1;
+		} else {
+			readInput(
+				argv.inputFormat as string,
+				argv.stdin ? '--stdin' : argv.file as string,
+				(input: LSIF.Element[]) => {
 					const filter: IFilter = argv as unknown as IFilter;
-					process.exitCode = validate(input, getFilteredIds(filter, input),
-												path.join(path.dirname(process.argv[1]),
-														'../node_modules/lsif-protocol/lib/protocol.d.ts'));
+					process.exitCode = validate(
+						input, getFilteredIds(filter, input),
+						path.join(path.dirname(process.argv[1]),
+						'../node_modules/lsif-protocol/lib/protocol.d.ts'));
 				});
-			}
-		})
+		}
+	})
 
 	// Visualization tool
-	.command('visualize [file]', '', (argv: yargs.Argv) => argv
-		.positional('file', {
-			describe: 'Path to input file or --stdin',
-		})
-		.option('distance', {
+	.command('visualize [file]', '',
+	{
+		distance: {
 			default: 1,
+			demandOption: false,
 			describe: 'Max distance between any vertex and the filtered input',
-		}) as any /* ToDo@jumattos */, (argv: yargs.Arguments<{ stdin: boolean; file: string; inputFormat: string; distance: number }>) => {
-			if (!argv.stdin && argv.file === undefined) {
-				yargs.showHelp('log');
-				console.error('\nError: Missing input file. Did you forget --stdin?');
-				process.exitCode = 1;
-			} else {
-				readInput(argv.inputFormat, argv.stdin ? '--stdin' : argv.file, (input: LSIF.Element[]) => {
-					const filter: IFilter = argv as unknown as IFilter;
-					process.exitCode = visualize(input, getFilteredIds(filter, input), argv.distance);
-				});
-			}
-		})
+			type: 'number',
+		},
+		file: {
+			describe: 'Path to input file or --stdin',
+			type: 'string',
+		},
+	}, (argv: yargs.Arguments) => {
+		if (!argv.stdin && argv.file === undefined) {
+			yargs.showHelp('log');
+			console.error('\nError: Missing input file. Did you forget --stdin?');
+			process.exitCode = 1;
+		} else {
+			readInput(argv.inputFormat as string, argv.stdin ? '--stdin' : argv.file as string, (input: LSIF.Element[]) => {
+				const filter: IFilter = argv as unknown as IFilter;
+				process.exitCode = visualize(input, getFilteredIds(filter, input), argv.distance as number);
+			});
+		}
+	})
 
 	// One and only one command should be specified
 	.demandCommand(1, 1)

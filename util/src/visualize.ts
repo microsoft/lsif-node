@@ -18,7 +18,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 			if (Edge.is11(edge)) {
 				idQueue.push(edge.inV.toString(), edge.outV.toString());
 			} else {
-				for (let inV of edge.inVs) {
+				for (const inV of edge.inVs) {
 					idQueue.push(inV.toString(), edge.outV.toString());
 				}
 			}
@@ -51,7 +51,8 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 	Object.keys(edges)
 	.forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key] as LSIF.Edge;
-		const inV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => Edge.is11(edge) ? element.id === edge.inV : edge.inVs.indexOf(element.id) !== -1)[0];
+		const inV: LSIF.Element = toolOutput.filter((element: LSIF.Element) =>
+													Edge.is11(edge) ? element.id === edge.inV : edge.inVs.indexOf(element.id) !== -1)[0];
 		const outV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.outV)[0];
 
 		vertices[inV.id.toString()] = inV;
@@ -97,7 +98,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 		if (Edge.is11(edge)) {
 			digraph += `  ${edge.outV} -> ${edge.inV} [label="${edge.label}"]\n`;
 		} else {
-			for (let inV of edge.inVs) {
+			for (const inV of edge.inVs) {
 				digraph += `  ${edge.outV} -> ${inV} [label="${edge.label}"]\n`;
 			}
 		}
