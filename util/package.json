@@ -1,6 +1,6 @@
 {
 	"name": "lsif-util",
-	"version": "1.0.0",
+	"version": "0.2.0",
 	"description": "Utility tools for LSIF development.",
 	"main": "./lib/main.js",
 	"repository": {
