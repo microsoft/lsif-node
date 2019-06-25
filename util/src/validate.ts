@@ -5,7 +5,6 @@
 import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
-import { Edge, ElementTypes, Id } from 'lsif-protocol';
 import * as TJS from 'typescript-json-schema';
 
 const vertices: { [id: string]: Element } = {};
@@ -89,11 +88,11 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	process.stdout.write(`${outputMessage}\r`);
 
 	for (const object of toolOutput) {
-		if (object.type === ElementTypes.edge) {
+		if (object.type === LSIF.ElementTypes.edge) {
 			const edge: LSIF.Edge = object as LSIF.Edge;
 			edges[edge.id.toString()] = new Element(edge);
 
-			const handleEdge = (outV: Id, inV: Id) => {
+			const handleEdge = (outV: LSIF.Id, inV: LSIF.Id) => {
 				if (inV === undefined || outV === undefined) {
 					errors.push(new Error(edge, `requires properties "inV" and "outV"`));
 					edges[edge.id.toString()].invalidate();
@@ -108,7 +107,7 @@ function readInput(toolOutput: LSIF.Element[]): void {
 
 				visited[inV.toString()] = visited[outV.toString()] = true;
 			};
-			if (Edge.is11(edge)) {
+			if (LSIF.Edge.is11(edge)) {
 				handleEdge(edge.outV, edge.inV);
 			} else {
 				edge.inVs.forEach ((inV) => handleEdge(edge.outV, inV));
@@ -201,8 +200,8 @@ function checkEdges(ids: string[], protocolPath: string): void {
 			let errorMessage: string | undefined;
 			edges[key].invalidate();
 
-			if ((Edge.is11(edge) && edge.inV === undefined) ||
-				Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
+			if ((LSIF.Edge.is11(edge) && edge.inV === undefined) ||
+				LSIF.Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
 				// This error was caught before
 				return;
 			}
