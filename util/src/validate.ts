@@ -30,8 +30,8 @@ class Error {
 
 	public print(): void {
 		console.error(
-			`\n${this.element.type.toUpperCase()} ${this.element.id}:
-			FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`,
+			`\n${this.element.type.toUpperCase()} ${this.element.id}: ` +
+			`FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`,
 		);
 	}
 }
@@ -240,12 +240,12 @@ function printOutput(ids: string[]): void {
 	console.log();
 
 	const verticesStats: Statistics = getStatistics(vertices, ids);
-	console.log(`Vertices:\t${verticesStats.passed} passed,
-				${verticesStats.failed} failed, ${verticesStats.total} total`);
+	console.log(`Vertices:\t${verticesStats.passed} passed, ` +
+				`${verticesStats.failed} failed, ${verticesStats.total} total`);
 
 	const edgesStats: Statistics = getStatistics(edges, ids);
-	console.log(`Edges:\t\t${edgesStats.passed} passed,
-				${edgesStats.failed} failed, ${edgesStats.total} total`);
+	console.log(`Edges:\t\t${edgesStats.passed} passed, ` +
+				`${edgesStats.failed} failed, ${edgesStats.total} total`);
 
 	errors.forEach((e: Error) => {
 		// Only print error for the elements verified
