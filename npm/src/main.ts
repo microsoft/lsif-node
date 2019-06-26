@@ -2,7 +2,6 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -18,16 +17,18 @@ from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
 import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
+import { StdoutWriter, FileWriter, Writer } from 'lsif-tsc/lib/utils/writer';
 
-const __out = process.stdout;
-const __eol = os.EOL;
 
 interface Options {
 	help: boolean;
 	version: boolean;
 	package?: string;
 	projectRoot?: string;
-	file?: string;
+	in?: string;
+	stdin: boolean;
+	out?: string;
+	stdout: boolean;
 }
 
 interface OptionDescription {
@@ -45,24 +46,29 @@ namespace Options {
 		version: false,
 		package: undefined,
 		projectRoot: undefined,
-		file: undefined
+		in: undefined,
+		stdin: false,
+		out: undefined,
+		stdout: false
 	};
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
-		{ id: 'file', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump. Defaults to stdin.'},
+		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
+		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
+		{ id: 'out', type: 'string', default: undefined, description: 'The output file the converted dump is saved to.'},
+		{ id: 'stdout', type: 'boolean', default: false, description: 'Write the dump to stdout'},
 	];
 }
 
+let writer: Writer = new StdoutWriter();
 function emit(value: string | Edge | Vertex): void {
 	if (Is.string(value)) {
-		__out.write(value);
-		__out.write(__eol);
+		writer.writeln(value);
 	} else {
-		__out.write(JSON.stringify(value, undefined, 0));
-		__out.write(__eol);
+		writer.writeln(JSON.stringify(value, undefined, 0));
 	}
 }
 
@@ -329,14 +335,36 @@ export function main(): void {
 		process.exitCode = -1;
 		return;
 	}
+
+	if (!options.stdin && options.in === undefined) {
+		console.log(`Either a input file using --in or --stdin must be specified`);
+		process.exitCode = -1;
+		return;
+	}
+
+	if (!options.stdout && options.out === undefined) {
+		console.log(`Either a output file using --out or --stdout must be specified.`);
+		process.exitCode = -1;
+		return;
+	}
+
+	if (options.in !== undefined && options.out !== undefined && makeAbsolute(options.in) === makeAbsolute(options.out)) {
+		console.log(`Input and output file can't be the same.`);
+		process.exitCode = -1;
+		return;
+	}
+
 	let exportLinker: ExportLinker | undefined;
 	if (packageJson !== undefined) {
 		exportLinker = new ExportLinker(projectRoot, packageJson);
 	}
 	const importLinker: ImportLinker = new ImportLinker(projectRoot);
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
-	if (options.file !== undefined && fs.existsSync(options.file)) {
-		input = fs.createReadStream(options.file, { encoding: 'utf8'});
+	if (options.in !== undefined && fs.existsSync(options.in)) {
+		input = fs.createReadStream(options.in, { encoding: 'utf8'});
+	}
+	if (options.out !== undefined) {
+		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	}
 
 	const rd = readline.createInterface(input);
