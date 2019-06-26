@@ -18,7 +18,7 @@
 	},
 	"dependencies": {
 		"minimist": "^1.2.0",
-		"typescript": "^3.5.2",
+		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/release%2Flisf%2F3.5.2/typescript-3.5.2-lsif.tgz",
 		"uuid": "^3.3.2",
 		"vscode-uri": "^2.0.2",
 		"npm": "^6.9.0",
@@ -36,6 +36,7 @@
 		"clean": "node ../node_modules/rimraf/bin.js lib",
 		"clean:all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
 		"prepublishOnly": "npm run clean && npm run compile:publish",
-		"postpublish": "node ../build/bin/post-publish.js"
+		"postpublish": "node ../build/bin/post-publish.js",
+		"postinstall": ""
 	}
 }

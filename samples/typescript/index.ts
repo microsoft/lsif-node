@@ -1,8 +1,32 @@
+/**
+ * A longer comment that needs to be fetch
+ *
+ * jdjdj
+ * dkjdkj
+ */
 interface I1 {
+	/**
+	 * A longer comment that needs to be fetch
+	 *
+	 * jdjdj
+	 * dkjdkj
+	 */
 	get(): void;
 }
 
+/**
+ * A longer comment that needs to be fetch
+ *
+ * jdjdj
+ * dkjdkj
+ */
 interface I2 {
+	/**
+	 * A longer comment that needs to be fetch
+	 *
+	 * jdjdj
+	 * dkjdkj
+	 */
 	get(): void;
 }
 
@@ -20,12 +44,24 @@ let x: mobx.ObservableMap;
 let s: Set<string> = new Set();
 s.add('foo');
 
+/**
+ * A longer comment that needs to be fetch
+ *
+ * jdjdj
+ * dkjdkj
+ */
 function foo(): number {
 	return 10;
 }
 
 export default foo();
 
+/**
+ * A longer comment that needs to be fetch
+ *
+ * jdjdj
+ * dkjdkj
+ */
 export const enum OutlineConfigKeys {
 	'icons' = 'outline.icons',
 	'problemsEnabled' = 'outline.problems.enabled',

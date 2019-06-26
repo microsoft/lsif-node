@@ -186,7 +186,8 @@
 			"args": [
 				"--max_old_space_size=4095",
 				"-p", "./tsconfig.json",
-				"--outputFormat", "line"
+				"--outputFormat", "line",
+				"--out", "test.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

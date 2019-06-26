@@ -1196,6 +1196,47 @@ export interface ProjectInfo {
 	outDir: string;
 }
 
+export class SimpleSymbolChainCache implements ts.SymbolChainCache {
+
+	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
+		return [key.symbol];
+	}
+	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
+		// do nothing;
+	}
+}
+
+export class FullSymbolChainCache implements ts.SymbolChainCache {
+
+	private store: LRUCache<string, ts.Symbol[]> = new LRUCache(4096);
+
+	constructor(private typeChecker: ts.TypeChecker) {
+	}
+
+	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] | undefined {
+		if (key.endOfChain) {
+			return undefined;
+		}
+		let sKey = this.makeKey(key);
+		let result = this.store.get(sKey);
+		//process.stdout.write(result === undefined ? '0' : '1');
+		return result;
+	}
+	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
+		if (key.endOfChain) {
+			return;
+		}
+		let sKey = this.makeKey(key);
+		this.store.set(sKey, value);
+	}
+
+	private makeKey(key: ts.SymbolChainCacheKey): string {
+		let symbolKey = tss.createSymbolKey(this.typeChecker, key.symbol);
+		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
+		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
+	}
+}
+
 class Visitor implements ResolverContext {
 
 	private program: ts.Program;
@@ -1224,6 +1265,7 @@ class Visitor implements ResolverContext {
 	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.program = languageService.getProgram()!
 		this.typeChecker = this.program.getTypeChecker();
+		this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache())
 		this.builder = new Builder({
 			idGenerator,
 			emitSource: !options.noContents
@@ -1639,8 +1681,8 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	private hoverCalls: number = 0;
-	private hoverTotal: number = 0;
+	// private hoverCalls: number = 0;
+	// private hoverTotal: number = 0;
 
 	public getOrCreateSymbolData(symbol: ts.Symbol, location?: ts.Node): SymbolData {
 		let id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
@@ -1701,7 +1743,8 @@ class Visitor implements ResolverContext {
 			let [identifierNode, identifierText] = this.getIdentifierInformation(sourceFile, symbol, declaration);
 			if (identifierNode !== undefined && identifierText !== undefined) {
 				let documentData = this.getOrCreateDocumentData(sourceFile);
-				let definition = this.vertex.range(Converter.rangeFromNode(sourceFile, identifierNode), {
+				let range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);
+				let definition = this.vertex.range(range, {
 					type: RangeTagTypes.definition,
 					text: identifierText,
 					kind: Converter.asSymbolKind(declaration),
@@ -1711,14 +1754,14 @@ class Visitor implements ResolverContext {
 				result.addDefinition(sourceFile, definition);
 				result.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
 				if (hover === undefined && tss.isNamedDeclaration(declaration)) {
-					let start = Date.now();
+					// let start = Date.now();
 					hover = this.getHover(declaration.name, sourceFile);
-					this.hoverCalls++;
-					let diff = Date.now() - start;
-					this.hoverTotal += diff;
-					if (diff > 100) {
-						console.log(`Computing hover took ${diff} ms for symbol ${id} | ${symbol.getName()} | ${this.hoverCalls} | ${this.hoverTotal}`)
-					}
+					// this.hoverCalls++;
+					// let diff = Date.now() - start;
+					// this.hoverTotal += diff;
+					// if (diff > 100) {
+					// 	console.log(`Computing hover took ${diff} ms for symbol ${id} | ${symbol.getName()} | ${this.hoverCalls} | ${this.hoverTotal}`)
+					// }
 					if (hover) {
 						result.addHover(hover);
 					} else {
@@ -1825,7 +1868,7 @@ class Visitor implements ResolverContext {
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
 		try {
-			let quickInfo = this.languageService.getQuickInfoAtPosition(sourceFile.fileName, node as any);
+			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
 			if (quickInfo === undefined) {
 				return undefined;
 			}
