@@ -2,13 +2,9 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-import * as os from 'os';
-
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from 'lsif-protocol';
-
-const __out = process.stdout;
-const __eol = os.EOL;
+import { Writer } from '../utils/writer';
 
 interface GraphSonProperty {
 	id: Id;
@@ -46,7 +42,7 @@ interface GraphSonVertex {
 	properties?: GraphSonPropertyMap;
 }
 
-export const create: Create = (idGenerator: () => Id): Emitter => {
+export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter => {
 	let vertices: Map<Id, GraphSonVertex>;
 	const labelMap: Map<EdgeLabels, string> = new Map<EdgeLabels, string>([
 		[EdgeLabels.item, 'item'],
@@ -292,8 +288,7 @@ export const create: Create = (idGenerator: () => Id): Emitter => {
 		},
 		end: () => {
 			for (let vertex of vertices.values()) {
-				__out.write(JSON.stringify(vertex, undefined, 0));
-				__out.write(__eol);
+				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}
 		}
 	}

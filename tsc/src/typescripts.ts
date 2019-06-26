@@ -120,6 +120,14 @@ export function getSymbolParent(symbol: ts.Symbol): ts.Symbol | undefined {
 	return (symbol as InternalSymbol).parent;
 }
 
+interface InternalNode extends ts.Node {
+	symbol?: ts.Symbol;
+}
+
+export function getSymbolFromNode(node: ts.Node): ts.Symbol | undefined {
+	return (node as InternalNode).symbol;
+}
+
 interface InternalSourceFile extends ts.SourceFile {
 	resolvedModules?: ts.Map<ts.ResolvedModuleFull | undefined>;
 }
