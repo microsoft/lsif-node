@@ -2,7 +2,6 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-import * as os from 'os';
 import * as fs from 'fs';
 import * as readline from 'readline';
 
@@ -12,16 +11,16 @@ import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
 import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
 import * as sql from './sqlite';
-
-const __out = process.stdout;
-const __eol = os.EOL;
+import { StdoutWriter, FileWriter, Writer } from './writer';
 
 interface Options {
 	help: boolean;
 	version: boolean;
-	file: string | undefined;
-	db: string;
 	compressOnly: boolean;
+	in?: string;
+	stdin: boolean;
+	out?: string;
+	stdout: boolean;
 }
 
 interface OptionDescription {
@@ -37,23 +36,27 @@ export namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		file: undefined,
-		db: 'lisf.db',
-		compressOnly: false
+		compressOnly: false,
+		in: undefined,
+		stdin: false,
+		out: undefined,
+		stdout: false
 	};
 
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'db', type: 'string', default: 'lsif.db', description: 'Specifies the name of the SQLite DB.'},
-		{ id: 'file', type: 'string', default: undefined, description: 'Reads the LSIF dump from file instead of stdin.'},
-		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No DB generation.'}
+		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
+		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
+		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
+		{ id: 'out', type: 'string', default: undefined, description: 'The name of the SQLite DB.'},
+		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout'}
 	];
 }
 
+let writer: Writer = new StdoutWriter();
 function emit(value: string): void {
-	__out.write(value);
-	__out.write(__eol);
+	writer.writeln(value);
 }
 
 export function main(): void {
@@ -125,13 +128,33 @@ export function main(): void {
 		return result;
 	}
 
+	if (!options.stdin && options.in === undefined) {
+		console.log(`Either a input file using --in or --stdin must be specified`);
+		process.exitCode = -1;
+		return;
+	}
+
+	if (!options.stdout && options.out === undefined) {
+		console.log(`Either a output file using --out or --stdout must be specified.`);
+		process.exitCode = -1;
+		return;
+	}
+
+	if (options.stdout && !options.compressOnly) {
+		console.log(`Writing to stdout can only be used together with --compressOnly`);
+		process.exitCode = -1;
+		return;
+	}
+
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
-	if (options.file !== undefined && fs.existsSync(options.file)) {
-		input = fs.createReadStream(options.file, { encoding: 'utf8'});
+	if (options.in !== undefined && fs.existsSync(options.in)) {
+		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
 	let db: sql.Database | undefined;
-	if (options.db && !options.compressOnly) {
-		let filename = options.db;
+	if (options.compressOnly && options.out) {
+		writer = new FileWriter(fs.openSync(options.out, 'w'));
+	} else if (!options.compressOnly && options.out) {
+		let filename = options.out;
 		if (!filename.endsWith('.db')) {
 			filename = filename + '.db';
 		}
