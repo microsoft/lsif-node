@@ -135,8 +135,7 @@ namespace Converter {
 			content.push(displayPartsToString(value.documentation));
 		}
 		return {
-			contents: content,
-			range: rangeFromTextSpan(file, value.textSpan)
+			contents: content
 		};
 	}
 
@@ -1265,7 +1264,6 @@ class Visitor implements ResolverContext {
 	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
 		this.program = languageService.getProgram()!
 		this.typeChecker = this.program.getTypeChecker();
-		this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache())
 		this.builder = new Builder({
 			idGenerator,
 			emitSource: !options.noContents
@@ -1306,7 +1304,11 @@ class Visitor implements ResolverContext {
 	}
 
 	public visitProgram(): ProjectInfo {
-		for (let sourceFile of this.program.getSourceFiles()) {
+		let sourceFiles = this.program.getSourceFiles();
+		if (sourceFiles.length > 256) {
+			this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache());
+		}
+		for (let sourceFile of sourceFiles) {
 			// let start = Date.now();
 			this.visit(sourceFile);
 			// let end = Date.now();
