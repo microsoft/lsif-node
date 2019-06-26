@@ -59,7 +59,7 @@ namespace Options {
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the converted dump is saved to.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Write the dump to stdout'},
+		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout'},
 	];
 }
 

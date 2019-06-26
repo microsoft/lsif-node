@@ -59,7 +59,7 @@ namespace Options {
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Prints the dump to stdout.'}
+		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
 	];
 }
 
