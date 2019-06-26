@@ -57,8 +57,8 @@ export function main(): void {
 				readInput(argv.inputFormat, argv.stdin ? '--stdin' : argv.file, (input: LSIF.Element[]) => {
 					const filter: IFilter = argv as unknown as IFilter;
 					process.exitCode = validate(input, getFilteredIds(filter, input),
-												path.join(path.dirname(process.argv[1]),
-														'../node_modules/lsif-protocol/lib/protocol.d.ts'));
+												path.join(__dirname,
+													'../node_modules/lsif-protocol/lib/protocol.d.ts'));
 				});
 			}
 		})
