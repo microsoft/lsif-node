@@ -58,7 +58,7 @@ namespace Options {
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
-		{ id: 'out', type: 'string', default: undefined, description: 'The out file the dump is save to.'},
+		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
 		{ id: 'stdout', type: 'boolean', default: false, description: 'Prints the dump to stdout.'}
 	];
 }
@@ -277,7 +277,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	}
 
 	if (writer === undefined) {
-		console.log(`Either a out file or --stdout must be specified.`);
+		console.log(`Either a output file using --out or --stdout must be specified.`);
 		process.exitCode = -1;
 		return;
 	}
