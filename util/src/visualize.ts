@@ -5,6 +5,19 @@
 import * as LSIF from 'lsif-protocol';
 import { Edge } from 'lsif-protocol';
 
+function getInVs(edge: LSIF.Edge): string[] {
+	let inVs: string[] = [];
+	if (Edge.is11(edge)) {
+		inVs.push(edge.inV.toString());
+	}
+	else {
+		for (const inV of edge.inVs) {
+			inVs.push(inV.toString());
+		}
+	}
+	return inVs;
+}
+
 export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: number): number {
 	const edges: { [id: string]: LSIF.Element } = {};
 	const vertices: { [id: string]: LSIF.Element } = {};
@@ -15,13 +28,8 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 		const element: LSIF.Element = toolOutput.filter((e: LSIF.Element) => e.id.toString() === id)[0];
 		if (element.type === 'edge') {
 			const edge: LSIF.Edge = element as LSIF.Edge;
-			if (Edge.is11(edge)) {
-				idQueue.push(edge.inV.toString(), edge.outV.toString());
-			} else {
-				for (const inV of edge.inVs) {
-					idQueue.push(inV.toString(), edge.outV.toString());
-				}
-			}
+			idQueue = idQueue.concat(getInVs(edge));
+			idQueue.push(edge.outV.toString());
 		} else {
 			idQueue.push(element.id.toString());
 		}
@@ -34,28 +42,25 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 
 		allEdges.forEach((element: LSIF.Element) => {
 			const edge: LSIF.Edge = element as LSIF.Edge;
-			/* ToDo@jumattos */
-			if (Edge.is11(edge)) {
-				const inV: string = edge.inV.toString();
-				const outV: string = edge.outV.toString();
+			const outV: string = edge.outV.toString();
+			getInVs(edge).forEach (inV => {
 				if (targetIds.includes(inV) || targetIds.includes(outV)) {
 					edges[edge.id] = edge;
 					idQueue.push(inV, outV);
 				}
-			} else {
-				/* Missing */
-			}
+			});
 		});
 	}
 
 	Object.keys(edges)
 	.forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key] as LSIF.Edge;
-		const inV: LSIF.Element = toolOutput.filter((element: LSIF.Element) =>
-													Edge.is11(edge) ? element.id === edge.inV : edge.inVs.indexOf(element.id) !== -1)[0];
+		const inVs: string[] = getInVs(edge);
 		const outV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.outV)[0];
 
-		vertices[inV.id.toString()] = inV;
+		toolOutput.filter((element: LSIF.Element) => inVs.includes(element.id.toString())).forEach(element => {
+			vertices[element.id.toString()] = element;
+		});
 		vertices[outV.id.toString()] = outV;
 	});
 
@@ -84,7 +89,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 
 		Object.keys(extraInfo)
 		.forEach((property: string) => {
-			const value: string = JSON.stringify((extraInfo as any)[property] /* ToDo@jumattos */);
+			const value: string = JSON.stringify((extraInfo as any)[property]);
 			const re: RegExp = new RegExp('"', 'g');
 			extraText += `\n${property} = ${value.replace(re, '\\"')}`;
 		});
