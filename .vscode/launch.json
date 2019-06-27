@@ -182,10 +182,11 @@
 			"request": "launch",
 			"name": "VS Code",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
-			"cwd": "${workspaceFolder}/../VSCode/src",
+			"cwd": "${workspaceFolder}/../vscode",
 			"args": [
 				"--max_old_space_size=4095",
-				"-p", "./tsconfig.json",
+				"-p", "./src/tsconfig.json",
+				"--projectRoot", "./",
 				"--outputFormat", "line",
 				"--out", "test.lsif"
 			],

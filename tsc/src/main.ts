@@ -55,7 +55,7 @@ namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
+		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
@@ -140,9 +140,9 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	if (options.projectRoot === undefined) {
-		options.projectRoot = tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd();
+		options.projectRoot = process.cwd();
 	}
-	options.projectRoot = tss.normalizePath(options.projectRoot);
+	options.projectRoot = tss.makeAbsolute(options.projectRoot);
 
 	if (options.inferTypings) {
 		if (config.options.types !== undefined) {

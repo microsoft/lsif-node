@@ -33,7 +33,8 @@ export function getDefaultCompilerOptions(configFileName?: string) {
 
 const isWindows = process.platform === 'win32';
 export function normalizePath(value: string): string {
-	return path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
+	let result = path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
+	return result.length > 0 && result.charAt(result.length - 1) === '/' ? result.substr(0, result.length - 1) : result;
 }
 
 export function makeAbsolute(p: string, root?: string): string {

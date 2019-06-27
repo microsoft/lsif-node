@@ -11,7 +11,7 @@ import * as uuid from 'uuid';
 
 import PackageJson from './package';
 import {
-	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, next
+	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, nextMoniker
 }
 from 'lsif-protocol';
 
@@ -143,11 +143,11 @@ class Linker {
 		} as Moniker;
 	}
 
-	protected createNextEdge(outV: Id, inV: Id): next {
+	protected createNextMonikerEdge(outV: Id, inV: Id): nextMoniker {
 		return {
 			id: this.idGenerator(),
 			type: ElementTypes.edge,
-			label: EdgeLabels.next,
+			label: EdgeLabels.nextMoniker,
 			outV: outV,
 			inV: inV
 		};
@@ -190,7 +190,7 @@ class ExportLinker extends Linker {
 			let npmMoniker = this.createMoniker(npmIdentifier, moniker.kind, NpmMoniker.scheme);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id));
-			emit(this.createNextEdge(moniker.id, npmMoniker.id));
+			emit(this.createNextMonikerEdge(moniker.id, npmMoniker.id));
 		}
 	}
 
@@ -267,7 +267,7 @@ class ImportLinker extends Linker {
 			let npmMoniker = this.createMoniker(npmIdentifier, moniker.kind, NpmMoniker.scheme);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id));
-			emit(this.createNextEdge(npmMoniker.id, moniker.id));
+			emit(this.createNextMonikerEdge(npmMoniker.id, moniker.id));
 		}
 	}
 }

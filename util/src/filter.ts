@@ -3,7 +3,6 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as LSIF from 'lsif-protocol';
-import { Edge, ElementTypes } from 'lsif-protocol';
 
 export interface IFilter {
 	id: string[];
@@ -26,16 +25,16 @@ export function getFilteredIds(argv: IFilter, input: LSIF.Element[]): string[] {
 
 	result = result.filter((element: LSIF.Element) => includes(id, element.id));
 	result = result.filter((element: LSIF.Element) => {
-		/* ToDo@jumattos The element is a vertex here as well. Uncomment the if and test are failing*/
-		if (element.type !== ElementTypes.edge) {
+		if (inV.length === 0) {
+			return true;
+		} else if (element.type !== LSIF.ElementTypes.edge) {
 			return false;
 		}
-		let edge: Edge = element as Edge;
-		if (Edge.is11(edge)) {
+		const edge: LSIF.Edge = element as LSIF.Edge;
+		if (LSIF.Edge.is11(edge)) {
 			return includes(inV, edge.inV);
 		} else {
-			console.log(JSON.stringify(edge, undefined, 0));
-			for (let item of edge.inVs) {
+			for (const item of edge.inVs) {
 				if (includes(inV, item)) {
 					return true;
 				}

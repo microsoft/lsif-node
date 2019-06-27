@@ -6,7 +6,6 @@ import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
 import * as TJS from 'typescript-json-schema';
-import { ElementTypes, Id, Edge } from 'lsif-protocol';
 
 const vertices: { [id: string]: Element } = {};
 const edges: { [id: string]: Element } = {};
@@ -31,8 +30,8 @@ class Error {
 
 	public print(): void {
 		console.error(
-			`\n${this.element.type.toUpperCase()} ${this.element.id}:
-			FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`,
+			`\n${this.element.type.toUpperCase()} ${this.element.id}: ` +
+			`FAIL> ${this.message}\n${JSON.stringify(this.element, undefined, 2)}`,
 		);
 	}
 }
@@ -70,11 +69,11 @@ export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath
 
 	if (fse.pathExistsSync(protocolPath)) {
 		checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
-					  .map((e: LSIF.Element) => e.id.toString()),
-					  protocolPath);
-		checkEdges(toolOutput.filter((e: LSIF.Element) => e.type === 'edge')
-				   .map((e: LSIF.Element) => e.id.toString()),
-				   protocolPath);
+								.map((e: LSIF.Element) => e.id.toString()),
+								protocolPath);
+		checkEdges(	toolOutput.filter((e: LSIF.Element) => e.type === 'edge')
+								.map((e: LSIF.Element) => e.id.toString()),
+								protocolPath);
 	} else {
 		console.warn(`Skipping thorough validation: ${protocolPath} was not found`);
 	}
@@ -89,11 +88,11 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	process.stdout.write(`${outputMessage}\r`);
 
 	for (const object of toolOutput) {
-		if (object.type === ElementTypes.edge) {
+		if (object.type === LSIF.ElementTypes.edge) {
 			const edge: LSIF.Edge = object as LSIF.Edge;
 			edges[edge.id.toString()] = new Element(edge);
 
-			let handleEdge = (outV: Id, inV: Id) => {
+			const handleEdge = (outV: LSIF.Id, inV: LSIF.Id) => {
 				if (inV === undefined || outV === undefined) {
 					errors.push(new Error(edge, `requires properties "inV" and "outV"`));
 					edges[edge.id.toString()].invalidate();
@@ -107,13 +106,11 @@ function readInput(toolOutput: LSIF.Element[]): void {
 				}
 
 				visited[inV.toString()] = visited[outV.toString()] = true;
-			}
-			if (Edge.is11(edge)) {
+			};
+			if (LSIF.Edge.is11(edge)) {
 				handleEdge(edge.outV, edge.inV);
 			} else {
-				for (let inV in edge.inVs) {
-					handleEdge(edge.outV, inV);
-				}
+				edge.inVs.forEach ((inV) => handleEdge(edge.outV, inV));
 			}
 
 		} else if (object.type === 'vertex') {
@@ -203,7 +200,8 @@ function checkEdges(ids: string[], protocolPath: string): void {
 			let errorMessage: string | undefined;
 			edges[key].invalidate();
 
-			if ((Edge.is11(edge) && edge.inV === undefined) || Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
+			if ((LSIF.Edge.is11(edge) && edge.inV === undefined) ||
+				LSIF.Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
 				// This error was caught before
 				return;
 			}
@@ -242,12 +240,12 @@ function printOutput(ids: string[]): void {
 	console.log();
 
 	const verticesStats: Statistics = getStatistics(vertices, ids);
-	console.log(`Vertices:\t${verticesStats.passed} passed,
-				${verticesStats.failed} failed, ${verticesStats.total} total`);
+	console.log(`Vertices:\t${verticesStats.passed} passed, ` +
+				`${verticesStats.failed} failed, ${verticesStats.total} total`);
 
 	const edgesStats: Statistics = getStatistics(edges, ids);
-	console.log(`Edges:\t\t${edgesStats.passed} passed,
-				${edgesStats.failed} failed, ${edgesStats.total} total`);
+	console.log(`Edges:\t\t${edgesStats.passed} passed, ` +
+				`${edgesStats.failed} failed, ${edgesStats.total} total`);
 
 	errors.forEach((e: Error) => {
 		// Only print error for the elements verified

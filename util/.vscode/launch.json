@@ -13,7 +13,7 @@
 				"${workspaceFolder}/lib/**/*.js"
             ],
             "sourceMaps": true,
-            "args": [ "visualize", ".\\example\\json.json", "--id", "2", "--inputFormat=json" ]
+            "args": [ "visualize", ".\\example\\json.json", "--inV", "2", "--inputFormat=json" ]
         },
         {
             "type": "node",

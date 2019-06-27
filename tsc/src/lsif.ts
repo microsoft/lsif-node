@@ -1244,8 +1244,8 @@ class Visitor implements ResolverContext {
 	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
-	private rootDir: string | undefined;
-	private outDir: string | undefined;
+	private rootDir: string;
+	private outDir: string;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
@@ -1284,6 +1284,8 @@ class Visitor implements ResolverContext {
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
 			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
+		} else if (compilerOptions.baseUrl !== undefined) {
+			this.rootDir = tss.makeAbsolute(compilerOptions.baseUrl, configLocation);
 		} else {
 			this.rootDir = tss.Program.getCommonSourceDirectory(this.program);
 		}
@@ -1309,14 +1311,11 @@ class Visitor implements ResolverContext {
 			this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
 		for (let sourceFile of sourceFiles) {
-			// let start = Date.now();
 			this.visit(sourceFile);
-			// let end = Date.now();
-			// console.log(`Processing ${sourceFile.fileName} took ${end-start} ms`);
 		}
 		return {
-			rootDir: this.rootDir!,
-			outDir: this.outDir!
+			rootDir: this.rootDir,
+			outDir: this.outDir
 		};
 	}
 
@@ -1643,8 +1642,8 @@ class Visitor implements ResolverContext {
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
 		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
 			// A real source file inside this project.
-			if (!sourceFile.isDeclarationFile) {
-				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir!, this.outDir!));
+			if (!sourceFile.isDeclarationFile || (sourceFile.fileName.startsWith(this.rootDir) && sourceFile.fileName.charAt(this.rootDir.length) === '/')) {
+				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir));
 			}
 			// This can come from a dependent project.
 			let fileName = sourceFile.fileName;

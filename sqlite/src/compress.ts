@@ -705,6 +705,9 @@ Compressor.registerEdgeCompressor(EdgeLabels.next, nextCompressor);
 export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.moniker, monikerEdgeCompressor);
 
+export const nextMonikerCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+Compressor.registerEdgeCompressor(EdgeLabels.nextMoniker, nextMonikerCompressor);
+
 export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.packageInformation, packageInformationEdgeCompressor);
 
