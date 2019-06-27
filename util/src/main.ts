@@ -65,7 +65,7 @@ export function main(): void {
 					process.exitCode = validate(
                         input,
                         getFilteredIds(filter, input),
-												path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
+						path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
 				});
 		}
 	})
