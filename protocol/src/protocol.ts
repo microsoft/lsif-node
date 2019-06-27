@@ -641,6 +641,7 @@ export enum EdgeLabels {
 	item = 'item',
 	next = 'next',
 	moniker = 'moniker',
+	nextMoniker = 'nextMoniker',
 	packageInformation = 'packageInformation',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
 	textDocument_foldingRange = 'textDocument/foldingRange',
@@ -760,6 +761,13 @@ export type moniker =
 	E11<ImplementationResult, Moniker, EdgeLabels.moniker>;
 
 /**
+ * An edge associating a moniker with another moniker. The relationship exists between:
+ *
+ * - `Moniker` -> `Moniker`
+ */
+export type nextMoniker = E11<Moniker, Moniker, EdgeLabels.nextMoniker>;
+
+/**
  * An edge associating a moniker with a package information. The relationship exists between:
  *
  * - `Moniker` -> `PackageInformation`
@@ -853,6 +861,7 @@ export type Edge =
 	item |
 	next |
 	moniker |
+	nextMoniker |
 	packageInformation |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
