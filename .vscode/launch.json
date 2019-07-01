@@ -196,6 +196,24 @@
 			"outFiles": [
 				"${workspaceFolder}/tsc/lib/**/*.js"
 			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Blob Storage",
+			"program": "${workspaceFolder}/sqlite/lib/main.js",
+			"cwd": "${workspaceFolder}/samples/typescript",
+			"args": [
+				"--blob",
+				"--in", "./test.lsif",
+				"--out", "./test.db"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/sqlite/lib/**/*.js"
+			]
 		}
 	]
 }

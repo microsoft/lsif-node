@@ -11,12 +11,14 @@ import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
 import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
 import * as sql from './sqlite';
+import * as blob from './sqlite2';
 import { StdoutWriter, FileWriter, Writer } from './writer';
 
 interface Options {
 	help: boolean;
 	version: boolean;
 	compressOnly: boolean;
+	blob: boolean;
 	in?: string;
 	stdin: boolean;
 	out?: string;
@@ -37,6 +39,7 @@ export namespace Options {
 		help: false,
 		version: false,
 		compressOnly: false,
+		blob: false,
 		in: undefined,
 		stdin: false,
 		out: undefined,
@@ -47,6 +50,7 @@ export namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
+		{ id: 'blob', type: 'boolean', default: false, description: 'Store the dump in blob format.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The name of the SQLite DB.'},
@@ -150,8 +154,10 @@ export function main(): void {
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-	let db: sql.Database | undefined;
-	if (options.compressOnly && options.out) {
+	let db: sql.Database | blob.Database | undefined;
+	if (options.blob) {
+		db = new blob.Database();
+	} else if (options.compressOnly && options.out) {
 		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	} else if (!options.compressOnly && options.out) {
 		let filename = options.out;
