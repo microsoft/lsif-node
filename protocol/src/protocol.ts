@@ -90,6 +90,8 @@ export interface Event extends V {
 
 export interface ProjectEvent extends Event {
 
+	scope: EventScope.project;
+
 	/**
 	 * The id of the project vertex.
 	 */
@@ -97,6 +99,8 @@ export interface ProjectEvent extends Event {
 }
 
 export interface DocumentEvent extends Event {
+
+	scope: EventScope.document;
 
 	/**
 	 * The id of the document vertex.
