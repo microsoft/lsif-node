@@ -7,12 +7,12 @@ A first draft specification can be found [here](https://github.com/Microsoft/lan
 ## How to Run the tools
 
 - `> npm install -g lsif-tsc` install the tsc LSIF tool.
-- `> lsif-tsc -p .\tsconfig.json` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
+- `> lsif-tsc -p .\tsconfig.json --stdout` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
 
 If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so run
 
 - `> npm install -g lsif-npm` install the npm LSIF tools
-- `> lsif-tsc -p .\tsconfig.json | lsif-npm -p .\package.json` creates an LSIF dump and converts the monikers to npm format.
+- `> lsif-tsc -p .\tsconfig.json --stdout | lsif-npm --stdin --package .\package.json --stdout` creates an LSIF dump and converts the monikers to npm format.
 
 Please note that the tools are work in progress and that we have not done any extensive testing so far. Known issues are:
 
@@ -20,6 +20,8 @@ Please note that the tools are work in progress and that we have not done any ex
 1. Go to Type Declaration is not fully implement
 1. Document link support and go to implementation is completely  missing
 1. Reference results are not always inlined when possible
+
+Both tools support --help to get information about their command line arguments.
 
 ## LSIF utility tools
 
@@ -29,18 +31,15 @@ You can validate or visualize LSIF output using the [LSIF utility tools](util/RE
 
 There is also an [extension for VS Code](https://github.com/Microsoft/vscode-lsif-extension) that can serve the content of a LSIF JSON file. Consider you have dumped the content of a workspace into an LSIF JSON file then you can use the extension to serve the supported LSP requests. This works as follows:
 
-- follow the steps in 'How to Run the tools` above.
-- clone the example you want to produce a index for into a sibling directory. For example https://github.com/Microsoft/vscode-uri.git.
-- cd into the workspace folder of the example.
-- `> npm install`
-- `> node ..\language-server-index-format\tsc-lsif\lib\main.js --outputFormat=json -p src/tsconfig.json` and pipe the output into a file. Note that under PowerShell you best do `| Out-File -Encoding ASCII lsif.json`
-- `> git clone https://github.com/Microsoft/vscode-lsif-extension.git` into a sibling directory.
+- follow the steps in 'How to Run the tools` above and create a dump.
+- `> git clone https://github.com/Microsoft/vscode-lsif-extension.git`
 - `> cd vscode-lsif-extension`
 - `> npm install`
 - `> npm run compile`
-- open the workspace using code.
+- open the workspace on vscode-lsif-extension using code.
 - switch to the debug viewlet and launch `Launch Client`
-- open the example workspace, e.g. `vscode-uri`. LSP requests like find all references or hover are served from the index dump.
+- in the launch version of VS Code open the command palette and execute the command: `Open LSIF Database`
+- in the open file picker dialog nativate to a created dump and select it.
 
 ![The extension](./images/extension.png)
 
