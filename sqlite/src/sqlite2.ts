@@ -249,10 +249,10 @@ class DocumentData {
 
 	private computeHash(): string {
 		let hash = crypto.createHash('md5');
-		hash.write(this.blob.contents);
+		hash.update(this.blob.contents);
 		// Assume that folding ranges are already sorted
 		if (this.blob.foldingRanges) {
-			hash.write(JSON.stringify(this.blob.foldingRanges, undefined, 0));
+			hash.update(JSON.stringify(this.blob.foldingRanges, undefined, 0));
 		}
 		return hash.digest('base64');
 	}
