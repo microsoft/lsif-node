@@ -11,9 +11,8 @@ import * as lsp from 'vscode-languageserver-protocol';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
-	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange, textDocument_documentSymbol, textDocument_diagnostic
+	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange, textDocument_documentSymbol, textDocument_diagnostic, RangeTagTypes
 } from 'lsif-protocol';
-
 
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {
@@ -24,6 +23,77 @@ function assertDefined<T>(value: T | undefined | null): T {
 
 function isLocalMoniker(moniker: MonikerData): boolean {
 	return moniker.scheme === '$local';
+}
+
+namespace Ranges {
+	export function compare(r1: lsp.Range, r2: lsp.Range): number {
+		if (r1.start.line < r2.start.line) {
+			return -1;
+		}
+		if (r1.start.line > r2.start.line) {
+			return 1;
+		}
+		if (r1.start.character < r2.start.character) {
+			return -1;
+		}
+		if (r1.start.character > r2.start.character) {
+			return 1;
+		}
+		if (r1.end.line < r2.end.line) {
+			return -1;
+		}
+		if (r1.end.line > r2.end.line) {
+			return 1;
+		}
+		if (r1.end.character < r2.end.character) {
+			return -1;
+		}
+		if (r1.end.character > r2.end.character) {
+			return 1;
+		}
+		return 0;
+	}
+	export function hash(hash: crypto.Hash, range: Range): void {
+		const values: any[] = [];
+		values.push(range.start.line, range.start.character, range.end.line, range.end.character);
+		if (range.tag !== undefined) {
+			values.push(range.tag.type, range.tag.text);
+			if (range.tag.type === RangeTagTypes.definition || range.tag.type === RangeTagTypes.declaration) {
+				let fullRange = range.tag.fullRange;
+				let fullRangeValue: any[] = [];
+				fullRangeValue.push(fullRange.start.line, fullRange.start.character, fullRange.end.line, fullRange.end.character);
+				values.push(range.tag.kind, !!range.tag.deprecated, fullRangeValue, range.tag.detail !== undefined ? range.tag.detail : '');
+			}
+		} else {
+			values.push(null);
+		}
+		hash.update(JSON.stringify(values, undefined, 0));
+	}
+}
+
+namespace Strings {
+	export function compare(s1: string, s2: string): number {
+		return ( s1 == s2 ) ? 0 : ( s1 > s2 ) ? 1 : -1;
+	}
+}
+
+namespace Diagnostics {
+	export function compare(d1: lsp.Diagnostic, d2: lsp.Diagnostic): number {
+		let result = Ranges.compare(d1.range, d2.range);
+		if (result !== 0) {
+			return result;
+		}
+		result = Strings.compare(d1.message, d2.message);
+		if (result !== 0) {
+			return result;
+		}
+		return 0;
+	}
+
+	export function hash(hash: crypto.Hash, diag: lsp.Diagnostic): void {
+
+	}
+
 }
 
 interface LiteralMap<T> {
@@ -185,6 +255,13 @@ class DocumentData {
 			hash.write(JSON.stringify(this.blob.foldingRanges, undefined, 0));
 		}
 		return hash.digest('base64');
+	}
+
+	private sortDiagnostics(): void {
+		if (this.blob.diagnostics === undefined) {
+			return;
+		}
+		this.blob.diagnostics = this.blob.diagnostics.sort(Diagnostics.compare);
 	}
 }
 
