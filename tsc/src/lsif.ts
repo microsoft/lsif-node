@@ -340,10 +340,16 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(kind: MonikerKind, identifier: string): void {
-		let moniker = this.vertex.moniker(kind, 'tsc', identifier);
-		this.emit(moniker);
-		this.emit(this.edge.moniker(this.resultSet, moniker));
+	public addMoniker(identifier: string, kind?: MonikerKind): void {
+		if (kind === undefined) {
+			let moniker = this.vertex.moniker('$local', identifier);
+			this.emit(moniker);
+			this.emit(this.edge.moniker(this.resultSet, moniker));
+		} else {
+			let moniker = this.vertex.moniker('tsc', identifier, kind);
+			this.emit(moniker);
+			this.emit(this.edge.moniker(this.resultSet, moniker));
+		}
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -1730,11 +1736,13 @@ class Visitor implements ResolverContext {
 				monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
 			}
 		}
-		if (monikerIdentifer !== undefined) {
+		if (monikerIdentifer === undefined) {
+			result.addMoniker(id);
+		} else {
 			if (externalLibrary === true) {
-				result.addMoniker(MonikerKind.import, monikerIdentifer);
+				result.addMoniker(monikerIdentifer, MonikerKind.import);
 			} else {
-				result.addMoniker(MonikerKind.export, monikerIdentifer);
+				result.addMoniker(monikerIdentifer, MonikerKind.export);
 			}
 		}
 

@@ -2,7 +2,7 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-// import * as crypto from 'crypto';
+import * as crypto from 'crypto';
 // import * as fs from 'fs';
 
 // import * as Sqlite from 'better-sqlite3';
@@ -11,9 +11,8 @@ import * as lsp from 'vscode-languageserver-protocol';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
-	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange
+	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange, textDocument_documentSymbol, textDocument_diagnostic
 } from 'lsif-protocol';
-import { LSPLogMessage } from 'vscode-jsonrpc/lib/messages';
 
 
 function assertDefined<T>(value: T | undefined | null): T {
@@ -21,6 +20,10 @@ function assertDefined<T>(value: T | undefined | null): T {
 		throw new Error(`Element must be defined`);
 	}
 	return value;
+}
+
+function isLocalMoniker(moniker: MonikerData): boolean {
+	return moniker.scheme === '$local';
 }
 
 interface LiteralMap<T> {
@@ -90,11 +93,39 @@ class DocumentData {
 
 	public addRangeData(id: Id, data: RangeData): void {
 		this.blob.ranges[id] = data;
+		let moniker: MonikerData | undefined;
 		if (data.moniker !== undefined) {
-			this.addMoniker(data.moniker, assertDefined(this.provider.getMonikerData(data.moniker)));
+			moniker = assertDefined(this.provider.getMonikerData(data.moniker))
+			this.addMoniker(data.moniker, moniker);
 		}
 		if (data.next !== undefined) {
 			this.addResultSetData(data.next, assertDefined(this.provider.getResultData(data.next)));
+		}
+		if (data.hoverResult !== undefined) {
+			if (moniker === undefined || isLocalMoniker(moniker)) {
+				this.addHover(data.hoverResult)
+			}
+		}
+	}
+
+	private addResultSetData(id: Id, resultSet: ResultSetData): void {
+		if (this.blob.resultSets === undefined) {
+			this.blob.resultSets = Object.create(null);
+		}
+		this.blob.resultSets![id] = resultSet;
+
+		let moniker: MonikerData | undefined;
+		if (resultSet.moniker !== undefined) {
+			moniker = assertDefined(this.provider.getMonikerData(resultSet.moniker));
+			this.addMoniker(resultSet.moniker, moniker);
+		}
+		if (resultSet.next !== undefined) {
+			this.addResultSetData(resultSet.next, assertDefined(this.provider.getResultData(resultSet.next)));
+		}
+		if (resultSet.hoverResult !== undefined) {
+			if (moniker === undefined || isLocalMoniker(moniker)) {
+				this.addHover(resultSet.hoverResult)
+			}
 		}
 	}
 
@@ -117,18 +148,11 @@ class DocumentData {
 		this.blob.monikers![id] = moniker;
 	}
 
-	private addResultSetData(id: Id, resultSet: ResultSetData): void {
-		if (this.blob.resultSets === undefined) {
-			this.blob.resultSets = Object.create(null);
+	private addHover(id: Id): void {
+		if (this.blob.hovers === undefined) {
+			this.blob.hovers = Object.create(null);
 		}
-		this.blob.resultSets![id] = resultSet;
-
-		if (resultSet.moniker !== undefined) {
-			this.addMoniker(resultSet.moniker, assertDefined(this.provider.getMonikerData(resultSet.moniker)));
-		}
-		if (resultSet.next !== undefined) {
-			this.addResultSetData(resultSet.next, assertDefined(this.provider.getResultData(resultSet.next)));
-		}
+		this.blob.hovers![id] = assertDefined(this.provider.getHoverData(id));
 	}
 
 	public finalize(): string {
@@ -138,9 +162,8 @@ class DocumentData {
 					this.validateDocumentSymbols(item);
 				}
 			}
-
 		}
-		return '';
+		return this.computeHash();
 	}
 
 	private validateDocumentSymbols(value: RangeBasedDocumentSymbol): void {
@@ -152,6 +175,16 @@ class DocumentData {
 				this.validateDocumentSymbols(child);
 			}
 		}
+	}
+
+	private computeHash(): string {
+		let hash = crypto.createHash('md5');
+		hash.write(this.blob.contents);
+		// Assume that folding ranges are already sorted
+		if (this.blob.foldingRanges) {
+			hash.write(JSON.stringify(this.blob.foldingRanges, undefined, 0));
+		}
+		return hash.digest('base64');
 	}
 }
 
@@ -231,6 +264,12 @@ export class Database implements DataProvider {
 				case EdgeLabels.textDocument_foldingRange:
 					this.handleFoldingRangeEdge(element);
 					break;
+				case EdgeLabels.textDocument_documentSymbol:
+					this.handleDocumentSymbolEdge(element);
+					break;
+				case EdgeLabels.textDocument_diagnostic:
+					this.handleDiagnosticsEdge(element);
+					break;
 				case EdgeLabels.contains:
 					if (!this.handleDocumentContains(element)) {
 						this.handleProjectContains(element);
@@ -293,7 +332,7 @@ export class Database implements DataProvider {
 
 	private handleDocumentEnd(event: DocumentEvent) {
 		let documentData = this.getEnsureDocumentData(event.data);
-		console.log(documentData);
+		console.log(documentData.finalize());
 		// Insert into DB
 		this.documentDatas.set(event.id, null);
 	}
@@ -313,8 +352,20 @@ export class Database implements DataProvider {
 		this.monikerDatas.set(moniker.id, data);
 	}
 
+	private handleMonikerEdge(moniker: moniker): void {
+		const source: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(moniker.outV) || this.resultSetDatas.get(moniker.outV));
+		assertDefined(this.monikerDatas.get(moniker.inV));
+		source.moniker = moniker.inV;
+	}
+
 	private handleHover(hover: HoverResult): void {
 		this.hoverDatas.set(hover.id, hover.result);
+	}
+
+	private handleHoverEdge(edge: textDocument_hover): void {
+		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
+		assertDefined(this.hoverDatas.get(edge.inV));
+		outV.hoverResult = edge.inV;
 	}
 
 	private handleFoldingRange(folding: FoldingRangeResult): void {
@@ -330,26 +381,24 @@ export class Database implements DataProvider {
 		this.documentSymbols.set(symbols.id, symbols.result);
 	}
 
+	private handleDocumentSymbolEdge(edge: textDocument_documentSymbol): void {
+		const source = assertDefined(this.getDocumentData(edge.outV));
+		source.addDocumentSymbolResult(assertDefined(this.documentSymbols.get(edge.inV)));
+	}
+
 	private handleDiagnostics(diagnostics: DiagnosticResult): void {
 		this.diagnostics.set(diagnostics.id, diagnostics.result);
 	}
 
-	private handleMonikerEdge(moniker: moniker): void {
-		const source: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(moniker.outV) || this.resultSetDatas.get(moniker.outV));
-		assertDefined(this.monikerDatas.get(moniker.inV));
-		source.moniker = moniker.inV;
+	private handleDiagnosticsEdge(edge: textDocument_diagnostic): void {
+		const source = assertDefined(this.getDocumentData(edge.outV));
+		source.addDiagnostics(assertDefined(this.diagnostics.get(edge.inV)));
 	}
 
 	private handleNextEdge(edge: next): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		assertDefined(this.resultSetDatas.get(edge.inV));
 		outV.next = edge.inV;
-	}
-
-	private handleHoverEdge(edge: textDocument_hover): void {
-		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
-		assertDefined(this.hoverDatas.get(edge.inV));
-		outV.hoverResult = edge.inV;
 	}
 
 	private handleDocumentContains(contains: contains): boolean {
