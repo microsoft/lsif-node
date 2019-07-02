@@ -7,13 +7,15 @@ import * as crypto from 'crypto';
 
 // import * as Sqlite from 'better-sqlite3';
 
+import * as uuid from 'uuid';
+
 import * as lsp from 'vscode-languageserver-protocol';
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
 	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange,
-	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind
+	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind, textDocument_declaration, textDocument_definition, textDocument_references, item, ItemEdgeProperties
 } from 'lsif-protocol';
 
 function assertDefined<T>(value: T | undefined | null): T {
@@ -133,22 +135,24 @@ interface DocumentBlob {
 	diagnostics?: lsp.Diagnostic[];
 }
 
-interface RangeData extends Pick<Range, 'start' | 'end' | 'tag'> {
+interface NavigationResultPartition {
 	declarationResult?: Id[];
 	definitionResult?: Id[]
 	referenceResult?: Id[];
-	hoverResult?: Id;
+}
+
+interface RangeData extends Pick<Range, 'start' | 'end' | 'tag'> {
 	moniker?: Id;
 	next?: Id;
+	hoverResult?: Id;
+	primaryPartition?: NavigationResultPartition;
 }
 
 interface ResultSetData {
-	declarationResult?: Id[];
-	definitionResult?: Id[]
-	referenceResult?: Id[];
-	hoverResult?: Id;
 	moniker?: Id;
 	next?: Id;
+	hoverResult?: Id;
+	primaryPartition?: NavigationResultPartition;
 }
 
 type MonikerData = Pick<Moniker, 'scheme' | 'identifier' | 'kind'>;
@@ -166,37 +170,14 @@ class DocumentData {
 	private provider: DataProvider;
 	private blob: DocumentBlob;
 
-	private Ids: Set<Id>;
-	private documentSymbolResult: DocumentSymbolResult | undefined;
-
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
 		this.blob = { contents: document.contents!, ranges: Object.create(null) };
-
-		this.Ids = new Set();
-	}
-
-	public clearCache(vertexCache: Map<Id, Vertex>): void {
-		for (let id of this.Ids.values()) {
-			vertexCache.delete(id);
-		}
 	}
 
 	public addRangeData(id: Id, data: RangeData): void {
 		this.blob.ranges[id] = data;
-		let moniker: MonikerData | undefined;
-		if (data.moniker !== undefined) {
-			moniker = assertDefined(this.provider.getMonikerData(data.moniker))
-			this.addMoniker(data.moniker, moniker);
-		}
-		if (data.next !== undefined) {
-			this.addResultSetData(data.next, assertDefined(this.provider.getResultData(data.next)));
-		}
-		if (data.hoverResult !== undefined) {
-			if (moniker === undefined || isLocalMoniker(moniker)) {
-				this.addHover(data.hoverResult)
-			}
-		}
+		this.addReferencedData(data);
 	}
 
 	private addResultSetData(id: Id, resultSet: ResultSetData): void {
@@ -204,18 +185,21 @@ class DocumentData {
 			this.blob.resultSets = LiteralMap.create();
 		}
 		this.blob.resultSets![id] = resultSet;
+		this.addReferencedData(resultSet);
+	}
 
+	private addReferencedData(item: RangeData | ResultSetData): void {
 		let moniker: MonikerData | undefined;
-		if (resultSet.moniker !== undefined) {
-			moniker = assertDefined(this.provider.getMonikerData(resultSet.moniker));
-			this.addMoniker(resultSet.moniker, moniker);
+		if (item.moniker !== undefined) {
+			moniker = assertDefined(this.provider.getMonikerData(item.moniker));
+			this.addMoniker(item.moniker, moniker);
 		}
-		if (resultSet.next !== undefined) {
-			this.addResultSetData(resultSet.next, assertDefined(this.provider.getResultData(resultSet.next)));
+		if (item.next !== undefined) {
+			this.addResultSetData(item.next, assertDefined(this.provider.getResultData(item.next)));
 		}
-		if (resultSet.hoverResult !== undefined) {
+		if (item.hoverResult !== undefined) {
 			if (moniker === undefined || isLocalMoniker(moniker)) {
-				this.addHover(resultSet.hoverResult)
+				this.addHover(item.hoverResult)
 			}
 		}
 	}
@@ -247,25 +231,7 @@ class DocumentData {
 	}
 
 	public finalize(): string {
-		if (this.documentSymbolResult !== undefined) {
-			for (let item of this.documentSymbolResult.result) {
-				if (!lsp.DocumentSymbol.is(item)) {
-					this.validateDocumentSymbols(item);
-				}
-			}
-		}
 		return this.computeHash();
-	}
-
-	private validateDocumentSymbols(value: RangeBasedDocumentSymbol): void {
-		if (this.blob.ranges[value.id] === undefined) {
-			throw Error(`Range based document symbol result refers to unknown range ${value.id}`);
-		}
-		if (value.children !== undefined) {
-			for (let child of value.children) {
-				this.validateDocumentSymbols(child);
-			}
-		}
 	}
 
 	private computeHash(): string {
@@ -288,7 +254,6 @@ class DocumentData {
 				hash.update(JSON.stringify(compressed, undefined, 0));
 			}
 		}
-
 
 		// Assume that folding ranges are already sorted
 		if (this.blob.foldingRanges) {
@@ -355,6 +320,13 @@ export class Database implements DataProvider {
 	private resultSetDatas: Map<Id, ResultSetData>;
 	private monikerDatas: Map<Id, MonikerData>;
 	private hoverDatas: Map<Id, lsp.Hover>;
+	private declarationDatas: Map<Id, Map<string, Id[]>>;
+	private definitionDatas: Map<Id, Map<string, Id[]>>;
+	private referenceDatas: Map<Id, Map<string, Id[]>>;
+	private implementationDatas: Map<Id, Map<string, Id[]>>;
+	private referenceResultDatas: Map<Id, Map<string, Id[]>>;
+
+	private containsDatas: Map<Id, Id[]>;
 
 	constructor() {
 		this.documents = new Map();
@@ -369,6 +341,12 @@ export class Database implements DataProvider {
 		this.resultSetDatas = new Map();
 		this.monikerDatas = new Map();
 		this.hoverDatas = new Map();
+		this.declarationDatas = new Map();
+		this.definitionDatas = new Map();
+		this.referenceDatas = new Map();
+		this.implementationDatas = new Map();
+		this.referenceResultDatas = new Map()
+		this.containsDatas = new Map();
 	}
 
 	public insert(element: Edge | Vertex): void {
@@ -410,9 +388,6 @@ export class Database implements DataProvider {
 				case EdgeLabels.moniker:
 					this.handleMonikerEdge(element)
 					break;
-				case EdgeLabels.textDocument_hover:
-					this.handleHoverEdge(element);
-					break;
 				case EdgeLabels.textDocument_foldingRange:
 					this.handleFoldingRangeEdge(element);
 					break;
@@ -422,10 +397,24 @@ export class Database implements DataProvider {
 				case EdgeLabels.textDocument_diagnostic:
 					this.handleDiagnosticsEdge(element);
 					break;
+				case EdgeLabels.textDocument_hover:
+					this.handleHoverEdge(element);
+					break;
+				case EdgeLabels.textDocument_declaration:
+					this.handleDeclarationEdge(element);
+					break;
+				case EdgeLabels.textDocument_definition:
+					this.handleDefinitionEdge(element);
+					break;
+				case EdgeLabels.textDocument_references:
+					this.handleReferenceEdge(element);
+					break;
+				case EdgeLabels.item:
+					this.handleItemEdge(element);
+					break;
 				case EdgeLabels.contains:
-					if (!this.handleDocumentContains(element)) {
-						this.handleProjectContains(element);
-					}
+					this.handleContains(element);
+					break;
 			}
 		}
 	}
@@ -482,13 +471,6 @@ export class Database implements DataProvider {
 		this.documents.delete(event.data);
 	}
 
-	private handleDocumentEnd(event: DocumentEvent) {
-		let documentData = this.getEnsureDocumentData(event.data);
-		console.log(documentData.finalize());
-		// Insert into DB
-		this.documentDatas.set(event.id, null);
-	}
-
 	private handleRange(range: Range): void {
 		let data: RangeData = { start: range.start, end: range.end, tag: range.tag };
 		this.rangeDatas.set(range.id, data);
@@ -518,6 +500,62 @@ export class Database implements DataProvider {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		assertDefined(this.hoverDatas.get(edge.inV));
 		outV.hoverResult = edge.inV;
+	}
+
+	private handleDeclarationEdge(edge: textDocument_declaration): void {
+		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
+		this.ensureMoniker(outV);
+		this.declarationDatas.set(edge.inV, new Map());
+	}
+
+	private handleDefinitionEdge(edge: textDocument_definition): void {
+		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
+		this.ensureMoniker(outV);
+		this.definitionDatas.set(edge.inV, new Map());
+	}
+
+	private handleReferenceEdge(edge: textDocument_references): void {
+		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
+		this.ensureMoniker(outV);
+		this.referenceDatas.set(edge.inV, new Map());
+	}
+
+	private ensureMoniker(data: RangeData | ResultSetData): void {
+		if (data.moniker !== undefined) {
+			return;
+		}
+		const monikerData: MonikerData = { scheme: '$synthetic', identifier: uuid.v4() };
+		data.moniker = monikerData.identifier;
+		this.monikerDatas.set(monikerData.identifier, monikerData);
+	}
+
+	private handleItemEdge(edge: item): void {
+		let property: ItemEdgeProperties | undefined = edge.property;
+		if (property === undefined) {
+			return;
+		}
+		let data: Map<Id, Id[]> | undefined;
+		switch (property) {
+			case ItemEdgeProperties.declarations:
+				data = this.declarationDatas.get(edge.outV);
+				break;
+			case ItemEdgeProperties.definitions:
+				data = this.definitionDatas.get(edge.outV);
+				break;
+			case ItemEdgeProperties.references:
+				data = this.referenceDatas.get(edge.outV);
+				break;
+			case ItemEdgeProperties.implementationResults:
+				data = this.implementationDatas.get(edge.outV);
+				break;
+			case ItemEdgeProperties.referenceResults:
+				data = this.referenceResultDatas.get(edge.outV);
+				break;
+		}
+		if (data === undefined) {
+			return;
+		}
+		data.set(edge.document, edge.inVs);
 	}
 
 	private handleFoldingRange(folding: FoldingRangeResult): void {
@@ -553,20 +591,29 @@ export class Database implements DataProvider {
 		outV.next = edge.inV;
 	}
 
-	private handleDocumentContains(contains: contains): boolean {
-		let documentData = this.getDocumentData(contains.outV);
-		if (documentData === undefined) {
-			return false;
+	private handleContains(contains: contains): boolean {
+		let values = this.containsDatas.get(contains.outV);
+		if (values === undefined) {
+			values = [];
+			this.containsDatas.set(contains.outV, values);
 		}
-		for (let inV of contains.inVs) {
-			const data = assertDefined(this.rangeDatas.get(inV));
-			documentData.addRangeData(inV, data)
-		}
+		values.push(...contains.inVs);
 		return true;
 	}
 
-	private handleProjectContains(contains: contains): boolean {
-		return true;
+	private handleDocumentEnd(event: DocumentEvent) {
+		const documentData = this.getEnsureDocumentData(event.data);
+		const contains = this.containsDatas.get(event.data);
+		if (contains === undefined) {
+			return;
+		}
+		for (let id of contains) {
+			const range = assertDefined(this.rangeDatas.get(id));
+			documentData.addRangeData(id, range);
+		}
+		console.log(documentData.finalize());
+		// Insert into DB
+		this.documentDatas.set(event.id, null);
 	}
 
 	private getOrCreateDocumentData(document: Document): DocumentData {
