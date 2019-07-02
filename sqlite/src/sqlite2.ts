@@ -8,13 +8,12 @@ import * as crypto from 'crypto';
 // import * as Sqlite from 'better-sqlite3';
 
 import * as lsp from 'vscode-languageserver-protocol';
-import { Compressor, foldingRangeCompressor, CompressorOptions } from './compress';
-
+import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
 	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange,
-	textDocument_documentSymbol, textDocument_diagnostic
+	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind
 } from 'lsif-protocol';
 
 function assertDefined<T>(value: T | undefined | null): T {
@@ -64,7 +63,32 @@ namespace Strings {
 	}
 }
 
-export namespace Diagnostics {
+namespace Monikers {
+	export function compare(m1: MonikerData, m2: MonikerData): number {
+		let result = Strings.compare(m1.identifier, m2.identifier);
+		if (result !== 0) {
+			return result;
+		}
+		result = Strings.compare(m1.scheme, m2.scheme);
+		if (result !== 0) {
+			return result;
+		}
+		if (m1.kind === m2.kind) {
+			return 0;
+		}
+		const k1 = m1.kind !== undefined ? m1.kind : MonikerKind.import;
+		const k2 = m2.kind !== undefined ? m2.kind : MonikerKind.import;
+		if (k1 === MonikerKind.import && k2 === MonikerKind.export) {
+			return -1;
+		}
+		if (k1 === MonikerKind.export && k2 === MonikerKind.import) {
+			return 1;
+		}
+		return 0;
+	}
+}
+
+namespace Diagnostics {
 	export function compare(d1: lsp.Diagnostic, d2: lsp.Diagnostic): number {
 		let result = Ranges.compare(d1.range, d2.range);
 		if (result !== 0) {
@@ -234,7 +258,7 @@ class DocumentData {
 	}
 
 	private validateDocumentSymbols(value: RangeBasedDocumentSymbol): void {
-		if (!this.Ids.has(value.id)) {
+		if (this.blob.ranges[value.id] === undefined) {
 			throw Error(`Range based document symbol result refers to unknown range ${value.id}`);
 		}
 		if (value.children !== undefined) {
@@ -245,23 +269,73 @@ class DocumentData {
 	}
 
 	private computeHash(): string {
-		let hash = crypto.createHash('md5');
+		const hash = crypto.createHash('md5');
 		hash.update(this.blob.contents);
-		let options: CompressorOptions = { mode: 'hash' };
-		let compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
-		let ranges = LiteralMap.values(this.blob.ranges).sort(Ranges.compare);
+		const options: CompressorOptions = { mode: 'hash' };
+		const compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
+		const ranges = LiteralMap.values(this.blob.ranges).sort(Ranges.compare);
 		for (let range of ranges) {
-			let compressed = compressor.compress(range, options);
+			const compressed = compressor.compress(range, options);
 			hash.update(JSON.stringify(compressed, undefined, 0));
 		}
+
+		// moniker
+		if (this.blob.monikers !== undefined) {
+			const monikers = LiteralMap.values(this.blob.monikers).sort(Monikers.compare);
+			const compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.moniker));
+			for (let moniker of monikers) {
+				const compressed = compressor.compress(moniker, options);
+				hash.update(JSON.stringify(compressed, undefined, 0));
+			}
+		}
+
+
 		// Assume that folding ranges are already sorted
 		if (this.blob.foldingRanges) {
-			let compressor = foldingRangeCompressor;
+			const compressor = foldingRangeCompressor;
 			for (let range of this.blob.foldingRanges) {
-				let compressed = compressor.compress(range, options);
+				const compressed = compressor.compress(range, options);
 				hash.update(JSON.stringify(compressed, undefined, 0))
 			}
 		}
+
+		// Unsure if we need to sort the children by range or not?
+		if (this.blob.documentSymbols && this.blob.documentSymbols.length > 0) {
+			const first = this.blob.documentSymbols[0];
+			const compressor = lsp.DocumentSymbol.is(first) ? undefined : assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
+			if (compressor === undefined) {
+				throw new Error(`Document symbol compression not supported`);
+			}
+			const inline = (result: any[], value: RangeBasedDocumentSymbol) => {
+				const item: any[] = [];
+				const compressed = compressor.compress(this.blob.ranges[value.id], options);
+				item.push(compressed);
+				if (value.children && value.children.length > 0) {
+					const children: any[] = [];
+					for (let child of value.children) {
+						inline(children, child);
+					}
+					item.push(children);
+				}
+				result.push(item);
+			}
+			let compressed: any[] = [];
+			for (let symbol of (this.blob.documentSymbols as RangeBasedDocumentSymbol[])) {
+				inline(compressed, symbol);
+			}
+			hash.update(JSON.stringify(compressed, undefined, 0));
+		}
+
+		// Diagnostics
+		if (this.blob.diagnostics && this.blob.diagnostics.length > 0) {
+			this.blob.diagnostics = this.blob.diagnostics.sort(Diagnostics.compare);
+			const compressor = diagnosticCompressor;
+			for (let diagnostic of this.blob.diagnostics) {
+				let compressed = compressor.compress(diagnostic, options);
+				hash.update(JSON.stringify(compressed, undefined, 0));
+			}
+		}
+
 		return hash.digest('base64');
 	}
 }

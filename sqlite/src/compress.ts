@@ -587,7 +587,7 @@ const packageInformationCompressor = new GenericCompressor<PackageInformation>(v
 ]);
 Compressor.registerVertexCompressor(VertexLabels.packageInformation, packageInformationCompressor);
 
-const rangeBasedDocumentSymbolCompressor = new GenericCompressor<RangeBasedDocumentSymbol>(undefined, Compressor.nextId(), (next, that) => [
+export const rangeBasedDocumentSymbolCompressor = new GenericCompressor<RangeBasedDocumentSymbol>(undefined, Compressor.nextId(), (next, that) => [
 	GenericCompressorProperty.scalar('id', next()),
 	GenericCompressorProperty.array('children', next(), that)
 ]);
@@ -611,7 +611,7 @@ const diagnosticRelatedInformationCompressor = new GenericCompressor<lsp.Diagnos
 ]);
 Compressor.addCompressor(diagnosticRelatedInformationCompressor);
 
-const diagnosticCompressor = new GenericCompressor<lsp.Diagnostic>(undefined, Compressor.nextId(), (next) => [
+export const diagnosticCompressor = new GenericCompressor<lsp.Diagnostic>(undefined, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.literal('range', next(), lspRangeCompressor),
 	GenericCompressorProperty.scalar('severity', next()),
 	GenericCompressorProperty.scalar('code', next()),
