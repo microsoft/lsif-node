@@ -25,10 +25,6 @@ function assertDefined<T>(value: T | undefined | null): T {
 	return value;
 }
 
-function isLocalMoniker(moniker: MonikerData): boolean {
-	return moniker.scheme === '$local';
-}
-
 namespace Ranges {
 	export function compare(r1: lsp.Range, r2: lsp.Range): number {
 		if (r1.start.line < r2.start.line) {
@@ -88,6 +84,10 @@ namespace Monikers {
 		}
 		return 0;
 	}
+
+	export function isLocal(moniker: MonikerData): boolean {
+		return moniker.scheme === '$local';
+	}
 }
 
 namespace Diagnostics {
@@ -136,9 +136,9 @@ interface DocumentBlob {
 }
 
 interface NavigationResultPartition {
-	declarationResult?: Id[];
-	definitionResult?: Id[]
-	referenceResult?: Id[];
+	declarations?: Id[];
+	definitions?: Id[]
+	references?: Id[];
 }
 
 interface RangeData extends Pick<Range, 'start' | 'end' | 'tag'> {
@@ -163,21 +163,27 @@ interface DataProvider {
 	getMonikerData(id: Id): MonikerData | undefined;
 	removeMonikerData(id: Id): void;
 	getHoverData(id: Id): lsp.Hover | undefined;
+	getAndDeleteDeclarations(id: Id, documentId: Id): Id[] | undefined;
+	getAndDeleteDefinitions(id: Id, documentId: Id): Id[] | undefined;
+	getAndDeleteReferences(id: Id, documentId: Id): Id[] | undefined;
 }
 
 class DocumentData {
 
 	private provider: DataProvider;
+
+	private id: Id;
 	private blob: DocumentBlob;
 
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
+		this.id = document.id;
 		this.blob = { contents: document.contents!, ranges: Object.create(null) };
 	}
 
 	public addRangeData(id: Id, data: RangeData): void {
 		this.blob.ranges[id] = data;
-		this.addReferencedData(data);
+		this.addReferencedData(id, data);
 	}
 
 	private addResultSetData(id: Id, resultSet: ResultSetData): void {
@@ -185,10 +191,10 @@ class DocumentData {
 			this.blob.resultSets = LiteralMap.create();
 		}
 		this.blob.resultSets![id] = resultSet;
-		this.addReferencedData(resultSet);
+		this.addReferencedData(id, resultSet);
 	}
 
-	private addReferencedData(item: RangeData | ResultSetData): void {
+	private addReferencedData(id: Id, item: RangeData | ResultSetData): void {
 		let moniker: MonikerData | undefined;
 		if (item.moniker !== undefined) {
 			moniker = assertDefined(this.provider.getMonikerData(item.moniker));
@@ -198,9 +204,15 @@ class DocumentData {
 			this.addResultSetData(item.next, assertDefined(this.provider.getResultData(item.next)));
 		}
 		if (item.hoverResult !== undefined) {
-			if (moniker === undefined || isLocalMoniker(moniker)) {
+			if (moniker === undefined || Monikers.isLocal(moniker)) {
 				this.addHover(item.hoverResult)
 			}
+		}
+		const declarations = this.provider.getAndDeleteDeclarations(id, this.id);
+		const definitions = this.provider.getAndDeleteDeclarations(id, this.id);
+		const references = this.provider.getAndDeleteReferences(id, this.id);
+		if (declarations !== undefined || definitions !== undefined || references || undefined) {
+			item.primaryPartition = { declarations, definitions, references };
 		}
 	}
 
@@ -320,11 +332,12 @@ export class Database implements DataProvider {
 	private resultSetDatas: Map<Id, ResultSetData>;
 	private monikerDatas: Map<Id, MonikerData>;
 	private hoverDatas: Map<Id, lsp.Hover>;
-	private declarationDatas: Map<Id, Map<string, Id[]>>;
-	private definitionDatas: Map<Id, Map<string, Id[]>>;
-	private referenceDatas: Map<Id, Map<string, Id[]>>;
-	private implementationDatas: Map<Id, Map<string, Id[]>>;
-	private referenceResultDatas: Map<Id, Map<string, Id[]>>;
+	private navigationEdges: Map<Id, Id>;
+	private declarationDatas: Map<Id, Map<Id, Id[]>>;
+	private definitionDatas: Map<Id, Map<Id, Id[]>>;
+	private referenceDatas: Map<Id, Map<Id, Id[]>>;
+	private implementationDatas: Map<Id, Map<Id, Id[]>>;
+	private referenceResultDatas: Map<Id, Map<Id, Id[]>>;
 
 	private containsDatas: Map<Id, Id[]>;
 
@@ -341,6 +354,7 @@ export class Database implements DataProvider {
 		this.resultSetDatas = new Map();
 		this.monikerDatas = new Map();
 		this.hoverDatas = new Map();
+		this.navigationEdges = new Map();
 		this.declarationDatas = new Map();
 		this.definitionDatas = new Map();
 		this.referenceDatas = new Map();
@@ -439,6 +453,38 @@ export class Database implements DataProvider {
 		return this.hoverDatas.get(id);
 	}
 
+	public getAndDeleteDeclarations(id: Id, documentId: Id): Id[] | undefined {
+		return this.getAndDeleteNavigation(this.declarationDatas, id, documentId);
+	}
+
+	public getAndDeleteDefinitions(id: Id, documentId: Id): Id[] | undefined {
+		return this.getAndDeleteNavigation(this.definitionDatas, id, documentId);
+	}
+
+	public getAndDeleteReferences(id: Id, documentId: Id): Id[] | undefined {
+		return this.getAndDeleteNavigation(this.referenceDatas, id, documentId);
+	}
+
+	private getAndDeleteNavigation(navData: Map<Id, Map<Id, Id[]>>, id: Id, documentId: Id): Id[] | undefined {
+		const navId = this.navigationEdges.get(id);
+		if (navId === undefined) {
+			return undefined;
+		}
+		let moniker = assertDefined(this.lookupMoniker(id));
+		if (Monikers.isLocal(moniker)) {
+			this.navigationEdges.delete(id);
+		}
+		const map = navData.get(navId);
+		if (map === undefined) {
+			return undefined;
+		}
+		const result = map.get(documentId);
+		if (result !== undefined) {
+			map.delete(documentId);
+		}
+		return result;
+	}
+
 	public runInsertTransaction(cb: (db: Database) => void): void {
 		cb(this);
 	}
@@ -506,18 +552,21 @@ export class Database implements DataProvider {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
 		this.declarationDatas.set(edge.inV, new Map());
+		this.navigationEdges.set(edge.outV, edge.inV);
 	}
 
 	private handleDefinitionEdge(edge: textDocument_definition): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
 		this.definitionDatas.set(edge.inV, new Map());
+		this.navigationEdges.set(edge.outV, edge.inV);
 	}
 
 	private handleReferenceEdge(edge: textDocument_references): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
 		this.referenceDatas.set(edge.inV, new Map());
+		this.navigationEdges.set(edge.outV, edge.inV);
 	}
 
 	private ensureMoniker(data: RangeData | ResultSetData): void {
@@ -527,6 +576,14 @@ export class Database implements DataProvider {
 		const monikerData: MonikerData = { scheme: '$synthetic', identifier: uuid.v4() };
 		data.moniker = monikerData.identifier;
 		this.monikerDatas.set(monikerData.identifier, monikerData);
+	}
+
+	private lookupMoniker(id: Id): MonikerData | undefined {
+		let data = this.rangeDatas.get(id) || this.resultSetDatas.get(id);
+		if (data === undefined  || data.moniker === undefined) {
+			return undefined;
+		}
+		return this.monikerDatas.get(data.moniker);
 	}
 
 	private handleItemEdge(edge: item): void {
