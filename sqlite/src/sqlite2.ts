@@ -8,10 +8,13 @@ import * as crypto from 'crypto';
 // import * as Sqlite from 'better-sqlite3';
 
 import * as lsp from 'vscode-languageserver-protocol';
+import { Compressor, foldingRangeCompressor, CompressorOptions } from './compress';
+
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
-	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange, textDocument_documentSymbol, textDocument_diagnostic, RangeTagTypes
+	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange,
+	textDocument_documentSymbol, textDocument_diagnostic
 } from 'lsif-protocol';
 
 function assertDefined<T>(value: T | undefined | null): T {
@@ -53,22 +56,6 @@ namespace Ranges {
 		}
 		return 0;
 	}
-	export function hash(hash: crypto.Hash, range: Range): void {
-		const values: any[] = [];
-		values.push(range.start.line, range.start.character, range.end.line, range.end.character);
-		if (range.tag !== undefined) {
-			values.push(range.tag.type, range.tag.text);
-			if (range.tag.type === RangeTagTypes.definition || range.tag.type === RangeTagTypes.declaration) {
-				let fullRange = range.tag.fullRange;
-				let fullRangeValue: any[] = [];
-				fullRangeValue.push(fullRange.start.line, fullRange.start.character, fullRange.end.line, fullRange.end.character);
-				values.push(range.tag.kind, !!range.tag.deprecated, fullRangeValue, range.tag.detail !== undefined ? range.tag.detail : '');
-			}
-		} else {
-			values.push(null);
-		}
-		hash.update(JSON.stringify(values, undefined, 0));
-	}
 }
 
 namespace Strings {
@@ -77,7 +64,7 @@ namespace Strings {
 	}
 }
 
-namespace Diagnostics {
+export namespace Diagnostics {
 	export function compare(d1: lsp.Diagnostic, d2: lsp.Diagnostic): number {
 		let result = Ranges.compare(d1.range, d2.range);
 		if (result !== 0) {
@@ -89,16 +76,26 @@ namespace Diagnostics {
 		}
 		return 0;
 	}
-
-	export function hash(hash: crypto.Hash, diag: lsp.Diagnostic): void {
-
-	}
-
 }
 
 interface LiteralMap<T> {
 	[key: string]: T;
 	[key: number]: T;
+}
+
+namespace LiteralMap {
+
+	export function create<T = any>(): LiteralMap<T> {
+		return Object.create(null);
+	}
+
+	export function values<T>(map: LiteralMap<T>): T[] {
+		let result: T[] = [];
+		for (let key of Object.keys(map)) {
+			result.push(map[key]);
+		}
+		return result;
+	}
 }
 
 interface DocumentBlob {
@@ -180,7 +177,7 @@ class DocumentData {
 
 	private addResultSetData(id: Id, resultSet: ResultSetData): void {
 		if (this.blob.resultSets === undefined) {
-			this.blob.resultSets = Object.create(null);
+			this.blob.resultSets = LiteralMap.create();
 		}
 		this.blob.resultSets![id] = resultSet;
 
@@ -213,14 +210,14 @@ class DocumentData {
 
 	private addMoniker(id: Id, moniker: MonikerData): void {
 		if (this.blob.monikers === undefined) {
-			this.blob.monikers = Object.create(null);
+			this.blob.monikers = LiteralMap.create();
 		}
 		this.blob.monikers![id] = moniker;
 	}
 
 	private addHover(id: Id): void {
 		if (this.blob.hovers === undefined) {
-			this.blob.hovers = Object.create(null);
+			this.blob.hovers = LiteralMap.create();
 		}
 		this.blob.hovers![id] = assertDefined(this.provider.getHoverData(id));
 	}
@@ -250,18 +247,22 @@ class DocumentData {
 	private computeHash(): string {
 		let hash = crypto.createHash('md5');
 		hash.update(this.blob.contents);
+		let options: CompressorOptions = { mode: 'hash' };
+		let compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
+		let ranges = LiteralMap.values(this.blob.ranges).sort(Ranges.compare);
+		for (let range of ranges) {
+			let compressed = compressor.compress(range, options);
+			hash.update(JSON.stringify(compressed, undefined, 0));
+		}
 		// Assume that folding ranges are already sorted
 		if (this.blob.foldingRanges) {
-			hash.update(JSON.stringify(this.blob.foldingRanges, undefined, 0));
+			let compressor = foldingRangeCompressor;
+			for (let range of this.blob.foldingRanges) {
+				let compressed = compressor.compress(range, options);
+				hash.update(JSON.stringify(compressed, undefined, 0))
+			}
 		}
 		return hash.digest('base64');
-	}
-
-	private sortDiagnostics(): void {
-		if (this.blob.diagnostics === undefined) {
-			return;
-		}
-		this.blob.diagnostics = this.blob.diagnostics.sort(Diagnostics.compare);
 	}
 }
 

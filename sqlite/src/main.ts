@@ -116,7 +116,7 @@ export function main(): void {
 		if (compressor === undefined) {
 			throw new Error(`No compressor found for ${element.label}`);
 		}
-		return JSON.stringify(compressor.compress(element));
+		return JSON.stringify(compressor.compress(element, { mode: 'store' }));
 	}
 
 	function shortForm(element: Vertex | Edge): number {
