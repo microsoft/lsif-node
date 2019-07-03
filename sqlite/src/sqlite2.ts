@@ -15,7 +15,8 @@ import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompre
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
 	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange,
-	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind, textDocument_declaration, textDocument_definition, textDocument_references, item, ItemEdgeProperties
+	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind, textDocument_declaration, textDocument_definition, textDocument_references, item,
+	ItemEdgeProperties, DeclarationResult, DefinitionResult, ReferenceResult
 } from 'lsif-protocol';
 
 function assertDefined<T>(value: T | undefined | null): T {
@@ -124,38 +125,53 @@ namespace LiteralMap {
 	}
 }
 
-interface DocumentBlob {
-	contents: string;
-	ranges: LiteralMap<RangeData>;
-	resultSets?: LiteralMap<ResultSetData>;
-	monikers?: LiteralMap<MonikerData>;
-	hovers?: LiteralMap<lsp.Hover>;
-	foldingRanges?: lsp.FoldingRange[];
-	documentSymbols?: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[];
-	diagnostics?: lsp.Diagnostic[];
-}
-
-interface NavigationResultPartition {
-	declarations?: Id[];
-	definitions?: Id[]
-	references?: Id[];
-}
-
 interface RangeData extends Pick<Range, 'start' | 'end' | 'tag'> {
 	moniker?: Id;
 	next?: Id;
 	hoverResult?: Id;
-	primaryPartition?: NavigationResultPartition;
+	declarationResult?: Id;
+	definitionResult?: Id;
+	referenceResult?: Id;
 }
 
 interface ResultSetData {
 	moniker?: Id;
 	next?: Id;
 	hoverResult?: Id;
-	primaryPartition?: NavigationResultPartition;
+	declarationResult?: Id;
+	definitionResult?: Id;
+	referenceResult?: Id;
+}
+
+interface DeclarationResultData {
+	values: Id[];
+}
+
+interface DefinitionResultData {
+	values: Id[];
+}
+
+interface ReferenceResultData {
+	declarations?: Id[];
+	definitions?: Id[];
+	references?: Id[];
 }
 
 type MonikerData = Pick<Moniker, 'scheme' | 'identifier' | 'kind'>;
+
+interface DocumentBlob {
+	contents: string;
+	ranges: LiteralMap<RangeData>;
+	resultSets?: LiteralMap<ResultSetData>;
+	monikers?: LiteralMap<MonikerData>;
+	hovers?: LiteralMap<lsp.Hover>;
+	declarationResults?: LiteralMap<DeclarationResultData>;
+	definitionResults?: LiteralMap<DefinitionResultData>;
+	referenceResults?: LiteralMap<ReferenceResultData>;
+	foldingRanges?: lsp.FoldingRange[];
+	documentSymbols?: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[];
+	diagnostics?: lsp.Diagnostic[];
+}
 
 interface DataProvider {
 	getResultData(id: Id): ResultSetData | undefined;
@@ -163,9 +179,9 @@ interface DataProvider {
 	getMonikerData(id: Id): MonikerData | undefined;
 	removeMonikerData(id: Id): void;
 	getHoverData(id: Id): lsp.Hover | undefined;
-	getAndDeleteDeclarations(id: Id, documentId: Id): Id[] | undefined;
-	getAndDeleteDefinitions(id: Id, documentId: Id): Id[] | undefined;
-	getAndDeleteReferences(id: Id, documentId: Id): Id[] | undefined;
+	getAndDeleteDeclarations(declarationResult: Id, documentId: Id): DeclarationResultData;
+	getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData;
+	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData;
 }
 
 class DocumentData {
@@ -208,11 +224,23 @@ class DocumentData {
 				this.addHover(item.hoverResult)
 			}
 		}
-		const declarations = this.provider.getAndDeleteDeclarations(id, this.id);
-		const definitions = this.provider.getAndDeleteDeclarations(id, this.id);
-		const references = this.provider.getAndDeleteReferences(id, this.id);
-		if (declarations !== undefined || definitions !== undefined || references || undefined) {
-			item.primaryPartition = { declarations, definitions, references };
+		if (item.declarationResult) {
+			if (this.blob.declarationResults === undefined) {
+				this.blob.declarationResults = LiteralMap.create();
+			}
+			this.blob.declarationResults[item.declarationResult] = this.provider.getAndDeleteDeclarations(item.declarationResult, this.id);
+		}
+		if (item.definitionResult) {
+			if (this.blob.definitionResults === undefined) {
+				this.blob.definitionResults = LiteralMap.create();
+			}
+			this.blob.definitionResults[item.definitionResult] = this.provider.getAndDeleteDefinitions(item.definitionResult, this.id);
+		}
+		if (item.referenceResult) {
+			if (this.blob.referenceResults === undefined) {
+				this.blob.referenceResults = LiteralMap.create();
+			}
+			this.blob.referenceResults[item.referenceResult] = this.provider.getAndDeleteReferences(item.referenceResult, this.id);
 		}
 	}
 
@@ -251,10 +279,14 @@ class DocumentData {
 		hash.update(this.blob.contents);
 		const options: CompressorOptions = { mode: 'hash' };
 		const compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
-		const ranges = LiteralMap.values(this.blob.ranges).sort(Ranges.compare);
-		for (let range of ranges) {
-			const compressed = compressor.compress(range, options);
-			hash.update(JSON.stringify(compressed, undefined, 0));
+		const rangeHashes: Map<Id, string> = new Map();
+		for (let key of Object.keys(this.blob.ranges)) {
+			const range = this.blob.ranges[key];
+			const rangeHash = crypto.createHash('md5').update(JSON.stringify(compressor.compress(range, options), undefined, 0)).digest('base64');
+			rangeHashes.set(Number(key), rangeHash);
+		}
+		for (let item of Array.from(rangeHashes.values()).sort(Strings.compare)) {
+			hash.update(item);
 		}
 
 		// moniker
@@ -275,7 +307,6 @@ class DocumentData {
 				hash.update(JSON.stringify(compressed, undefined, 0))
 			}
 		}
-
 		// Unsure if we need to sort the children by range or not?
 		if (this.blob.documentSymbols && this.blob.documentSymbols.length > 0) {
 			const first = this.blob.documentSymbols[0];
@@ -285,8 +316,8 @@ class DocumentData {
 			}
 			const inline = (result: any[], value: RangeBasedDocumentSymbol) => {
 				const item: any[] = [];
-				const compressed = compressor.compress(this.blob.ranges[value.id], options);
-				item.push(compressed);
+				const rangeHash = assertDefined(rangeHashes.get(value.id));
+				item.push(rangeHash);
 				if (value.children && value.children.length > 0) {
 					const children: any[] = [];
 					for (let child of value.children) {
@@ -332,12 +363,9 @@ export class Database implements DataProvider {
 	private resultSetDatas: Map<Id, ResultSetData>;
 	private monikerDatas: Map<Id, MonikerData>;
 	private hoverDatas: Map<Id, lsp.Hover>;
-	private navigationEdges: Map<Id, Id>;
-	private declarationDatas: Map<Id, Map<Id, Id[]>>;
-	private definitionDatas: Map<Id, Map<Id, Id[]>>;
-	private referenceDatas: Map<Id, Map<Id, Id[]>>;
-	private implementationDatas: Map<Id, Map<Id, Id[]>>;
-	private referenceResultDatas: Map<Id, Map<Id, Id[]>>;
+	private declarationDatas: Map<Id /* result id */, Map<Id /* document id */, DeclarationResultData>>;
+	private definitionDatas: Map<Id /* result id */, Map<Id /* document id */, DefinitionResultData>>;
+	private referenceDatas: Map<Id /* result id */, Map<Id /* document id */, ReferenceResultData>>;
 
 	private containsDatas: Map<Id, Id[]>;
 
@@ -354,12 +382,9 @@ export class Database implements DataProvider {
 		this.resultSetDatas = new Map();
 		this.monikerDatas = new Map();
 		this.hoverDatas = new Map();
-		this.navigationEdges = new Map();
 		this.declarationDatas = new Map();
 		this.definitionDatas = new Map();
 		this.referenceDatas = new Map();
-		this.implementationDatas = new Map();
-		this.referenceResultDatas = new Map()
 		this.containsDatas = new Map();
 	}
 
@@ -380,6 +405,15 @@ export class Database implements DataProvider {
 					break;
 				case VertexLabels.hoverResult:
 					this.handleHover(element);
+					break;
+				case VertexLabels.declarationResult:
+					this.handleDeclarationResult(element);
+					break;
+				case VertexLabels.definitionResult:
+					this.handleDefinitionResult(element);
+					break;
+				case VertexLabels.referenceResult:
+					this.handleReferenceResult(element);
 					break;
 				case VertexLabels.foldingRangeResult:
 					this.handleFoldingRange(element);
@@ -453,35 +487,24 @@ export class Database implements DataProvider {
 		return this.hoverDatas.get(id);
 	}
 
-	public getAndDeleteDeclarations(id: Id, documentId: Id): Id[] | undefined {
-		return this.getAndDeleteNavigation(this.declarationDatas, id, documentId);
+	public getAndDeleteDeclarations(declaratinResult: Id, documentId: Id): DeclarationResultData {
+		const map = assertDefined(this.declarationDatas.get(declaratinResult));
+		const result = map.get(documentId) || { values: [] };
+		map.delete(documentId);
+		return result;
 	}
 
-	public getAndDeleteDefinitions(id: Id, documentId: Id): Id[] | undefined {
-		return this.getAndDeleteNavigation(this.definitionDatas, id, documentId);
+	public getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData {
+		const map = assertDefined(this.definitionDatas.get(definitionResult));
+		const result = map.get(documentId) || { values: [] };
+		map.delete(documentId);
+		return result;
 	}
 
-	public getAndDeleteReferences(id: Id, documentId: Id): Id[] | undefined {
-		return this.getAndDeleteNavigation(this.referenceDatas, id, documentId);
-	}
-
-	private getAndDeleteNavigation(navData: Map<Id, Map<Id, Id[]>>, id: Id, documentId: Id): Id[] | undefined {
-		const navId = this.navigationEdges.get(id);
-		if (navId === undefined) {
-			return undefined;
-		}
-		let moniker = assertDefined(this.lookupMoniker(id));
-		if (Monikers.isLocal(moniker)) {
-			this.navigationEdges.delete(id);
-		}
-		const map = navData.get(navId);
-		if (map === undefined) {
-			return undefined;
-		}
-		const result = map.get(documentId);
-		if (result !== undefined) {
-			map.delete(documentId);
-		}
+	public getAndDeleteReferences(referenceResult: Id, documentId: Id): ReferenceResultData {
+		const map = assertDefined(this.referenceDatas.get(referenceResult));
+		const result = map.get(documentId) || {};
+		map.delete(documentId);
 		return result;
 	}
 
@@ -548,25 +571,37 @@ export class Database implements DataProvider {
 		outV.hoverResult = edge.inV;
 	}
 
+	private handleDeclarationResult(result: DeclarationResult): void {
+		this.declarationDatas.set(result.id, new Map());
+	}
+
 	private handleDeclarationEdge(edge: textDocument_declaration): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
-		this.declarationDatas.set(edge.inV, new Map());
-		this.navigationEdges.set(edge.outV, edge.inV);
+		assertDefined(this.declarationDatas.get(edge.inV));
+		outV.declarationResult = edge.inV;
+	}
+
+	private handleDefinitionResult(result: DefinitionResult): void {
+		this.definitionDatas.set(result.id, new Map());
 	}
 
 	private handleDefinitionEdge(edge: textDocument_definition): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
-		this.definitionDatas.set(edge.inV, new Map());
-		this.navigationEdges.set(edge.outV, edge.inV);
+		assertDefined(this.definitionDatas.get(edge.inV));
+		outV.definitionResult = edge.inV;
+	}
+
+	private handleReferenceResult(result: ReferenceResult): void {
+		this.referenceDatas.set(result.id, new Map());
 	}
 
 	private handleReferenceEdge(edge: textDocument_references): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
 		this.ensureMoniker(outV);
-		this.referenceDatas.set(edge.inV, new Map());
-		this.navigationEdges.set(edge.outV, edge.inV);
+		assertDefined(this.referenceDatas.get(edge.inV));
+		outV.referenceResult = edge.inV;
 	}
 
 	private ensureMoniker(data: RangeData | ResultSetData): void {
@@ -578,41 +613,56 @@ export class Database implements DataProvider {
 		this.monikerDatas.set(monikerData.identifier, monikerData);
 	}
 
-	private lookupMoniker(id: Id): MonikerData | undefined {
-		let data = this.rangeDatas.get(id) || this.resultSetDatas.get(id);
-		if (data === undefined  || data.moniker === undefined) {
-			return undefined;
-		}
-		return this.monikerDatas.get(data.moniker);
-	}
+	// private lookupMoniker(id: Id): MonikerData | undefined {
+	// 	let data = this.rangeDatas.get(id) || this.resultSetDatas.get(id);
+	// 	if (data === undefined  || data.moniker === undefined) {
+	// 		return undefined;
+	// 	}
+	// 	return this.monikerDatas.get(data.moniker);
+	// }
 
 	private handleItemEdge(edge: item): void {
 		let property: ItemEdgeProperties | undefined = edge.property;
 		if (property === undefined) {
-			return;
+			const map: Map<Id, DefinitionResultData> | Map<Id, DeclarationResultData> = assertDefined(this.declarationDatas.get(edge.outV) || this.definitionDatas.get(edge.outV));
+			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.document);
+			if (data === undefined) {
+				data = { values: edge.inVs.slice() };
+				map.set(edge.document, data);
+			} else {
+				data.values.push(...edge.inVs);
+			}
+		} else {
+			const map: Map<Id, ReferenceResultData> = assertDefined(this.referenceDatas.get(edge.outV));
+			let data: ReferenceResultData | undefined = map.get(edge.document);
+			if (data === undefined) {
+				data = {};
+				map.set(edge.document, data);
+			}
+			switch (property) {
+				case ItemEdgeProperties.declarations:
+					if (data.declarations === undefined) {
+						data.declarations = edge.inVs.slice();
+					} else {
+						data.declarations.push(...edge.inVs);
+					}
+					break;
+				case ItemEdgeProperties.definitions:
+					if (data.definitions === undefined) {
+						data.definitions = edge.inVs.slice();
+					} else {
+						data.definitions.push(...edge.inVs);
+					}
+					break;
+				case ItemEdgeProperties.references:
+					if (data.references === undefined) {
+						data.references = edge.inVs.slice();
+					} else {
+						data.references.push(...edge.inVs);
+					}
+					break;
+			}
 		}
-		let data: Map<Id, Id[]> | undefined;
-		switch (property) {
-			case ItemEdgeProperties.declarations:
-				data = this.declarationDatas.get(edge.outV);
-				break;
-			case ItemEdgeProperties.definitions:
-				data = this.definitionDatas.get(edge.outV);
-				break;
-			case ItemEdgeProperties.references:
-				data = this.referenceDatas.get(edge.outV);
-				break;
-			case ItemEdgeProperties.implementationResults:
-				data = this.implementationDatas.get(edge.outV);
-				break;
-			case ItemEdgeProperties.referenceResults:
-				data = this.referenceResultDatas.get(edge.outV);
-				break;
-		}
-		if (data === undefined) {
-			return;
-		}
-		data.set(edge.document, edge.inVs);
 	}
 
 	private handleFoldingRange(folding: FoldingRangeResult): void {
