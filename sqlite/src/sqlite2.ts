@@ -3,9 +3,9 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as crypto from 'crypto';
-// import * as fs from 'fs';
+import * as fs from 'fs';
 
-// import * as Sqlite from 'better-sqlite3';
+import * as Sqlite from 'better-sqlite3';
 
 import * as uuid from 'uuid';
 
@@ -184,17 +184,35 @@ interface DataProvider {
 	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData;
 }
 
+interface DocumentDatabaseData {
+	hash: string;
+	blob: string;
+	declarations?: [number, number, number, number][];
+	definitions?: [number, number, number, number][];
+	references?: {
+		declarations?: [number, number, number, number][];
+		definitions?: [number, number, number, number][];
+		references?: [number, number, number, number][];
+	}
+}
+
 class DocumentData {
 
 	private provider: DataProvider;
 
 	private id: Id;
+	private _uri: string;
 	private blob: DocumentBlob;
 
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
 		this.id = document.id;
+		this._uri = document.uri;
 		this.blob = { contents: document.contents!, ranges: Object.create(null) };
+	}
+
+	get uri(): string {
+		return this._uri;
 	}
 
 	public addRangeData(id: Id, data: RangeData): void {
@@ -270,8 +288,11 @@ class DocumentData {
 		this.blob.hovers![id] = assertDefined(this.provider.getHoverData(id));
 	}
 
-	public finalize(): string {
-		return this.computeHash();
+	public finalize(): DocumentDatabaseData {
+		return {
+			hash: this.computeHash(),
+			blob: JSON.stringify(this.blob, undefined, 0),
+		}
 	}
 
 	private computeHash(): string {
@@ -350,14 +371,18 @@ class DocumentData {
 
 export class Database implements DataProvider {
 
-	private documents: Map<Id, Document>;
+	private db: Sqlite.Database;
+	private insertBlobStatement: Sqlite.Statement;
+	private insertDocumentStatement: Sqlite.Statement;
+	private insertVersionStatement: Sqlite.Statement;
 
+
+	private documents: Map<Id, Document>;
 	private documentDatas: Map<Id, DocumentData | null>;
 
 	private foldingRanges: Map<Id, lsp.FoldingRange[]>;
 	private documentSymbols: Map<Id, lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>;
 	private diagnostics: Map<Id, lsp.Diagnostic[]>;
-
 
 	private rangeDatas: Map<Id, RangeData>;
 	private resultSetDatas: Map<Id, ResultSetData>;
@@ -369,7 +394,7 @@ export class Database implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor() {
+	constructor(filename: string) {
 		this.documents = new Map();
 
 		this.documentDatas = new Map();
@@ -386,6 +411,36 @@ export class Database implements DataProvider {
 		this.definitionDatas = new Map();
 		this.referenceDatas = new Map();
 		this.containsDatas = new Map();
+
+		try {
+			fs.unlinkSync(filename);
+		} catch (err) {
+		}
+		this.db = new Sqlite(filename);
+		this.db.pragma('synchronous = OFF');
+		this.db.pragma('journal_mode = MEMORY');
+		this.createTables();
+		this.insertBlobStatement = this.db.prepare('Insert Into blobs (documentId, content) VALUES (?, ?)');
+		this.insertDocumentStatement = this.db.prepare('Insert Into documents (documentId, uri) VALUES (?, ?)');
+		this.insertVersionStatement = this.db.prepare('Insert Into versions (versionId, documentId) VALUES (?, ?)');
+	}
+
+	private createTables(): void {
+		this.db.exec('Create Table blobs (documentId Text Unique Primary Key, content Blob Not Null)');
+		this.db.exec('Create Table documents (documentId Text Not Null, uri Text Not Null)');
+		this.db.exec('Create Table versions (versionId Text Not Null, documentId Text Not Null)');
+		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
+		this.db.exec('Create Table defs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
+		this.db.exec('Create Table refs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
+	}
+
+	private createIndices(): void {
+		this.db.exec('Create Index _blobs on blobs (documentId)');
+		this.db.exec('Create Index _documents on documents (documentId)');
+		this.db.exec('Create Index _versions on versions (versionId)');
+		this.db.exec('Create Index _decls on decls (identifier, scheme, documentId)');
+		this.db.exec('Create Index _defs on defs (identifier, scheme, documentId)');
+		this.db.exec('Create Index _refs on refs (identifier, scheme, documentId)');
 	}
 
 	public insert(element: Edge | Vertex): void {
@@ -513,6 +568,8 @@ export class Database implements DataProvider {
 	}
 
 	public close(): void {
+		this.createIndices();
+		this.db.close();
 	}
 
 	private handleEvent(event: Event): void {
@@ -711,15 +768,16 @@ export class Database implements DataProvider {
 	private handleDocumentEnd(event: DocumentEvent) {
 		const documentData = this.getEnsureDocumentData(event.data);
 		const contains = this.containsDatas.get(event.data);
-		if (contains === undefined) {
-			return;
+		if (contains !== undefined) {
+			for (let id of contains) {
+				const range = assertDefined(this.rangeDatas.get(id));
+				documentData.addRangeData(id, range);
+			}
 		}
-		for (let id of contains) {
-			const range = assertDefined(this.rangeDatas.get(id));
-			documentData.addRangeData(id, range);
-		}
-		console.log(documentData.finalize());
-		// Insert into DB
+		let data = documentData.finalize();
+		this.insertBlobStatement.run(data.hash, data.blob);
+		this.insertDocumentStatement.run(data.hash, documentData.uri);
+		this.insertVersionStatement.run('v1', data.hash);
 		this.documentDatas.set(event.id, null);
 	}
 

@@ -155,16 +155,18 @@ export function main(): void {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
 	let db: sql.Database | blob.Database | undefined;
-	if (options.blob) {
-		db = new blob.Database();
-	} else if (options.compressOnly && options.out) {
+	if (options.compressOnly && options.out) {
 		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	} else if (!options.compressOnly && options.out) {
 		let filename = options.out;
 		if (!filename.endsWith('.db')) {
 			filename = filename + '.db';
 		}
-		db = new sql.Database(filename, stringify, shortForm);
+		if (options.blob) {
+			db = new blob.Database(filename);
+		} else {
+			db = new sql.Database(filename, stringify, shortForm);
+		}
 	}
 
 	function emitMetaData(vertex: MetaData): void {
