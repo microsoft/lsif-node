@@ -10,8 +10,7 @@ import { Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, Met
 import { itemPropertyShortForms } from './compress';
 import { Inserter } from './inserter';
 
-
-export class Database {
+export class GraphStore {
 
 	private db: Sqlite.Database;
 	private insertContentStmt: Sqlite.Statement;
@@ -63,7 +62,7 @@ export class Database {
 		this.db.exec('Create Index items_inv on items (inV)');
 	}
 
-	public runInsertTransaction(cb: (db: Database) => void): void {
+	public runInsertTransaction(cb: (db: GraphStore) => void): void {
 		this.db.transaction(() => {
 			cb(this);
 		})();

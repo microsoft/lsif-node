@@ -444,7 +444,7 @@ class DocumentData {
 	}
 }
 
-export class Database implements DataProvider {
+export class BlobStore implements DataProvider {
 
 	private db: Sqlite.Database;
 	private insertBlobStatement: Sqlite.Statement;
@@ -644,7 +644,7 @@ export class Database implements DataProvider {
 		return result;
 	}
 
-	public runInsertTransaction(cb: (db: Database) => void): void {
+	public runInsertTransaction(cb: (db: BlobStore) => void): void {
 		cb(this);
 	}
 

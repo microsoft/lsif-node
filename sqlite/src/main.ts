@@ -10,8 +10,8 @@ import * as minimist from 'minimist';
 import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
 import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
-import * as sql from './sqlite';
-import * as blob from './sqlite2';
+import * as graph from './graphStore';
+import * as blob from './blobStore';
 import { StdoutWriter, FileWriter, Writer } from './writer';
 
 interface Options {
@@ -154,7 +154,7 @@ export function main(): void {
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-	let db: sql.Database | blob.Database | undefined;
+	let db: graph.GraphStore | blob.BlobStore | undefined;
 	if (options.compressOnly && options.out) {
 		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	} else if (!options.compressOnly && options.out) {
@@ -163,9 +163,9 @@ export function main(): void {
 			filename = filename + '.db';
 		}
 		if (options.blob) {
-			db = new blob.Database(filename);
+			db = new blob.BlobStore(filename);
 		} else {
-			db = new sql.Database(filename, stringify, shortForm);
+			db = new graph.GraphStore(filename, stringify, shortForm);
 		}
 	}
 
