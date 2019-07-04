@@ -15,7 +15,7 @@ import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
 	RangeBasedDocumentSymbol, DocumentSymbolResult, DiagnosticResult, Moniker, next, ResultSet, moniker, HoverResult, textDocument_hover, textDocument_foldingRange,
 	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind, textDocument_declaration, textDocument_definition, textDocument_references, item,
-	ItemEdgeProperties, DeclarationResult, DefinitionResult, ReferenceResult
+	ItemEdgeProperties, DeclarationResult, DefinitionResult, ReferenceResult, MetaData
 } from 'lsif-protocol';
 
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
@@ -237,7 +237,7 @@ class DocumentData {
 		this.provider = provider;
 		this.id = document.id;
 		this._uri = document.uri;
-		this.blob = { contents: document.contents!, ranges: Object.create(null) };
+		this.blob = { contents: Buffer.from(document.contents!, 'base64').toString('utf8'), ranges: Object.create(null) };
 		this.declarations = [];
 		this.definitions = [];
 		this.references = [];
@@ -507,6 +507,7 @@ export class BlobStore implements DataProvider {
 	}
 
 	private createTables(): void {
+		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
 		this.db.exec('Create Table blobs (documentId Text Unique Primary Key, content Blob Not Null)');
 		this.db.exec('Create Table documents (documentId Text Not Null, uri Text Not Null)');
 		this.db.exec('Create Table versions (versionId Text Not Null, documentId Text Not Null)');
@@ -527,6 +528,9 @@ export class BlobStore implements DataProvider {
 	public insert(element: Edge | Vertex): void {
 		if (element.type === ElementTypes.vertex) {
 			switch(element.label) {
+				case VertexLabels.metaData:
+					this.handleMetaData(element);
+					break;
 				case VertexLabels.document:
 					this.documents.set(element.id, element);
 					break;
@@ -654,6 +658,11 @@ export class BlobStore implements DataProvider {
 		this.referneceInserter.finish();
 		this.createIndices();
 		this.db.close();
+	}
+
+	private handleMetaData(vertex: MetaData): void {
+		let value = JSON.stringify(vertex, undefined, 0);
+		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 	}
 
 	private handleEvent(event: Event): void {
