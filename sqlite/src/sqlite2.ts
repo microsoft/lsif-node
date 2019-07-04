@@ -10,7 +10,6 @@ import * as Sqlite from 'better-sqlite3';
 import * as uuid from 'uuid';
 
 import * as lsp from 'vscode-languageserver-protocol';
-import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
@@ -18,6 +17,10 @@ import {
 	textDocument_documentSymbol, textDocument_diagnostic, MonikerKind, textDocument_declaration, textDocument_definition, textDocument_references, item,
 	ItemEdgeProperties, DeclarationResult, DefinitionResult, ReferenceResult
 } from 'lsif-protocol';
+
+import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
+import { Inserter } from './inserter';
+
 
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {
@@ -184,16 +187,39 @@ interface DataProvider {
 	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData;
 }
 
+type InlineRange = [number, number, number, number];
+
+interface ExternalDefinition {
+	scheme: string;
+	indentifier: string;
+	ranges: InlineRange[];
+}
+
+interface ExternalDeclaration {
+	scheme: string;
+	indentifier: string;
+	ranges: InlineRange[];
+}
+
+interface ExternalReference {
+	scheme: string;
+	indentifier: string;
+	declarations?: InlineRange[];
+	definitions?: InlineRange[];
+	references?: InlineRange[];
+}
+
 interface DocumentDatabaseData {
 	hash: string;
 	blob: string;
-	declarations?: [number, number, number, number][];
-	definitions?: [number, number, number, number][];
-	references?: {
-		declarations?: [number, number, number, number][];
-		definitions?: [number, number, number, number][];
-		references?: [number, number, number, number][];
-	}
+	declarations?: ExternalDeclaration[];
+	definitions?: ExternalDefinition[];
+	references?: ExternalReference[];
+}
+
+interface MonikerScopedResultData<T> {
+	moniker: MonikerData;
+	data: T;
 }
 
 class DocumentData {
@@ -203,12 +229,18 @@ class DocumentData {
 	private id: Id;
 	private _uri: string;
 	private blob: DocumentBlob;
+	private declarations: MonikerScopedResultData<DeclarationResultData>[];
+	private definitions: MonikerScopedResultData<DefinitionResultData>[];
+	private references: MonikerScopedResultData<ReferenceResultData>[];
 
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
 		this.id = document.id;
 		this._uri = document.uri;
 		this.blob = { contents: document.contents!, ranges: Object.create(null) };
+		this.declarations = [];
+		this.definitions = [];
+		this.references = [];
 	}
 
 	get uri(): string {
@@ -243,22 +275,40 @@ class DocumentData {
 			}
 		}
 		if (item.declarationResult) {
-			if (this.blob.declarationResults === undefined) {
-				this.blob.declarationResults = LiteralMap.create();
+			moniker = assertDefined(moniker);
+			const declarations = this.provider.getAndDeleteDeclarations(item.declarationResult, this.id)
+			if (Monikers.isLocal(moniker)) {
+				if (this.blob.declarationResults === undefined) {
+					this.blob.declarationResults = LiteralMap.create();
+				}
+				this.blob.declarationResults[item.declarationResult] = declarations;
+			} else {
+				this.declarations.push({ moniker, data: declarations});
 			}
-			this.blob.declarationResults[item.declarationResult] = this.provider.getAndDeleteDeclarations(item.declarationResult, this.id);
 		}
 		if (item.definitionResult) {
-			if (this.blob.definitionResults === undefined) {
-				this.blob.definitionResults = LiteralMap.create();
+			moniker = assertDefined(moniker);
+			const definitions = this.provider.getAndDeleteDefinitions(item.definitionResult, this.id);
+			if (Monikers.isLocal(moniker)) {
+				if (this.blob.definitionResults === undefined) {
+					this.blob.definitionResults = LiteralMap.create();
+				}
+				this.blob.definitionResults[item.definitionResult] = definitions;
+			} else {
+				this.definitions.push({ moniker, data: definitions });
 			}
-			this.blob.definitionResults[item.definitionResult] = this.provider.getAndDeleteDefinitions(item.definitionResult, this.id);
 		}
 		if (item.referenceResult) {
-			if (this.blob.referenceResults === undefined) {
-				this.blob.referenceResults = LiteralMap.create();
+			moniker = assertDefined(moniker);
+			const references = this.provider.getAndDeleteReferences(item.referenceResult, this.id);
+			if (Monikers.isLocal(moniker)) {
+				if (this.blob.referenceResults === undefined) {
+					this.blob.referenceResults = LiteralMap.create();
+				}
+				this.blob.referenceResults[item.referenceResult] = references;
+			} else {
+				this.references.push({ moniker, data: references });
 			}
-			this.blob.referenceResults[item.referenceResult] = this.provider.getAndDeleteReferences(item.referenceResult, this.id);
 		}
 	}
 
@@ -289,9 +339,34 @@ class DocumentData {
 	}
 
 	public finalize(): DocumentDatabaseData {
+		const id2InlineRange = (id: Id): [number, number, number, number] => {
+			const range = this.blob.ranges[id];
+			return [range.start.line, range.start.character, range.end.line, range.end.character];
+		}
+
+		let externalDeclarations: ExternalDeclaration[] = [];
+		for (let declaration of this.declarations) {
+			externalDeclarations.push({ scheme: declaration.moniker.scheme, indentifier: declaration.moniker.identifier, ranges: declaration.data.values.map(id2InlineRange) });
+		}
+		let externalDefinitions: ExternalDefinition[] = [];
+		for (let definition of this.definitions) {
+			externalDefinitions.push({ scheme: definition.moniker.scheme, indentifier: definition.moniker.identifier, ranges: definition.data.values.map(id2InlineRange) });
+		}
+		let externalReferences: ExternalReference[] = [];
+		for (let reference of this.references) {
+			externalReferences.push({
+				scheme: reference.moniker.scheme, indentifier: reference.moniker.identifier,
+				declarations : reference.data.declarations ? reference.data.declarations.map(id2InlineRange) : undefined,
+				definitions : reference.data.definitions ? reference.data.definitions.map(id2InlineRange) : undefined,
+				references : reference.data.references ? reference.data.references.map(id2InlineRange) : undefined
+			});
+		}
 		return {
 			hash: this.computeHash(),
 			blob: JSON.stringify(this.blob, undefined, 0),
+			declarations: externalDeclarations.length > 0 ? externalDeclarations : undefined,
+			definitions: externalDefinitions.length > 0 ? externalDefinitions : undefined,
+			references: externalReferences.length > 0 ? externalReferences : undefined
 		}
 	}
 
@@ -375,6 +450,9 @@ export class Database implements DataProvider {
 	private insertBlobStatement: Sqlite.Statement;
 	private insertDocumentStatement: Sqlite.Statement;
 	private insertVersionStatement: Sqlite.Statement;
+	private declarationInserter: Inserter;
+	private definitionInserter: Inserter;
+	private referneceInserter: Inserter;
 
 
 	private documents: Map<Id, Document>;
@@ -423,15 +501,18 @@ export class Database implements DataProvider {
 		this.insertBlobStatement = this.db.prepare('Insert Into blobs (documentId, content) VALUES (?, ?)');
 		this.insertDocumentStatement = this.db.prepare('Insert Into documents (documentId, uri) VALUES (?, ?)');
 		this.insertVersionStatement = this.db.prepare('Insert Into versions (versionId, documentId) VALUES (?, ?)');
+		this.declarationInserter = new Inserter(this.db, 'Insert Into decls (scheme, identifier, documentId, startLine, startCharacter, endLine, endCharacter)', 7, 128);
+		this.definitionInserter = new Inserter(this.db, 'Insert Into defs (scheme, identifier, documentId, startLine, startCharacter, endLine, endCharacter)', 7, 128);
+		this.referneceInserter = new Inserter(this.db, 'Insert Into refs (scheme, identifier, documentId, kind, startLine, startCharacter, endLine, endCharacter)', 8, 64);
 	}
 
 	private createTables(): void {
 		this.db.exec('Create Table blobs (documentId Text Unique Primary Key, content Blob Not Null)');
 		this.db.exec('Create Table documents (documentId Text Not Null, uri Text Not Null)');
 		this.db.exec('Create Table versions (versionId Text Not Null, documentId Text Not Null)');
-		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
-		this.db.exec('Create Table defs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
-		this.db.exec('Create Table refs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, ranges Blob Not Null)');
+		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table defs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table refs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, kind Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
 	}
 
 	private createIndices(): void {
@@ -568,6 +649,9 @@ export class Database implements DataProvider {
 	}
 
 	public close(): void {
+		this.declarationInserter.finish();
+		this.definitionInserter.finish();
+		this.referneceInserter.finish();
 		this.createIndices();
 		this.db.close();
 	}
@@ -778,6 +862,39 @@ export class Database implements DataProvider {
 		this.insertBlobStatement.run(data.hash, data.blob);
 		this.insertDocumentStatement.run(data.hash, documentData.uri);
 		this.insertVersionStatement.run('v1', data.hash);
+		if (data.declarations) {
+			for (let declaration of data.declarations) {
+				for (let range in declaration.ranges) {
+					this.declarationInserter.do(declaration.scheme, declaration.indentifier, data.hash, range[0], range[1], range[2], range[3]);
+				}
+			}
+		}
+		if (data.definitions) {
+			for (let definition of data.definitions) {
+				for (let range of definition.ranges) {
+					this.definitionInserter.do(definition.scheme, definition.indentifier, data.hash, range[0], range[1], range[2], range[3]);
+				}
+			}
+		}
+		if (data.references) {
+			for (let reference of data.references) {
+				if (reference.declarations) {
+					for (let range of reference.declarations) {
+						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 0, range[0], range[1], range[2], range[3]);
+					}
+				}
+				if (reference.definitions) {
+					for (let range of reference.definitions) {
+						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 1, range[0], range[1], range[2], range[3]);
+					}
+				}
+				if (reference.references) {
+					for (let range of reference.references) {
+						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 2, range[0], range[1], range[2], range[3]);
+					}
+				}
+			}
+		}
 		this.documentDatas.set(event.id, null);
 	}
 
