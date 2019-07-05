@@ -204,7 +204,8 @@
 			"program": "${workspaceFolder}/sqlite/lib/main.js",
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"args": [
-				"--blob",
+				"--format", "blob",
+				"--projectVersion", "v1",
 				"--in", "./test.lsif",
 				"--out", "./test.db"
 			],

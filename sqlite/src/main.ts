@@ -18,7 +18,9 @@ interface Options {
 	help: boolean;
 	version: boolean;
 	compressOnly: boolean;
-	blob: boolean;
+	format: 'graph' | 'blob';
+	projectVersion?: string;
+	delete: boolean,
 	in?: string;
 	stdin: boolean;
 	out?: string;
@@ -39,7 +41,9 @@ export namespace Options {
 		help: false,
 		version: false,
 		compressOnly: false,
-		blob: false,
+		format: 'graph',
+		projectVersion: undefined,
+		delete: false,
 		in: undefined,
 		stdin: false,
 		out: undefined,
@@ -50,7 +54,9 @@ export namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
-		{ id: 'blob', type: 'boolean', default: false, description: 'Store the dump in blob format.'},
+		{ id: 'format', type: 'string', default: 'graph', description: 'The SQLite format. Either graph (default) or blob.'},
+		{ id: 'delete', type: 'boolean', default: false, description: 'Deletes an old version of the DB. Only valid with blob format.'},
+		{ id: 'projectVersion', type: 'string', default: undefined, description: 'The imported project version. Only valid with blob format.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The name of the SQLite DB.'},
@@ -162,8 +168,13 @@ export function main(): void {
 		if (!filename.endsWith('.db')) {
 			filename = filename + '.db';
 		}
-		if (options.blob) {
-			db = new blob.BlobStore(filename);
+		if (options.format === 'blob') {
+			if (options.projectVersion === undefined) {
+				console.log(`Blob format requires a project version.`);
+				process.exitCode = -1;
+				return;
+			}
+			db = new blob.BlobStore(filename, options.projectVersion, options.delete);
 		} else {
 			db = new graph.GraphStore(filename, stringify, shortForm);
 		}

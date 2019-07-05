@@ -474,6 +474,7 @@ class DocumentData {
 
 export class BlobStore implements DataProvider {
 
+	private forceDelete: boolean;
 	private version: string;
 
 	private db: Sqlite.Database;
@@ -485,10 +486,10 @@ export class BlobStore implements DataProvider {
 	private referneceInserter: Inserter;
 	private hoverInserter: Inserter;
 
-
+	private knowHashes: Set<string>;
 	private documents: Map<Id, Document>;
 	private documentDatas: Map<Id, DocumentData | null>;
-	private handledHovers: Set<string>;
+	private seenHovers: Set<string>;
 
 	private foldingRanges: Map<Id, lsp.FoldingRange[]>;
 	private documentSymbols: Map<Id, lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>;
@@ -504,12 +505,14 @@ export class BlobStore implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor(filename: string, version: string = 'v1') {
+	constructor(filename: string, version: string = 'v1', forceDelete: boolean = false) {
+		this.forceDelete = forceDelete;
 		this.version = version;
-		this.documents = new Map();
+		this.knowHashes = new Set();
+		this.seenHovers = new Set();
 
+		this.documents = new Map();
 		this.documentDatas = new Map();
-		this.handledHovers = new Set();
 
 		this.foldingRanges = new Map();
 		this.documentSymbols = new Map();
@@ -524,14 +527,20 @@ export class BlobStore implements DataProvider {
 		this.referenceDatas = new Map();
 		this.containsDatas = new Map();
 
-		try {
-			fs.unlinkSync(filename);
-		} catch (err) {
+		if (forceDelete) {
+			try {
+				fs.unlinkSync(filename);
+			} catch (err) {
+			}
+		} else {
+			forceDelete = !fs.existsSync(filename);
 		}
 		this.db = new Sqlite(filename);
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
-		this.createTables();
+		if (forceDelete) {
+			this.createTables();
+		}
 		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, content)', 2, 16);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (documentHash, uri)', 2, 16);
 		this.versionInserter = new Inserter(this.db, 'Insert Into versions (version, hash)', 2, 256);
@@ -539,6 +548,13 @@ export class BlobStore implements DataProvider {
 		this.definitionInserter = new Inserter(this.db, 'Insert Into defs (scheme, identifier, documentHash, startLine, startCharacter, endLine, endCharacter)', 7, 128);
 		this.referneceInserter = new Inserter(this.db, 'Insert Into refs (scheme, identifier, documentHash, kind, startLine, startCharacter, endLine, endCharacter)', 8, 64);
 		this.hoverInserter = new Inserter(this.db, 'Insert Into hovers (scheme, identifier, hoverHash)', 3, 128);
+
+		if (!forceDelete) {
+			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all();
+			for (let item of hashes) {
+				this.knowHashes.add(item.hash);
+			}
+		}
 	}
 
 	private createTables(): void {
@@ -691,16 +707,22 @@ export class BlobStore implements DataProvider {
 
 	public close(): void {
 		this.blobInserter.finish();
+		this.documentInserter.finish();
 		this.versionInserter.finish();
 		this.declarationInserter.finish();
 		this.definitionInserter.finish();
 		this.referneceInserter.finish();
 		this.hoverInserter.finish();
-		this.createIndices();
+		if (this.forceDelete) {
+			this.createIndices();
+		}
 		this.db.close();
 	}
 
 	private handleMetaData(vertex: MetaData): void {
+		if (!this.forceDelete) {
+			return;
+		}
 		let value = JSON.stringify(vertex, undefined, 0);
 		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 	}
@@ -909,38 +931,42 @@ export class BlobStore implements DataProvider {
 			}
 		}
 		let data = documentData.finalize();
-		this.blobInserter.do(data.hash, Buffer.from(data.blob, 'utf8'));
-		this.documentInserter.do(data.hash, documentData.uri);
-		this.versionInserter.do(this.version, data.hash);
-		if (data.declarations) {
-			for (let declaration of data.declarations) {
-				for (let range in declaration.ranges) {
-					this.declarationInserter.do(declaration.scheme, declaration.indentifier, data.hash, range[0], range[1], range[2], range[3]);
-				}
-			}
-		}
-		if (data.definitions) {
-			for (let definition of data.definitions) {
-				for (let range of definition.ranges) {
-					this.definitionInserter.do(definition.scheme, definition.indentifier, data.hash, range[0], range[1], range[2], range[3]);
-				}
-			}
-		}
-		if (data.references) {
-			for (let reference of data.references) {
-				if (reference.declarations) {
-					for (let range of reference.declarations) {
-						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 0, range[0], range[1], range[2], range[3]);
+		if (this.knowHashes.has(data.hash)) {
+			this.versionInserter.do(this.version, data.hash);
+		} else {
+			this.blobInserter.do(data.hash, Buffer.from(data.blob, 'utf8'));
+			this.documentInserter.do(data.hash, documentData.uri);
+			this.versionInserter.do(this.version, data.hash);
+			if (data.declarations) {
+				for (let declaration of data.declarations) {
+					for (let range in declaration.ranges) {
+						this.declarationInserter.do(declaration.scheme, declaration.indentifier, data.hash, range[0], range[1], range[2], range[3]);
 					}
 				}
-				if (reference.definitions) {
-					for (let range of reference.definitions) {
-						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 1, range[0], range[1], range[2], range[3]);
+			}
+			if (data.definitions) {
+				for (let definition of data.definitions) {
+					for (let range of definition.ranges) {
+						this.definitionInserter.do(definition.scheme, definition.indentifier, data.hash, range[0], range[1], range[2], range[3]);
 					}
 				}
-				if (reference.references) {
-					for (let range of reference.references) {
-						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 2, range[0], range[1], range[2], range[3]);
+			}
+			if (data.references) {
+				for (let reference of data.references) {
+					if (reference.declarations) {
+						for (let range of reference.declarations) {
+							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 0, range[0], range[1], range[2], range[3]);
+						}
+					}
+					if (reference.definitions) {
+						for (let range of reference.definitions) {
+							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 1, range[0], range[1], range[2], range[3]);
+						}
+					}
+					if (reference.references) {
+						for (let range of reference.references) {
+							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 2, range[0], range[1], range[2], range[3]);
+						}
 					}
 				}
 			}
@@ -950,13 +976,18 @@ export class BlobStore implements DataProvider {
 				let hash = crypto.createHash('md5');
 				let blob = JSON.stringify(item.hover, undefined, 0);
 				const hashId = hash.update(blob).digest('base64');
-				if (this.handledHovers.has(hashId)) {
+				if (this.seenHovers.has(hashId)) {
+					continue;
+				}
+				if (this.knowHashes.has(hashId)) {
+					this.versionInserter.do(this.version, hashId);
+					this.seenHovers.add(hashId);
 					continue;
 				}
 				this.blobInserter.do(hashId, Buffer.from(blob, 'utf8'));
 				this.hoverInserter.do(item.scheme, item.indentifier, hashId);
 				this.versionInserter.do(this.version, hashId);
-				this.handledHovers.add(hashId);
+				this.seenHovers.add(hashId);
 			}
 		}
 		this.documentDatas.set(event.id, null);
