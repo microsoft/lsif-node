@@ -182,9 +182,9 @@ interface DataProvider {
 	getMonikerData(id: Id): MonikerData | undefined;
 	removeMonikerData(id: Id): void;
 	getHoverData(id: Id): lsp.Hover | undefined;
-	getAndDeleteDeclarations(declarationResult: Id, documentId: Id): DeclarationResultData;
-	getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData;
-	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData;
+	getAndDeleteDeclarations(declarationResult: Id, documentId: Id): DeclarationResultData | undefined;
+	getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData | undefined;
+	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData | undefined;
 }
 
 type InlineRange = [number, number, number, number];
@@ -256,7 +256,12 @@ class DocumentData {
 		if (this.blob.resultSets === undefined) {
 			this.blob.resultSets = LiteralMap.create();
 		}
-		this.blob.resultSets![id] = resultSet;
+		// Many ranges can point to the same result set. Make sure
+		// we only travers once.
+		if (this.blob.resultSets[id] !== undefined) {
+			return;
+		}
+		this.blob.resultSets[id] = resultSet;
 		this.addReferencedData(id, resultSet);
 	}
 
@@ -276,38 +281,44 @@ class DocumentData {
 		}
 		if (item.declarationResult) {
 			moniker = assertDefined(moniker);
-			const declarations = this.provider.getAndDeleteDeclarations(item.declarationResult, this.id)
-			if (Monikers.isLocal(moniker)) {
-				if (this.blob.declarationResults === undefined) {
-					this.blob.declarationResults = LiteralMap.create();
+			const declarations = this.provider.getAndDeleteDeclarations(item.declarationResult, this.id);
+			if (declarations !== undefined) {
+				if (Monikers.isLocal(moniker)) {
+					if (this.blob.declarationResults === undefined) {
+						this.blob.declarationResults = LiteralMap.create();
+					}
+					this.blob.declarationResults[item.declarationResult] = declarations;
+				} else {
+					this.declarations.push({ moniker, data: declarations});
 				}
-				this.blob.declarationResults[item.declarationResult] = declarations;
-			} else {
-				this.declarations.push({ moniker, data: declarations});
 			}
 		}
 		if (item.definitionResult) {
 			moniker = assertDefined(moniker);
 			const definitions = this.provider.getAndDeleteDefinitions(item.definitionResult, this.id);
-			if (Monikers.isLocal(moniker)) {
-				if (this.blob.definitionResults === undefined) {
-					this.blob.definitionResults = LiteralMap.create();
+			if (definitions !== undefined) {
+				if (Monikers.isLocal(moniker)) {
+					if (this.blob.definitionResults === undefined) {
+						this.blob.definitionResults = LiteralMap.create();
+					}
+					this.blob.definitionResults[item.definitionResult] = definitions;
+				} else {
+					this.definitions.push({ moniker, data: definitions });
 				}
-				this.blob.definitionResults[item.definitionResult] = definitions;
-			} else {
-				this.definitions.push({ moniker, data: definitions });
 			}
 		}
 		if (item.referenceResult) {
 			moniker = assertDefined(moniker);
 			const references = this.provider.getAndDeleteReferences(item.referenceResult, this.id);
-			if (Monikers.isLocal(moniker)) {
-				if (this.blob.referenceResults === undefined) {
-					this.blob.referenceResults = LiteralMap.create();
+			if (references !== undefined) {
+				if (Monikers.isLocal(moniker)) {
+					if (this.blob.referenceResults === undefined) {
+						this.blob.referenceResults = LiteralMap.create();
+					}
+					this.blob.referenceResults[item.referenceResult] = references;
+				} else {
+					this.references.push({ moniker, data: references });
 				}
-				this.blob.referenceResults[item.referenceResult] = references;
-			} else {
-				this.references.push({ moniker, data: references });
 			}
 		}
 	}
@@ -627,23 +638,23 @@ export class BlobStore implements DataProvider {
 		return this.hoverDatas.get(id);
 	}
 
-	public getAndDeleteDeclarations(declaratinResult: Id, documentId: Id): DeclarationResultData {
+	public getAndDeleteDeclarations(declaratinResult: Id, documentId: Id): DeclarationResultData | undefined {
 		const map = assertDefined(this.declarationDatas.get(declaratinResult));
-		const result = map.get(documentId) || { values: [] };
+		const result = map.get(documentId);
 		map.delete(documentId);
 		return result;
 	}
 
-	public getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData {
+	public getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData | undefined {
 		const map = assertDefined(this.definitionDatas.get(definitionResult));
-		const result = map.get(documentId) || { values: [] };
+		const result = map.get(documentId);
 		map.delete(documentId);
 		return result;
 	}
 
-	public getAndDeleteReferences(referenceResult: Id, documentId: Id): ReferenceResultData {
+	public getAndDeleteReferences(referenceResult: Id, documentId: Id): ReferenceResultData | undefined {
 		const map = assertDefined(this.referenceDatas.get(referenceResult));
-		const result = map.get(documentId) || {};
+		const result = map.get(documentId);
 		map.delete(documentId);
 		return result;
 	}
