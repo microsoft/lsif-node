@@ -10,8 +10,7 @@ export class Inserter {
 	private batch: any[];
 
 	public constructor(private db: Sqlite.Database, private stmt: string, private numberOfArgs: number, private batchSize: number) {
-		const args = `(${new Array(numberOfArgs).fill('?').join(',')})`;
-		this.sqlStmt = db.prepare(`${stmt} Values ${new Array(batchSize).fill(args).join(',')}`);
+		this.sqlStmt = this.makeStatement(this.batchSize);
 		this.batch = [];
 	}
 
@@ -30,20 +29,12 @@ export class Inserter {
 		if (this.batch.length === 0) {
 			return;
 		}
-		let values: string[] = [];
-		for (let i = 0; i < this.batch.length; i = i + this.numberOfArgs) {
-			let elem: any[] = [];
-			for (let e = 0; e < this.numberOfArgs; e++) {
-				let param = this.batch[i + e];
-				if (param === null) {
-					elem.push('NULL');
-				} else {
-					elem.push(typeof param === 'string' ? `'${param}'` : param);
-				}
-			}
-			values.push(`(${elem.join(',')})`);
-		}
-		const stmt = `${this.stmt} Values ${values.join(',')}`;
-		this.db.exec(stmt);
+		const finalStatement = this.makeStatement(this.batch.length / this.numberOfArgs);
+		finalStatement.run(...this.batch);
+	}
+
+	private makeStatement(size: number): Sqlite.Statement {
+		const args = `(${new Array(this.numberOfArgs).fill('?').join(',')})`;
+		return this.db.prepare(`${this.stmt} Values ${new Array(size).fill(args).join(',')}`);
 	}
 }

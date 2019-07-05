@@ -209,12 +209,19 @@ interface ExternalReference {
 	references?: InlineRange[];
 }
 
+interface ExternalHovers {
+	scheme: string;
+	indentifier: string;
+	hover: lsp.Hover;
+}
+
 interface DocumentDatabaseData {
 	hash: string;
 	blob: string;
 	declarations?: ExternalDeclaration[];
 	definitions?: ExternalDefinition[];
 	references?: ExternalReference[];
+	hovers?: ExternalHovers[];
 }
 
 interface MonikerScopedResultData<T> {
@@ -232,6 +239,7 @@ class DocumentData {
 	private declarations: MonikerScopedResultData<DeclarationResultData>[];
 	private definitions: MonikerScopedResultData<DefinitionResultData>[];
 	private references: MonikerScopedResultData<ReferenceResultData>[];
+	private hovers: MonikerScopedResultData<lsp.Hover>[];
 
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
@@ -241,6 +249,7 @@ class DocumentData {
 		this.declarations = [];
 		this.definitions = [];
 		this.references = [];
+		this.hovers = [];
 	}
 
 	get uri(): string {
@@ -275,8 +284,14 @@ class DocumentData {
 			this.addResultSetData(item.next, assertDefined(this.provider.getResultData(item.next)));
 		}
 		if (item.hoverResult !== undefined) {
-			if (moniker === undefined || Monikers.isLocal(moniker)) {
-				this.addHover(item.hoverResult)
+			moniker = assertDefined(moniker);
+			if (Monikers.isLocal(moniker)) {
+				if (this.blob.hovers === undefined) {
+					this.blob.hovers = LiteralMap.create();
+				}
+				this.blob.hovers[item.hoverResult] = assertDefined(this.provider.getHoverData(item.hoverResult));
+			} else {
+				this.hovers.push({ moniker, data: assertDefined(this.provider.getHoverData(item.hoverResult)) });
 			}
 		}
 		if (item.declarationResult) {
@@ -342,13 +357,6 @@ class DocumentData {
 		this.blob.monikers![id] = moniker;
 	}
 
-	private addHover(id: Id): void {
-		if (this.blob.hovers === undefined) {
-			this.blob.hovers = LiteralMap.create();
-		}
-		this.blob.hovers![id] = assertDefined(this.provider.getHoverData(id));
-	}
-
 	public finalize(): DocumentDatabaseData {
 		const id2InlineRange = (id: Id): [number, number, number, number] => {
 			const range = this.blob.ranges[id];
@@ -372,12 +380,21 @@ class DocumentData {
 				references : reference.data.references ? reference.data.references.map(id2InlineRange) : undefined
 			});
 		}
+		let externalHovers: ExternalHovers[] = [];
+		for (let hover of this.hovers) {
+			externalHovers.push({
+				scheme: hover.moniker.scheme,
+				indentifier: hover.moniker.identifier,
+				hover: hover.data
+			});
+		}
 		return {
 			hash: this.computeHash(),
 			blob: JSON.stringify(this.blob, undefined, 0),
 			declarations: externalDeclarations.length > 0 ? externalDeclarations : undefined,
 			definitions: externalDefinitions.length > 0 ? externalDefinitions : undefined,
-			references: externalReferences.length > 0 ? externalReferences : undefined
+			references: externalReferences.length > 0 ? externalReferences : undefined,
+			hovers: externalHovers.length > 0 ? externalHovers : undefined
 		}
 	}
 
@@ -457,17 +474,21 @@ class DocumentData {
 
 export class BlobStore implements DataProvider {
 
+	private version: string;
+
 	private db: Sqlite.Database;
-	private insertBlobStatement: Sqlite.Statement;
-	private insertDocumentStatement: Sqlite.Statement;
-	private insertVersionStatement: Sqlite.Statement;
+	private documentInserter: Inserter;
+	private blobInserter: Inserter;
+	private versionInserter: Inserter;
 	private declarationInserter: Inserter;
 	private definitionInserter: Inserter;
 	private referneceInserter: Inserter;
+	private hoverInserter: Inserter;
 
 
 	private documents: Map<Id, Document>;
 	private documentDatas: Map<Id, DocumentData | null>;
+	private handledHovers: Set<string>;
 
 	private foldingRanges: Map<Id, lsp.FoldingRange[]>;
 	private documentSymbols: Map<Id, lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>;
@@ -483,10 +504,12 @@ export class BlobStore implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor(filename: string) {
+	constructor(filename: string, version: string = 'v1') {
+		this.version = version;
 		this.documents = new Map();
 
 		this.documentDatas = new Map();
+		this.handledHovers = new Set();
 
 		this.foldingRanges = new Map();
 		this.documentSymbols = new Map();
@@ -509,31 +532,34 @@ export class BlobStore implements DataProvider {
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
 		this.createTables();
-		this.insertBlobStatement = this.db.prepare('Insert Into blobs (documentId, content) VALUES (?, ?)');
-		this.insertDocumentStatement = this.db.prepare('Insert Into documents (documentId, uri) VALUES (?, ?)');
-		this.insertVersionStatement = this.db.prepare('Insert Into versions (versionId, documentId) VALUES (?, ?)');
-		this.declarationInserter = new Inserter(this.db, 'Insert Into decls (scheme, identifier, documentId, startLine, startCharacter, endLine, endCharacter)', 7, 128);
-		this.definitionInserter = new Inserter(this.db, 'Insert Into defs (scheme, identifier, documentId, startLine, startCharacter, endLine, endCharacter)', 7, 128);
-		this.referneceInserter = new Inserter(this.db, 'Insert Into refs (scheme, identifier, documentId, kind, startLine, startCharacter, endLine, endCharacter)', 8, 64);
+		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, content)', 2, 16);
+		this.documentInserter = new Inserter(this.db, 'Insert Into documents (documentHash, uri)', 2, 16);
+		this.versionInserter = new Inserter(this.db, 'Insert Into versions (version, hash)', 2, 256);
+		this.declarationInserter = new Inserter(this.db, 'Insert Into decls (scheme, identifier, documentHash, startLine, startCharacter, endLine, endCharacter)', 7, 128);
+		this.definitionInserter = new Inserter(this.db, 'Insert Into defs (scheme, identifier, documentHash, startLine, startCharacter, endLine, endCharacter)', 7, 128);
+		this.referneceInserter = new Inserter(this.db, 'Insert Into refs (scheme, identifier, documentHash, kind, startLine, startCharacter, endLine, endCharacter)', 8, 64);
+		this.hoverInserter = new Inserter(this.db, 'Insert Into hovers (scheme, identifier, hoverHash)', 3, 128);
 	}
 
 	private createTables(): void {
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
-		this.db.exec('Create Table blobs (documentId Text Unique Primary Key, content Blob Not Null)');
-		this.db.exec('Create Table documents (documentId Text Not Null, uri Text Not Null)');
-		this.db.exec('Create Table versions (versionId Text Not Null, documentId Text Not Null)');
-		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
-		this.db.exec('Create Table defs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
-		this.db.exec('Create Table refs (scheme Text Not Null, identifier Text Not Null, documentId Text Not Null, kind Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table blobs (hash Text Unique Primary Key, content Blob Not Null)');
+		this.db.exec('Create Table documents (documentHash Text Not Null, uri Text Not Null)');
+		this.db.exec('Create Table versions (version Text Not Null, hash Text Not Null)');
+		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentHash Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table defs (scheme Text Not Null, identifier Text Not Null, documentHash Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table refs (scheme Text Not Null, identifier Text Not Null, documentHash Text Not Null, kind Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
+		this.db.exec('Create Table hovers (scheme Text Not Null, identifier Text Not Null, hoverHash Text Not Null)');
 	}
 
 	private createIndices(): void {
-		this.db.exec('Create Index _blobs on blobs (documentId)');
-		this.db.exec('Create Index _documents on documents (documentId)');
-		this.db.exec('Create Index _versions on versions (versionId)');
-		this.db.exec('Create Index _decls on decls (identifier, scheme, documentId)');
-		this.db.exec('Create Index _defs on defs (identifier, scheme, documentId)');
-		this.db.exec('Create Index _refs on refs (identifier, scheme, documentId)');
+		this.db.exec('Create Index _blobs on blobs (hash)');
+		this.db.exec('Create Index _documents on documents (documentHash)');
+		this.db.exec('Create Index _versions on versions (version)');
+		this.db.exec('Create Index _decls on decls (identifier, scheme, documentHash)');
+		this.db.exec('Create Index _defs on defs (identifier, scheme, documentHash)');
+		this.db.exec('Create Index _refs on refs (identifier, scheme, documentHash)');
+		this.db.exec('Create Index _hovers on hovers (identifier, scheme, hoverHash)');
 	}
 
 	public insert(element: Edge | Vertex): void {
@@ -664,9 +690,12 @@ export class BlobStore implements DataProvider {
 	}
 
 	public close(): void {
+		this.blobInserter.finish();
+		this.versionInserter.finish();
 		this.declarationInserter.finish();
 		this.definitionInserter.finish();
 		this.referneceInserter.finish();
+		this.hoverInserter.finish();
 		this.createIndices();
 		this.db.close();
 	}
@@ -728,6 +757,7 @@ export class BlobStore implements DataProvider {
 
 	private handleHoverEdge(edge: textDocument_hover): void {
 		const outV: RangeData | ResultSetData = assertDefined(this.rangeDatas.get(edge.outV) || this.resultSetDatas.get(edge.outV));
+		this.ensureMoniker(outV);
 		assertDefined(this.hoverDatas.get(edge.inV));
 		outV.hoverResult = edge.inV;
 	}
@@ -879,9 +909,9 @@ export class BlobStore implements DataProvider {
 			}
 		}
 		let data = documentData.finalize();
-		this.insertBlobStatement.run(data.hash, data.blob);
-		this.insertDocumentStatement.run(data.hash, documentData.uri);
-		this.insertVersionStatement.run('v1', data.hash);
+		this.blobInserter.do(data.hash, Buffer.from(data.blob, 'utf8'));
+		this.documentInserter.do(data.hash, documentData.uri);
+		this.versionInserter.do(this.version, data.hash);
 		if (data.declarations) {
 			for (let declaration of data.declarations) {
 				for (let range in declaration.ranges) {
@@ -913,6 +943,20 @@ export class BlobStore implements DataProvider {
 						this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 2, range[0], range[1], range[2], range[3]);
 					}
 				}
+			}
+		}
+		if (data.hovers) {
+			for (let item of data.hovers) {
+				let hash = crypto.createHash('md5');
+				let blob = JSON.stringify(item.hover, undefined, 0);
+				const hashId = hash.update(blob).digest('base64');
+				if (this.handledHovers.has(hashId)) {
+					continue;
+				}
+				this.blobInserter.do(hashId, Buffer.from(blob, 'utf8'));
+				this.hoverInserter.do(item.scheme, item.indentifier, hashId);
+				this.versionInserter.do(this.version, hashId);
+				this.handledHovers.add(hashId);
 			}
 		}
 		this.documentDatas.set(event.id, null);
