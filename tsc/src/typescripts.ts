@@ -223,6 +223,10 @@ export function isValueModule(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
 }
 
+export function isTypeParameter(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
+}
+
 export function isBlockScopedVariable(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 }
