@@ -162,6 +162,11 @@ interface ReferenceResultData {
 
 type MonikerData = Pick<Moniker, 'scheme' | 'identifier' | 'kind'>;
 
+enum BlobFormat {
+	utf8Json = 1,
+	utf8JsonZipped = 2
+}
+
 interface DocumentBlob {
 	contents: string;
 	ranges: LiteralMap<RangeData>;
@@ -181,7 +186,8 @@ interface DataProvider {
 	removeResultSetData(id: Id): void;
 	getMonikerData(id: Id): MonikerData | undefined;
 	removeMonikerData(id: Id): void;
-	getHoverData(id: Id): lsp.Hover | undefined;
+	getAndDeleteHoverData(id: Id): lsp.Hover | undefined;
+	storeHover(moniker: MonikerData, id: Id): void;
 	getAndDeleteDeclarations(declarationResult: Id, documentId: Id): DeclarationResultData | undefined;
 	getAndDeleteDefinitions(definitionResult: Id, documentId: Id): DefinitionResultData | undefined;
 	getAndDeleteReferences(referencResult: Id, documentId: Id): ReferenceResultData | undefined;
@@ -209,19 +215,12 @@ interface ExternalReference {
 	references?: InlineRange[];
 }
 
-interface ExternalHovers {
-	scheme: string;
-	indentifier: string;
-	hover: lsp.Hover;
-}
-
 interface DocumentDatabaseData {
 	hash: string;
 	blob: string;
 	declarations?: ExternalDeclaration[];
 	definitions?: ExternalDefinition[];
 	references?: ExternalReference[];
-	hovers?: ExternalHovers[];
 }
 
 interface MonikerScopedResultData<T> {
@@ -239,7 +238,6 @@ class DocumentData {
 	private declarations: MonikerScopedResultData<DeclarationResultData>[];
 	private definitions: MonikerScopedResultData<DefinitionResultData>[];
 	private references: MonikerScopedResultData<ReferenceResultData>[];
-	private hovers: MonikerScopedResultData<lsp.Hover>[];
 
 	constructor(document: Document, provider: DataProvider) {
 		this.provider = provider;
@@ -249,7 +247,6 @@ class DocumentData {
 		this.declarations = [];
 		this.definitions = [];
 		this.references = [];
-		this.hovers = [];
 	}
 
 	get uri(): string {
@@ -289,9 +286,11 @@ class DocumentData {
 				if (this.blob.hovers === undefined) {
 					this.blob.hovers = LiteralMap.create();
 				}
-				this.blob.hovers[item.hoverResult] = assertDefined(this.provider.getHoverData(item.hoverResult));
+				if (this.blob.hovers[item.hoverResult] === undefined) {
+					this.blob.hovers[item.hoverResult] = assertDefined(this.provider.getAndDeleteHoverData(item.hoverResult));
+				}
 			} else {
-				this.hovers.push({ moniker, data: assertDefined(this.provider.getHoverData(item.hoverResult)) });
+				this.provider.storeHover(moniker, item.hoverResult);
 			}
 		}
 		if (item.declarationResult) {
@@ -380,21 +379,12 @@ class DocumentData {
 				references : reference.data.references ? reference.data.references.map(id2InlineRange) : undefined
 			});
 		}
-		let externalHovers: ExternalHovers[] = [];
-		for (let hover of this.hovers) {
-			externalHovers.push({
-				scheme: hover.moniker.scheme,
-				indentifier: hover.moniker.identifier,
-				hover: hover.data
-			});
-		}
 		return {
 			hash: this.computeHash(),
 			blob: JSON.stringify(this.blob, undefined, 0),
 			declarations: externalDeclarations.length > 0 ? externalDeclarations : undefined,
 			definitions: externalDefinitions.length > 0 ? externalDefinitions : undefined,
 			references: externalReferences.length > 0 ? externalReferences : undefined,
-			hovers: externalHovers.length > 0 ? externalHovers : undefined
 		}
 	}
 
@@ -486,10 +476,10 @@ export class BlobStore implements DataProvider {
 	private referneceInserter: Inserter;
 	private hoverInserter: Inserter;
 
-	private knowHashes: Set<string>;
+	private knownHashes: Set<string>;
+	private insertedHashes: Set<string>;
 	private documents: Map<Id, Document>;
 	private documentDatas: Map<Id, DocumentData | null>;
-	private seenHovers: Set<string>;
 
 	private foldingRanges: Map<Id, lsp.FoldingRange[]>;
 	private documentSymbols: Map<Id, lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>;
@@ -508,8 +498,8 @@ export class BlobStore implements DataProvider {
 	constructor(filename: string, version: string = 'v1', forceDelete: boolean = false) {
 		this.forceDelete = forceDelete;
 		this.version = version;
-		this.knowHashes = new Set();
-		this.seenHovers = new Set();
+		this.knownHashes = new Set();
+		this.insertedHashes = new Set();
 
 		this.documents = new Map();
 		this.documentDatas = new Map();
@@ -541,7 +531,7 @@ export class BlobStore implements DataProvider {
 		if (forceDelete) {
 			this.createTables();
 		}
-		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, content)', 2, 16);
+		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, format, content)', 3, 16);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (documentHash, uri)', 2, 16);
 		this.versionInserter = new Inserter(this.db, 'Insert Into versions (version, hash)', 2, 256);
 		this.declarationInserter = new Inserter(this.db, 'Insert Into decls (scheme, identifier, documentHash, startLine, startCharacter, endLine, endCharacter)', 7, 128);
@@ -552,14 +542,15 @@ export class BlobStore implements DataProvider {
 		if (!forceDelete) {
 			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all();
 			for (let item of hashes) {
-				this.knowHashes.add(item.hash);
+				this.knownHashes.add(item.hash);
 			}
 		}
 	}
 
 	private createTables(): void {
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
-		this.db.exec('Create Table blobs (hash Text Unique Primary Key, content Blob Not Null)');
+		this.db.exec('Create Table format (format Text Not Null)');
+		this.db.exec('Create Table blobs (hash Text Unique Primary Key, format Integer Not Null, content Blob Not Null)');
 		this.db.exec('Create Table documents (documentHash Text Not Null, uri Text Not Null)');
 		this.db.exec('Create Table versions (version Text Not Null, hash Text Not Null)');
 		this.db.exec('Create Table decls (scheme Text Not Null, identifier Text Not Null, documentHash Text Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
@@ -676,8 +667,12 @@ export class BlobStore implements DataProvider {
 		this.monikerDatas.delete(id);
 	}
 
-	public getHoverData(id: Id): lsp.Hover | undefined {
-		return this.hoverDatas.get(id);
+	public getAndDeleteHoverData(id: Id): lsp.Hover | undefined {
+		let result = this.hoverDatas.get(id);
+		if (result !== undefined) {
+			this.hoverDatas.delete(id);
+		}
+		return result;
 	}
 
 	public getAndDeleteDeclarations(declaratinResult: Id, documentId: Id): DeclarationResultData | undefined {
@@ -725,6 +720,7 @@ export class BlobStore implements DataProvider {
 		}
 		let value = JSON.stringify(vertex, undefined, 0);
 		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
+		this.db.exec(`Insert into format (format) Values ('blob')`);
 	}
 
 	private handleEvent(event: Event): void {
@@ -931,10 +927,10 @@ export class BlobStore implements DataProvider {
 			}
 		}
 		let data = documentData.finalize();
-		if (this.knowHashes.has(data.hash)) {
+		if (this.knownHashes.has(data.hash)) {
 			this.versionInserter.do(this.version, data.hash);
 		} else {
-			this.blobInserter.do(data.hash, Buffer.from(data.blob, 'utf8'));
+			this.blobInserter.do(data.hash, BlobFormat.utf8Json,  Buffer.from(data.blob, 'utf8'));
 			this.documentInserter.do(data.hash, documentData.uri);
 			this.versionInserter.do(this.version, data.hash);
 			if (data.declarations) {
@@ -971,26 +967,29 @@ export class BlobStore implements DataProvider {
 				}
 			}
 		}
-		if (data.hovers) {
-			for (let item of data.hovers) {
-				let hash = crypto.createHash('md5');
-				let blob = JSON.stringify(item.hover, undefined, 0);
-				const hashId = hash.update(blob).digest('base64');
-				if (this.seenHovers.has(hashId)) {
-					continue;
-				}
-				if (this.knowHashes.has(hashId)) {
-					this.versionInserter.do(this.version, hashId);
-					this.seenHovers.add(hashId);
-					continue;
-				}
-				this.blobInserter.do(hashId, Buffer.from(blob, 'utf8'));
-				this.hoverInserter.do(item.scheme, item.indentifier, hashId);
-				this.versionInserter.do(this.version, hashId);
-				this.seenHovers.add(hashId);
-			}
-		}
 		this.documentDatas.set(event.id, null);
+	}
+
+	public storeHover(moniker: MonikerData, id: Id): void {
+		let hover = this.getAndDeleteHoverData(id);
+		// We have already processed the hover
+		if (hover === undefined) {
+			return;
+		}
+		let hash = crypto.createHash('md5');
+		let blob = JSON.stringify(hover, undefined, 0);
+		const hashId = hash.update(blob).digest('base64');
+		// Actuall
+		if (this.knownHashes.has(hashId)) {
+			this.versionInserter.do(this.version, hashId);
+			return;
+		}
+		if (!this.insertedHashes.has(hashId)) {
+			this.blobInserter.do(hashId, BlobFormat.utf8Json, Buffer.from(blob, 'utf8'));
+			this.insertedHashes.add(hashId);
+		}
+		this.hoverInserter.do(moniker.scheme, moniker.identifier, hashId);
+		this.versionInserter.do(this.version, hashId);
 	}
 
 	private getOrCreateDocumentData(document: Document): DocumentData {
