@@ -728,11 +728,16 @@ class SymbolDataPartition extends LSIFData {
 	}
 }
 
+enum ExportKind {
+	notExported = 1,
+	noSourceParent = 2
+}
+
 class Symbols {
 
 	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
-	private exportedPaths: LRUCache<ts.Symbol, string | null>;
+	private exportedPaths: LRUCache<ts.Symbol, string | ExportKind>;
 
 	constructor(private typeChecker: ts.TypeChecker) {
 		this.baseSymbolCache = new LRUCache(2048);
@@ -849,25 +854,36 @@ class Symbols {
 		return result;
 	}
 
-	public getExportPath(symbol: ts.Symbol): string | undefined {
+	public getExportPath(symbol: ts.Symbol, isTsLibrary: boolean): string | ExportKind {
 		let result = this.exportedPaths.get(symbol);
 		if (result !== undefined) {
-			return result === null ? undefined : result;
+			return result;
 		}
+		let parent = tss.getSymbolParent(symbol);
 		if (tss.isSourceFile(symbol)) {
 			this.exportedPaths.set(symbol, '');
 			return '';
 		}
-		let parent = tss.getSymbolParent(symbol);
 		if (parent === undefined) {
-			this.exportedPaths.set(symbol, null);
-			return undefined;
+			if (tss.isValueModule(symbol)) {
+				this.exportedPaths.set(symbol, symbol.getName());
+				return symbol.getName();
+			}
+			if (isTsLibrary) {
+				this.exportedPaths.set(symbol, symbol.getName());
+				return symbol.getName();
+			}
+
+		}
+		if (parent === undefined) {
+			this.exportedPaths.set(symbol, ExportKind.noSourceParent);
+			return ExportKind.noSourceParent;
 		} else {
-			let parentValue = this.getExportPath(parent);
+			let parentValue = this.getExportPath(parent, isTsLibrary);
 			// The parent is not exported so any member isn't either
-			if (parentValue === undefined) {
-				this.exportedPaths.set(symbol, null);
-				return undefined;
+			if (parentValue === ExportKind.notExported || parentValue === ExportKind.noSourceParent) {
+				this.exportedPaths.set(symbol, parentValue);
+				return parentValue;
 			} else {
 				if (tss.isInterface(parent) || tss.isClass(parent)) {
 					result = `${parentValue}.${symbol.getName()}`;
@@ -879,12 +895,12 @@ class Symbols {
 						this.exportedPaths.set(symbol, result);
 						return result;
 					} else {
-						this.exportedPaths.set(symbol, null);
-						return undefined;
+						this.exportedPaths.set(symbol, ExportKind.notExported);
+						return ExportKind.notExported;
 					}
 				} else {
-					this.exportedPaths.set(symbol, null);
-					return undefined;
+					this.exportedPaths.set(symbol, ExportKind.notExported);
+					return ExportKind.notExported;
 				}
 			}
 		}
@@ -1698,9 +1714,12 @@ class Visitor implements ResolverContext {
 			return result;
 		}
 		let resolver = this.getResolver(symbol, location);
-		let scope =  this.resolveEmittingNode(symbol);
 		let declarations: ts.Node[] | undefined = resolver.getDeclarationNodes(symbol, location);
 		let sourceFiles: ts.SourceFile[] = resolver.getSourceFiles(symbol, location);
+		let isTSLibrary: boolean = sourceFiles.length === 0
+			? false
+			: sourceFiles.every(file => tss.Program.isSourceFileDefaultLibrary(this.program, file));
+		let scope =  this.resolveEmittingNode(symbol, isTSLibrary);
 		if (resolver.requiresSourceFile && sourceFiles.length === 0) {
 			throw new Error(`Resolver requires source file but no source file can be found.`);
 		}
@@ -1731,9 +1750,14 @@ class Visitor implements ResolverContext {
 		if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
 			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined);
 		} else {
-			const monikerName = this.symbols.getExportPath(symbol);
-			if (monikerName !== undefined && monikerName.length > 0) {
-				monikerIdentifer = tss.createMonikerIdentifier(monikerPath, monikerName);
+			const exported = this.symbols.getExportPath(symbol, isTSLibrary);
+			if (typeof exported === 'string' && exported.length > 0) {
+				monikerIdentifer = tss.createMonikerIdentifier(monikerPath, exported);
+			} else if (exported === ExportKind.noSourceParent) {
+				let qName = this.typeChecker.getFullyQualifiedName(symbol);
+				if (qName) {
+					monikerIdentifer = tss.createMonikerIdentifier(monikerPath, qName);
+				}
 			}
 		}
 		if (monikerIdentifer === undefined) {
@@ -1809,12 +1833,12 @@ class Visitor implements ResolverContext {
 		return [undefined, undefined];
 	}
 
-	private resolveEmittingNode(symbol: ts.Symbol): ts.Node | undefined {
+	private resolveEmittingNode(symbol: ts.Symbol, isTsLibrary: boolean): ts.Node | undefined {
 		// The symbol has a export path so we can't bind this to a node
 		// Note that we even treat private class members like this. Reason being
 		// is that they can be referenced but it would only be a compile error
 		// since JS in fact has not visibility.
-		if (this.symbols.getExportPath(symbol) !== null) {
+		if (this.symbols.getExportPath(symbol, isTsLibrary) !== null) {
 			return undefined;
 		}
 		let declarations = symbol.getDeclarations();
