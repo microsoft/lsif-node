@@ -31,6 +31,8 @@ export class GraphStore {
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
 		this.createTables();
+		this.db.exec(`Insert into format (format) Values ('graph')`);
+
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
@@ -42,6 +44,7 @@ export class GraphStore {
 
 	private createTables(): void {
 		// Vertex information
+		this.db.exec('Create Table format (format Text Not Null)');
 		this.db.exec('Create Table vertices (id Integer Unique Primary Key, label Integer Not Null, value Text Not Null)');
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');

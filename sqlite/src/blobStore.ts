@@ -21,7 +21,6 @@ import {
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 import { Inserter } from './inserter';
 
-
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {
 		throw new Error(`Element must be defined`);
@@ -477,7 +476,9 @@ export class BlobStore implements DataProvider {
 	private hoverInserter: Inserter;
 
 	private knownHashes: Set<string>;
-	private insertedHashes: Set<string>;
+	private insertedBlobs: Set<string>;
+	private insertedHovers: Set<string>;
+
 	private documents: Map<Id, Document>;
 	private documentDatas: Map<Id, DocumentData | null>;
 
@@ -499,7 +500,8 @@ export class BlobStore implements DataProvider {
 		this.forceDelete = forceDelete;
 		this.version = version;
 		this.knownHashes = new Set();
-		this.insertedHashes = new Set();
+		this.insertedBlobs = new Set();
+		this.insertedHovers = new Set();
 
 		this.documents = new Map();
 		this.documentDatas = new Map();
@@ -531,6 +533,7 @@ export class BlobStore implements DataProvider {
 		if (forceDelete) {
 			this.createTables();
 		}
+		this.db.exec(`Insert Into versionTags (tag, dateTime) Values ('${this.version}', ${Date.now()})`);
 		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, format, content)', 3, 16);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (documentHash, uri)', 2, 16);
 		this.versionInserter = new Inserter(this.db, 'Insert Into versions (version, hash)', 2, 256);
@@ -550,6 +553,7 @@ export class BlobStore implements DataProvider {
 	private createTables(): void {
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
 		this.db.exec('Create Table format (format Text Not Null)');
+		this.db.exec('Create Table versionTags (tag Text Unique Primary Key, dateTime Integer Not Null)');
 		this.db.exec('Create Table blobs (hash Text Unique Primary Key, format Integer Not Null, content Blob Not Null)');
 		this.db.exec('Create Table documents (documentHash Text Not Null, uri Text Not Null)');
 		this.db.exec('Create Table versions (version Text Not Null, hash Text Not Null)');
@@ -560,6 +564,8 @@ export class BlobStore implements DataProvider {
 	}
 
 	private createIndices(): void {
+		this.db.exec('Create Index _versionTags_tag on versionTags (tag)');
+		this.db.exec('Create Index _versionTags_dateTime on versionTags (dateTime)');
 		this.db.exec('Create Index _blobs on blobs (hash)');
 		this.db.exec('Create Index _documents on documents (documentHash)');
 		this.db.exec('Create Index _versions on versions (version)');
@@ -670,7 +676,9 @@ export class BlobStore implements DataProvider {
 	public getAndDeleteHoverData(id: Id): lsp.Hover | undefined {
 		let result = this.hoverDatas.get(id);
 		if (result !== undefined) {
-			this.hoverDatas.delete(id);
+			// We don't delete the hover right now.
+			// See https://github.com/microsoft/lsif-node/issues/57
+			// this.hoverDatas.delete(id);
 		}
 		return result;
 	}
@@ -976,20 +984,25 @@ export class BlobStore implements DataProvider {
 		if (hover === undefined) {
 			return;
 		}
-		let hash = crypto.createHash('md5');
-		let blob = JSON.stringify(hover, undefined, 0);
-		const hashId = hash.update(blob).digest('base64');
+		const blob = JSON.stringify(hover, undefined, 0);
+		const blobHash = crypto.createHash('md5').update(blob).digest('base64');
 		// Actuall
-		if (this.knownHashes.has(hashId)) {
-			this.versionInserter.do(this.version, hashId);
-			return;
+		if (this.knownHashes.has(blobHash)) {
+			this.versionInserter.do(this.version, blobHash);
+		} else {
+			if (!this.insertedBlobs.has(blobHash)) {
+				this.blobInserter.do(blobHash, BlobFormat.utf8Json, Buffer.from(blob, 'utf8'));
+				this.insertedBlobs.add(blobHash);
+			}
+			const hoverHash = crypto.createHash('md5').update(
+				JSON.stringify({s: moniker.scheme, i: moniker.identifier, b: blobHash }, undefined, 0))
+			.digest('base64');
+			if (!this.insertedHovers.has(hoverHash)) {
+				this.hoverInserter.do(moniker.scheme, moniker.identifier, blobHash);
+				this.versionInserter.do(this.version, blobHash);
+				this.insertedHovers.add(hoverHash);
+			}
 		}
-		if (!this.insertedHashes.has(hashId)) {
-			this.blobInserter.do(hashId, BlobFormat.utf8Json, Buffer.from(blob, 'utf8'));
-			this.insertedHashes.add(hashId);
-		}
-		this.hoverInserter.do(moniker.scheme, moniker.identifier, hashId);
-		this.versionInserter.do(this.version, hashId);
 	}
 
 	private getOrCreateDocumentData(document: Document): DocumentData {

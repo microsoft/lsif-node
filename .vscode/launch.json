@@ -206,6 +206,25 @@
 			"args": [
 				"--format", "blob",
 				"--projectVersion", "v1",
+				"--delete",
+				"--in", "./test.lsif",
+				"--out", "./test.db"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/sqlite/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Graph Storage",
+			"program": "${workspaceFolder}/sqlite/lib/main.js",
+			"cwd": "${workspaceFolder}/samples/typescript",
+			"args": [
+				"--format", "graph",
 				"--in", "./test.lsif",
 				"--out", "./test.db"
 			],
