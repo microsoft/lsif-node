@@ -496,7 +496,7 @@ export class BlobStore implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor(filename: string, version: string = 'v1', forceDelete: boolean = false) {
+	constructor(filename: string, version: string, forceDelete: boolean = false) {
 		this.forceDelete = forceDelete;
 		this.version = version;
 		this.knownHashes = new Set();
@@ -533,7 +533,7 @@ export class BlobStore implements DataProvider {
 		if (forceDelete) {
 			this.createTables();
 		}
-		this.db.exec(`Insert Into versionTags (tag, dateTime) Values ('${this.version}', ${Date.now()})`);
+		this.db.prepare(`Insert Into versionTags (tag, dateTime) Values (?, ?)`).run(this.version, Date.now());
 		this.blobInserter = new Inserter(this.db, 'Insert Into blobs (hash, format, content)', 3, 16);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (documentHash, uri)', 2, 16);
 		this.versionInserter = new Inserter(this.db, 'Insert Into versions (version, hash)', 2, 256);

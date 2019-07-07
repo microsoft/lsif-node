@@ -81,7 +81,7 @@ export function main(): void {
 	let longestId: number = 0;
 	for (let description of Options.descriptions) {
 		longestId = Math.max(longestId, description.id.length);
-		minOpts[description.type] = description.id;
+		(minOpts[description.type] as string[]).push(description.id);
 		minOpts.default![description.id] = description.default;
 		if (description.alias !== undefined) {
 			minOpts.alias![description.id] = [description.alias];
