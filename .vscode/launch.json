@@ -205,7 +205,7 @@
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"args": [
 				"--format", "blob",
-				"--projectVersion", "v1",
+				"--projectVersion", "1.0",
 				"--delete",
 				"--in", "./test.lsif",
 				"--out", "./test.db"
