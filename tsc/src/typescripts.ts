@@ -164,7 +164,7 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 		})
 	};
 	let hash = crypto.createHash('md5');
-	hash.write(JSON.stringify(fragments, undefined, 0));
+	hash.update(JSON.stringify(fragments, undefined, 0));
 	result = hash.digest('base64');
 	(symbol as InternalSymbol).__symbol__data__key__ = result;
 	return result;
@@ -221,6 +221,10 @@ export function isAliasSymbol(symbol: ts.Symbol): boolean  {
 
 export function isValueModule(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
+}
+
+export function isTypeParameter(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
 }
 
 export function isBlockScopedVariable(symbol: ts.Symbol): boolean {

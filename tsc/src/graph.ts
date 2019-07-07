@@ -91,7 +91,7 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public moniker(kind: MonikerKind, scheme: string, identifier: string): Moniker {
+	public moniker(scheme: string, identifier: string, kind?: MonikerKind): Moniker {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,

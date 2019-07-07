@@ -10,13 +10,17 @@ import * as minimist from 'minimist';
 import { Edge, Vertex, ElementTypes, VertexLabels, } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
 import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor } from './compress';
-import * as sql from './sqlite';
+import * as graph from './graphStore';
+import * as blob from './blobStore';
 import { StdoutWriter, FileWriter, Writer } from './writer';
 
 interface Options {
 	help: boolean;
 	version: boolean;
 	compressOnly: boolean;
+	format: 'graph' | 'blob';
+	projectVersion?: string;
+	delete: boolean,
 	in?: string;
 	stdin: boolean;
 	out?: string;
@@ -37,6 +41,9 @@ export namespace Options {
 		help: false,
 		version: false,
 		compressOnly: false,
+		format: 'graph',
+		projectVersion: undefined,
+		delete: false,
 		in: undefined,
 		stdin: false,
 		out: undefined,
@@ -47,6 +54,9 @@ export namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
+		{ id: 'format', type: 'string', default: 'graph', description: 'The SQLite format. Either graph (default) or blob.'},
+		{ id: 'delete', type: 'boolean', default: false, description: 'Deletes an old version of the DB. Only valid with blob format.'},
+		{ id: 'projectVersion', type: 'string', default: undefined, description: 'The imported project version. Only valid with blob format.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The name of the SQLite DB.'},
@@ -112,7 +122,7 @@ export function main(): void {
 		if (compressor === undefined) {
 			throw new Error(`No compressor found for ${element.label}`);
 		}
-		return JSON.stringify(compressor.compress(element));
+		return JSON.stringify(compressor.compress(element, { mode: 'store' }));
 	}
 
 	function shortForm(element: Vertex | Edge): number {
@@ -150,7 +160,7 @@ export function main(): void {
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-	let db: sql.Database | undefined;
+	let db: graph.GraphStore | blob.BlobStore | undefined;
 	if (options.compressOnly && options.out) {
 		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	} else if (!options.compressOnly && options.out) {
@@ -158,7 +168,16 @@ export function main(): void {
 		if (!filename.endsWith('.db')) {
 			filename = filename + '.db';
 		}
-		db = new sql.Database(filename, stringify, shortForm);
+		if (options.format === 'blob') {
+			if (options.projectVersion === undefined) {
+				console.log(`Blob format requires a project version.`);
+				process.exitCode = -1;
+				return;
+			}
+			db = new blob.BlobStore(filename, options.projectVersion, options.delete);
+		} else {
+			db = new graph.GraphStore(filename, stringify, shortForm);
+		}
 	}
 
 	function emitMetaData(vertex: MetaData): void {

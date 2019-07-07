@@ -10,7 +10,7 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id
 } from 'lsif-protocol';
 
 namespace Is {
@@ -54,6 +54,29 @@ export namespace CompressorProperty {
 	}
 }
 
+export interface CompressorOptions {
+	mode: 'store' | 'hash';
+}
+
+export namespace CompressorOptions {
+
+	export const defaults: CompressorOptions = Object.freeze({
+		mode: 'store'
+	});
+
+	export function is(value: Partial<CompressorOptions>): value is CompressorOptions {
+		let candidate: CompressorOptions = value as CompressorOptions;
+		return candidate !== undefined && typeof candidate.mode === 'string';
+	}
+
+	export function fillDefaults(value?: Partial<CompressorOptions>): CompressorOptions {
+		if (value === undefined) {
+			return Object.assign({}, CompressorOptions.defaults);
+		}
+		return Object.assign({}, CompressorOptions.defaults, value);
+	}
+}
+
 export abstract class Compressor<T> {
 	private static compressors: Compressor<any>[] = [];
 	private static vertexCompressors: Map<string, Compressor<any>> = new Map();
@@ -79,6 +102,10 @@ export abstract class Compressor<T> {
 		}
 	}
 
+	public static getVertexCompressor(label: VertexLabels): Compressor<any> | undefined {
+		return this.vertexCompressors.get(label);
+	}
+
 	public static allCompressors(): Compressor<any>[] {
 		let result = this.compressors.slice(0);
 		for (let elem of this.vertexCompressors.values()) {
@@ -102,7 +129,7 @@ export abstract class Compressor<T> {
 
 	public abstract get index(): number;
 
-	public abstract compress(element: T): CompressValue;
+	public abstract compress(element: T, options: CompressorOptions, level?: number): CompressValue;
 
 	public abstract metaData(): CompressorProperty[];
 }
@@ -135,12 +162,12 @@ export namespace GenericCompressorProperty {
 
 export class GenericCompressor<T> extends Compressor<T> {
 
-	private _parent: GenericCompressor<any> | undefined;
+	private _parent: Compressor<any> | undefined;
 	private _id: number;
 	private _index: number;
 	private _properties: GenericCompressorProperty<T, any>[];
 
-	public constructor(parent: GenericCompressor<any> | undefined, id: number, properties: (next: () => number, that: GenericCompressor<T>) => GenericCompressorProperty<T, any>[]) {
+	public constructor(parent: Compressor<any> | undefined, id: number, properties: (next: () => number, that: GenericCompressor<T>) => GenericCompressorProperty<T, any>[]) {
 		super();
 		this._parent = parent;
 		this._id = id;
@@ -160,10 +187,10 @@ export class GenericCompressor<T> extends Compressor<T> {
 		return this._index;
 	}
 
-	public compress(element: T, addId: boolean = true): CompressValue {
-		let result: CompressArray = this._parent !== undefined ? this._parent.compress(element, false) as CompressArray: [];
-		if (addId) {
-			result.unshift(this._id);
+	public compress(element: T, options: CompressorOptions, level: number = 0): CompressValue {
+		let result: CompressArray = this._parent !== undefined ? this._parent.compress(element, options, level + 1) as CompressArray: [];
+		if (level === 0) {
+			result.unshift(options.mode === 'store' ? this._id : -1);
 		}
 		let undefinedElements: number = 0;
 		const recordUndefined = () => {
@@ -216,7 +243,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 				case CompressionKind.literal:
 					let c1 = getCompressor(item.compressor, value, true);
 					pushUndefined();
-					result.push(c1.compress(value));
+					result.push(c1.compress(value, options));
 					break;
 				case CompressionKind.array:
 					if (!Array.isArray(value)) {
@@ -226,7 +253,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					for (let element of value) {
 						let c2 = getCompressor(item.compressor, element, false);
 						if (c2 !== undefined) {
-							convertedArray.push(c2.compress(element));
+							convertedArray.push(c2.compress(element, options));
 						} else {
 							convertedArray.push(element);
 						}
@@ -238,7 +265,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					const handleValue = (value: any): any => {
 						let compresor = getCompressor(item.compressor, value, false);
 						if (compresor !== undefined) {
-							return compresor.compress(value);
+							return compresor.compress(value, options);
 						}
 						let type = typeof value;
 						if (type === 'number' || type === 'string' || type === 'boolean') {
@@ -313,10 +340,48 @@ class NoopCompressor extends Compressor<number | string | boolean> {
 const noopCompressor = new NoopCompressor();
 Compressor.addCompressor(noopCompressor);
 
-const elementCompressor = new GenericCompressor<Element>(undefined, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.scalar('id', next()),
-	GenericCompressorProperty.scalar('type', next(), new Map<ElementTypes, number>([ [ElementTypes.vertex, 1], [ElementTypes.edge, 2] ]))
-]);
+const elementShortForms = function() {
+	return new Map<ElementTypes, number>([ [ElementTypes.vertex, 1], [ElementTypes.edge, 2] ]);
+}();
+
+class ElementCompressor extends Compressor<Element> {
+
+	private _id: number;
+
+	public constructor() {
+		super();
+		this._id = Compressor.nextId();
+	}
+
+	public compress(element: Element, options: CompressorOptions): [Id, number] {
+		if (options.mode === 'store') {
+			return [element.id, elementShortForms.get(element.type)!];
+		} else {
+			return [-1, -1];
+		}
+	}
+
+	public metaData(): CompressorProperty[] {
+		return [
+			CompressorProperty.scalar('id', 1),
+			CompressorProperty.scalar('type', 2)
+		];
+	}
+
+	public get id(): number {
+		return this._id;
+	}
+
+	public get parent(): undefined {
+		return undefined;
+	}
+
+	public get index(): number {
+		return 3;
+	}
+}
+
+const elementCompressor = new ElementCompressor();
 Compressor.addCompressor(elementCompressor);
 
 export const vertexShortForms = function() {
@@ -361,8 +426,8 @@ class LspRangeCompressor extends Compressor<lsp.Range> {
 		this._id = Compressor.nextId();
 	}
 
-	public compress(element: lsp.Range): [number, number, number, number, number] {
-		return [this.id, element.start.line, element.start.character, element.end.line, element.end.character];
+	public compress(element: lsp.Range, options: CompressorOptions): [number, number, number, number, number] {
+		return [options.mode === 'store' ? this.id : -1, element.start.line, element.start.character, element.end.line, element.end.character];
 	}
 
 	public metaData(): CompressorProperty[] {
@@ -438,23 +503,23 @@ class RangeCompressor extends Compressor<Range> {
 		this._index = vertexCompressor.index;
 	}
 
-	public compress(element: Range): CompressValue {
-		let result = vertexCompressor.compress(element, false) as CompressArray;
-		result.unshift(this._id);
+	public compress(element: Range, options: CompressorOptions): CompressValue {
+		let result = vertexCompressor.compress(element, options, 1) as CompressArray;
+		result.unshift(options.mode === 'store' ? this._id : -1);
 		result.push(element.start.line, element.start.character, element.end.line, element.end.character);
 		if (element.tag) {
 			switch (element.tag.type) {
 				case RangeTagTypes.declaration:
-					result.push(declarationTagCompressor.compress(element.tag));
+					result.push(declarationTagCompressor.compress(element.tag, options));
 					break;
 				case RangeTagTypes.definition:
-					result.push(definitionTagCompressor.compress(element.tag));
+					result.push(definitionTagCompressor.compress(element.tag, options));
 					break;
 				case RangeTagTypes.reference:
-					result.push(referenceTagCompressor.compress(element.tag));
+					result.push(referenceTagCompressor.compress(element.tag, options));
 					break;
 				case RangeTagTypes.unknown:
-					result.push(unknownTagCompressor.compress(element.tag));
+					result.push(unknownTagCompressor.compress(element.tag, options));
 					break;
 			}
 		} else {
@@ -522,7 +587,7 @@ const packageInformationCompressor = new GenericCompressor<PackageInformation>(v
 ]);
 Compressor.registerVertexCompressor(VertexLabels.packageInformation, packageInformationCompressor);
 
-const rangeBasedDocumentSymbolCompressor = new GenericCompressor<RangeBasedDocumentSymbol>(undefined, Compressor.nextId(), (next, that) => [
+export const rangeBasedDocumentSymbolCompressor = new GenericCompressor<RangeBasedDocumentSymbol>(undefined, Compressor.nextId(), (next, that) => [
 	GenericCompressorProperty.scalar('id', next()),
 	GenericCompressorProperty.array('children', next(), that)
 ]);
@@ -546,7 +611,7 @@ const diagnosticRelatedInformationCompressor = new GenericCompressor<lsp.Diagnos
 ]);
 Compressor.addCompressor(diagnosticRelatedInformationCompressor);
 
-const diagnosticCompressor = new GenericCompressor<lsp.Diagnostic>(undefined, Compressor.nextId(), (next) => [
+export const diagnosticCompressor = new GenericCompressor<lsp.Diagnostic>(undefined, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.literal('range', next(), lspRangeCompressor),
 	GenericCompressorProperty.scalar('severity', next()),
 	GenericCompressorProperty.scalar('code', next()),
@@ -561,7 +626,7 @@ const diagnosticResultCompressor = new GenericCompressor<DiagnosticResult>(verte
 ]);
 Compressor.registerVertexCompressor(VertexLabels.diagnosticResult, diagnosticResultCompressor);
 
-const foldingRangeCompressor = new GenericCompressor<lsp.FoldingRange>(undefined, Compressor.nextId(), (next) => [
+export const foldingRangeCompressor = new GenericCompressor<lsp.FoldingRange>(undefined, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('startLine', next()),
 	GenericCompressorProperty.scalar('startCharacter', next()),
 	GenericCompressorProperty.scalar('endLine', next()),

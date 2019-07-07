@@ -6,53 +6,11 @@ import * as fs from 'fs';
 import * as Sqlite from 'better-sqlite3';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains, PackageInformation, item } from 'lsif-protocol';
+
 import { itemPropertyShortForms } from './compress';
+import { Inserter } from './inserter';
 
-class Inserter {
-
-	private sqlStmt: Sqlite.Statement;
-	private batch: any[];
-
-	public constructor(private db: Sqlite.Database, private stmt: string, private numberOfArgs: number, private batchSize: number) {
-		const args = `(${new Array(numberOfArgs).fill('?').join(',')})`;
-		this.sqlStmt = db.prepare(`${stmt} Values ${new Array(batchSize).fill(args).join(',')}`);
-		this.batch = [];
-	}
-
-	public do(...params: any[]): void {
-		if (params.length !== this.numberOfArgs) {
-			throw new Error(`Wrong number of arguments. Expected ${this.numberOfArgs} but got ${params.length}`);
-		}
-		this.batch.push(...params);
-		if (this.batch.length === this.numberOfArgs * this.batchSize) {
-			this.sqlStmt.run(...this.batch);
-			this.batch = [];
-		}
-	}
-
-	public finish(): void {
-		if (this.batch.length === 0) {
-			return;
-		}
-		let values: string[] = [];
-		for (let i = 0; i < this.batch.length; i = i + this.numberOfArgs) {
-			let elem: any[] = [];
-			for (let e = 0; e < this.numberOfArgs; e++) {
-				let param = this.batch[i + e];
-				if (param === null) {
-					elem.push('NULL');
-				} else {
-					elem.push(typeof param === 'string' ? `'${param}'` : param);
-				}
-			}
-			values.push(`(${elem.join(',')})`);
-		}
-		const stmt = `${this.stmt} Values ${values.join(',')}`;
-		this.db.exec(stmt);
-	}
-}
-
-export class Database {
+export class GraphStore {
 
 	private db: Sqlite.Database;
 	private insertContentStmt: Sqlite.Statement;
@@ -73,6 +31,8 @@ export class Database {
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
 		this.createTables();
+		this.db.exec(`Insert into format (format) Values ('graph')`);
+
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
@@ -84,6 +44,7 @@ export class Database {
 
 	private createTables(): void {
 		// Vertex information
+		this.db.exec('Create Table format (format Text Not Null)');
 		this.db.exec('Create Table vertices (id Integer Unique Primary Key, label Integer Not Null, value Text Not Null)');
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
@@ -104,7 +65,7 @@ export class Database {
 		this.db.exec('Create Index items_inv on items (inV)');
 	}
 
-	public runInsertTransaction(cb: (db: Database) => void): void {
+	public runInsertTransaction(cb: (db: GraphStore) => void): void {
 		this.db.transaction(() => {
 			cb(this);
 		})();
