@@ -6,6 +6,7 @@ import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
 import * as TJS from 'typescript-json-schema';
+import { getInVs } from './shared';
 
 const vertices: { [id: string]: Element } = {};
 const edges: { [id: string]: Element } = {};
@@ -90,29 +91,20 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	for (const object of toolOutput) {
 		if (object.type === LSIF.ElementTypes.edge) {
 			const edge: LSIF.Edge = object as LSIF.Edge;
-			edges[edge.id.toString()] = new Element(edge);
+			const id: string = edge.id.toString();
+			edges[id] = new Element(edge);
 
-			const handleEdge = (outV: LSIF.Id, inV: LSIF.Id) => {
-				if (inV === undefined || outV === undefined) {
-					errors.push(new Error(edge, `requires properties "inV" and "outV"`));
-					edges[edge.id.toString()].invalidate();
-					return;
-				}
-
-				if (vertices[inV.toString()] === undefined || vertices[outV.toString()] === undefined) {
-					errors.push(new Error(edge, `was emitted before a vertex it refers to`));
-					edges[edge.id.toString()].invalidate();
-					checks[Check.vertexBeforeEdge] = false;
-				}
-
-				visited[inV.toString()] = visited[outV.toString()] = true;
-			};
-			if (LSIF.Edge.is11(edge)) {
-				handleEdge(edge.outV, edge.inV);
-			} else {
-				edge.inVs.forEach ((inV) => handleEdge(edge.outV, inV));
+			if (edge.outV === undefined) {
+				errors.push(new Error(edge, `requires property "outV"`));
+				edges[id].invalidate();
 			}
 
+			if (!LSIF.Edge.is11(edge) && !LSIF.Edge.is1N(edge)) {
+				errors.push(new Error(edge, `requires property "inV" or "inVs"`));
+				edges[id].invalidate();
+			} else {
+				checkVertexBeforeEdge(edge);
+			}
 		} else if (object.type === 'vertex') {
 			vertices[object.id.toString()] = new Element(object);
 		} else {
@@ -121,6 +113,24 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	}
 
 	console.log(`${outputMessage} done`);
+}
+
+function checkVertexBeforeEdge(edge: LSIF.Edge): void {
+	const inVs = getInVs(edge);
+	const outV = edge.outV.toString();
+
+	if (vertices[outV] === undefined ||
+		// The following will be true if any id in the inV array is not yet defined in the vertices dictionary
+		inVs.map((inV) => vertices[inV] === undefined).reduce((total, curr) => total || curr)) {
+		errors.push(new Error(edge, `was emitted before a vertex it refers to`));
+		edges[edge.id.toString()].invalidate();
+		checks[Check.vertexBeforeEdge] = false;
+	}
+
+	inVs.forEach((inV) => {
+		visited[inV] = true;
+	});
+	visited[outV] = true;
 }
 
 function checkAllVisited(): void {

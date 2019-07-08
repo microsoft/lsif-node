@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as LSIF from 'lsif-protocol';
-import { getInVs } from 'shared';
+import { getInVs } from './shared';
 
 export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: number): number {
 	const edges: { [id: string]: LSIF.Element } = {};
