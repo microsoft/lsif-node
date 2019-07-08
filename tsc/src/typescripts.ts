@@ -235,6 +235,10 @@ export function isTransient(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Transient) !== 0;
 }
 
+export function isTypeAlias(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
+}
+
 export function isPrivate(symbol: ts.Symbol): boolean {
 	let declarations = symbol.getDeclarations();
 	if (declarations) {

@@ -7,7 +7,7 @@ import * as path from 'path';
 import { URI } from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
-import { Vertex, Edge } from 'lsif-protocol';
+import { Vertex, Edge, VertexLabels } from 'lsif-protocol';
 import { Writer } from '../utils/writer';
 
 interface VisNode {
@@ -30,6 +30,11 @@ function baseName(uri: string): string {
 	return path.basename(URI.parse(uri).fsPath);
 }
 
+const include: Set<VertexLabels> = new Set([VertexLabels.document, VertexLabels.range, VertexLabels.resultSet, VertexLabels.definitionResult]);
+function filterVertex(element: Vertex): boolean {
+	return !include.has(element.label);
+}
+
 export const create: Create = (writer: Writer): Emitter => {
 	let data: VisData = {
 		nodes: [],
@@ -41,9 +46,9 @@ export const create: Create = (writer: Writer): Emitter => {
 		},
 		emit: (element: Vertex | Edge) => {
 			if (element.type === 'vertex') {
-				// if (element._kind === 'hoverResult') {
-				// 	return;
-				// }
+				if (filterVertex(element)) {
+					return;
+				}
 				let label: string;
 				switch (element.label) {
 					case 'project':
@@ -80,15 +85,21 @@ export const create: Create = (writer: Writer): Emitter => {
 				}
 				data.nodes.push(node);
 			} else if (element.type === 'edge') {
-				// if (element._kind === 'textDocument/hover' || element._kind === 'contains' || element._kind === 'child') {
-				// 	return;
-				// }
-				let edge: VisEdge = {
-					from: element.outV as number,
-					to: 10, //element.inV as number,
-					label: element.label
+				if (Edge.is11(element)) {
+					data.edges.push({
+						from: element.outV as number,
+						to: element.inV as number,
+						label: element.label
+					});
+				} else {
+					for (let inV of element.inVs) {
+						data.edges.push({
+							from: element.outV as number,
+							to: inV as number,
+							label: element.label
+						});
+					}
 				}
-				data.edges.push(edge)
 			}
 		},
 		end: () => {
