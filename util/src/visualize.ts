@@ -3,20 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as LSIF from 'lsif-protocol';
-import { Edge } from 'lsif-protocol';
-
-function getInVs(edge: LSIF.Edge): string[] {
-	let inVs: string[] = [];
-	if (Edge.is11(edge)) {
-		inVs.push(edge.inV.toString());
-	}
-	else {
-		for (const inV of edge.inVs) {
-			inVs.push(inV.toString());
-		}
-	}
-	return inVs;
-}
+import { getInVs } from 'shared';
 
 export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: number): number {
 	const edges: { [id: string]: LSIF.Element } = {};
@@ -43,7 +30,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 		allEdges.forEach((element: LSIF.Element) => {
 			const edge: LSIF.Edge = element as LSIF.Edge;
 			const outV: string = edge.outV.toString();
-			getInVs(edge).forEach (inV => {
+			getInVs(edge).forEach ((inV) => {
 				if (targetIds.includes(inV) || targetIds.includes(outV)) {
 					edges[edge.id] = edge;
 					idQueue.push(inV, outV);
@@ -58,7 +45,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 		const inVs: string[] = getInVs(edge);
 		const outV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.outV)[0];
 
-		toolOutput.filter((element: LSIF.Element) => inVs.includes(element.id.toString())).forEach(element => {
+		toolOutput.filter((element: LSIF.Element) => inVs.includes(element.id.toString())).forEach((element) => {
 			vertices[element.id.toString()] = element;
 		});
 		vertices[outV.id.toString()] = outV;
@@ -100,7 +87,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 	Object.keys(edges)
 	.forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key] as LSIF.Edge;
-		if (Edge.is11(edge)) {
+		if (LSIF.Edge.is11(edge)) {
 			digraph += `  ${edge.outV} -> ${edge.inV} [label="${edge.label}"]\n`;
 		} else {
 			for (const inV of edge.inVs) {
