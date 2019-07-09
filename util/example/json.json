@@ -25,7 +25,7 @@
    "type": "edge",
    "label": "contains",
    "outV": 1,
-   "inV": 3
+   "inVs": [ 3 ]
 }, {
    "id": 6,
    "type": "vertex",
@@ -36,5 +36,6 @@
    "label": "item",
    "property": "references",
    "outV": 6,
-   "inV": 3
+   "inVs": [ 3 ],
+   "document": "1"
 }]

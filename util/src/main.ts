@@ -27,13 +27,23 @@ function readInput(format: string, inputPath: string, callback: (input: LSIF.Ele
 				buffer.push(line);
 				break;
 			case 'line': default:
-				input.push(JSON.parse(line));
+				try {
+					const element: LSIF.Element = JSON.parse(line);
+					input.push(element);
+				} catch {
+					// Do nothing for now
+				}
 		}
 	});
 
 	rd.on('close', () => {
 		if (buffer.length > 0) {
 			input = JSON.parse(buffer.join('\n'));
+		} else if (input.length === 0) {
+			yargs.showHelp('log');
+			console.error('\nError: Fail to parse input file. Did you forget --inputFormat=json?');
+			process.exitCode = 1;
+			return;
 		}
 
 		callback(input);
@@ -63,8 +73,8 @@ export function main(): void {
 				(input: LSIF.Element[]) => {
 					const filter: IFilter = argv as unknown as IFilter;
 					process.exitCode = validate(
-                        input,
-                        getFilteredIds(filter, input),
+						input,
+						getFilteredIds(filter, input),
 						path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
 				});
 		}

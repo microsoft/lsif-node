@@ -210,8 +210,7 @@ function checkEdges(ids: string[], protocolPath: string): void {
 			let errorMessage: string | undefined;
 			edges[key].invalidate();
 
-			if ((LSIF.Edge.is11(edge) && edge.inV === undefined) ||
-				LSIF.Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
+			if ((!LSIF.Edge.is11(edge) && !(LSIF.Edge.is1N(edge))) || edge.outV === undefined) {
 				// This error was caught before
 				return;
 			}
@@ -221,6 +220,32 @@ function checkEdges(ids: string[], protocolPath: string): void {
 			} else if (!Object.values(LSIF.EdgeLabels)
 						.includes(edge.label)) {
 				errorMessage = `unknown label`;
+			} else {
+				try {
+					let typeName: string = 'E11';
+					// Special cases
+					if (edge.label === 'item') {
+						typeName = 'ItemEdge';
+					} else if (edge.label === 'contains') {
+						typeName = 'E1N';
+					}
+
+					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, typeName, { required: true });
+					const moreValidation: ValidatorResult | null = validateSchema(edge, specificSchema);
+					errorMessage = '';
+					moreValidation.errors
+						// Filter out unhelpful error messages not related to the instance
+						.filter((error) => error.property === 'instance')
+						.forEach((error: ValidationError, index: number) => {
+						if (index > 0) {
+							errorMessage += '; ';
+						}
+						errorMessage += `${error.message}`;
+					});
+				} catch {
+					// Failed to get more details for the error
+					errorMessage = 'unable to provide details';
+				}
 			}
 			errors.push(new Error(edges[key].element, errorMessage!));
 		}
