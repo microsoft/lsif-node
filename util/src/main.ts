@@ -19,19 +19,34 @@ function readInput(format: string, inputPath: string, callback: (input: LSIF.Ele
 	}
 
 	let input: LSIF.Element[] = [];
+	const invalidLines: string[] = [];
 	const buffer: string[] = [];
 	const rd: readline.Interface = readline.createInterface(inputStream);
+
 	rd.on('line', (line: string) => {
 		switch (format) {
 			case 'json':
 				buffer.push(line);
 				break;
 			case 'line': default:
-				input.push(JSON.parse(line));
+				try {
+					const element: LSIF.Element = JSON.parse(line);
+					input.push(element);
+				} catch {
+					invalidLines.push(line);
+				}
 		}
 	});
 
 	rd.on('close', () => {
+		if (invalidLines.length > 0) {
+			yargs.showHelp('log');
+			console.error('\nError: The following lines failed to parse. Did you forget --inputFormat=json?');
+			console.error(invalidLines.join('\n'));
+			process.exitCode = 1;
+			return;
+		}
+
 		if (buffer.length > 0) {
 			input = JSON.parse(buffer.join('\n'));
 		}
@@ -63,9 +78,9 @@ export function main(): void {
 				(input: LSIF.Element[]) => {
 					const filter: IFilter = argv as unknown as IFilter;
 					process.exitCode = validate(
-                        input,
-                        getFilteredIds(filter, input),
-												path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
+						input,
+						getFilteredIds(filter, input),
+						path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
 				});
 		}
 	})

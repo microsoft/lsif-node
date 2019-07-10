@@ -6,6 +6,7 @@ import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
 import * as TJS from 'typescript-json-schema';
+import { getInVs } from './shared';
 
 const vertices: { [id: string]: Element } = {};
 const edges: { [id: string]: Element } = {};
@@ -63,11 +64,11 @@ class Statistics {
 }
 
 export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath: string): number {
-	readInput(toolOutput);
-
-	checkAllVisited();
-
 	if (fse.pathExistsSync(protocolPath)) {
+		readInput(toolOutput);
+
+		checkAllVisited();
+
 		checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
 								.map((e: LSIF.Element) => e.id.toString()),
 								protocolPath);
@@ -75,7 +76,8 @@ export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath
 								.map((e: LSIF.Element) => e.id.toString()),
 								protocolPath);
 	} else {
-		console.warn(`Skipping thorough validation: ${protocolPath} was not found`);
+		console.error(`Error: ${protocolPath} was not found`);
+		return 1;
 	}
 
 	printOutput(ids);
@@ -90,29 +92,20 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	for (const object of toolOutput) {
 		if (object.type === LSIF.ElementTypes.edge) {
 			const edge: LSIF.Edge = object as LSIF.Edge;
-			edges[edge.id.toString()] = new Element(edge);
+			const id: string = edge.id.toString();
+			edges[id] = new Element(edge);
 
-			const handleEdge = (outV: LSIF.Id, inV: LSIF.Id) => {
-				if (inV === undefined || outV === undefined) {
-					errors.push(new Error(edge, `requires properties "inV" and "outV"`));
-					edges[edge.id.toString()].invalidate();
-					return;
-				}
-
-				if (vertices[inV.toString()] === undefined || vertices[outV.toString()] === undefined) {
-					errors.push(new Error(edge, `was emitted before a vertex it refers to`));
-					edges[edge.id.toString()].invalidate();
-					checks[Check.vertexBeforeEdge] = false;
-				}
-
-				visited[inV.toString()] = visited[outV.toString()] = true;
-			};
-			if (LSIF.Edge.is11(edge)) {
-				handleEdge(edge.outV, edge.inV);
-			} else {
-				edge.inVs.forEach ((inV) => handleEdge(edge.outV, inV));
+			if (edge.outV === undefined) {
+				errors.push(new Error(edge, `requires property "outV"`));
+				edges[id].invalidate();
 			}
 
+			if (!LSIF.Edge.is11(edge) && !LSIF.Edge.is1N(edge)) {
+				errors.push(new Error(edge, `requires property "inV" or "inVs"`));
+				edges[id].invalidate();
+			} else {
+				checkVertexBeforeEdge(edge);
+			}
 		} else if (object.type === 'vertex') {
 			vertices[object.id.toString()] = new Element(object);
 		} else {
@@ -121,6 +114,24 @@ function readInput(toolOutput: LSIF.Element[]): void {
 	}
 
 	console.log(`${outputMessage} done`);
+}
+
+function checkVertexBeforeEdge(edge: LSIF.Edge): void {
+	const inVs = getInVs(edge);
+	const outV = edge.outV.toString();
+
+	if (vertices[outV] === undefined ||
+		// The following will be true if any id in the inV array is not yet defined in the vertices dictionary
+		inVs.map((inV) => vertices[inV] === undefined).reduce((total, curr) => total || curr)) {
+		errors.push(new Error(edge, `was emitted before a vertex it refers to`));
+		edges[edge.id.toString()].invalidate();
+		checks[Check.vertexBeforeEdge] = false;
+	}
+
+	inVs.forEach((inV) => {
+		visited[inV] = true;
+	});
+	visited[outV] = true;
 }
 
 function checkAllVisited(): void {
@@ -162,15 +173,10 @@ function checkVertices(ids: string[], protocolPath: string): void {
 					const className: string = vertex.label[0].toUpperCase() + vertex.label.slice(1);
 					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, className, { required: true });
 					const moreValidation: ValidatorResult | null = validateSchema(vertex, specificSchema);
-					errorMessage = '';
-					moreValidation.errors.forEach((error: ValidationError, index: number) => {
-						if (index > 0) {
-							errorMessage += '; ';
-						}
-						errorMessage += `${error.message}`;
-					});
+					errorMessage = moreValidation.errors.join('; ');
 				} catch {
 					// Failed to get more details for the error
+					errorMessage = 'unable to provide details';
 				}
 			}
 			errors.push(new Error(vertex, errorMessage!));
@@ -185,9 +191,12 @@ function checkVertices(ids: string[], protocolPath: string): void {
 function checkEdges(ids: string[], protocolPath: string): void {
 	let outputMessage: string | undefined;
 	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath]);
-	const edgeSchema: TJS.Definition | null = TJS.generateSchema(program, 'Edge', { required: true, noExtraProps: true });
 	let count: number = 1;
 	const length: number = ids.length;
+
+	const e11Schema = TJS.generateSchema(program, 'E11', { required: true, noExtraProps: true });
+	const e1NSchema = TJS.generateSchema(program, 'E1N', { required: true, noExtraProps: true });
+	const itemSchema = TJS.generateSchema(program, 'ItemEdge', { required: true, noExtraProps: true });
 
 	ids.forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key].element as LSIF.Edge;
@@ -195,24 +204,33 @@ function checkEdges(ids: string[], protocolPath: string): void {
 		process.stdout.write(`${outputMessage}\r`);
 		count++;
 
-		const validation: ValidatorResult = validateSchema(edge, edgeSchema);
-		if (!validation.valid) {
-			let errorMessage: string | undefined;
+		if ((!LSIF.Edge.is11(edge) && !(LSIF.Edge.is1N(edge))) || edge.outV === undefined) {
+			// This error was caught before
+			return;
+		}
+
+		if (edge.label === undefined || !Object.values(LSIF.EdgeLabels).includes(edge.label)) {
+			errors.push(new Error(edges[key].element, edge.label ? `requires property "label"` : `unknown label`));
 			edges[key].invalidate();
+			return;
+		}
 
-			if ((LSIF.Edge.is11(edge) && edge.inV === undefined) ||
-				LSIF.Edge.is1N(edge) && edge.inVs === undefined || edge.outV === undefined) {
-				// This error was caught before
-				return;
-			}
+		let validation: ValidatorResult;
+		switch (edge.label) {
+			case LSIF.EdgeLabels.item:
+				validation = validateSchema(edge, itemSchema);
+				break;
+			case LSIF.EdgeLabels.contains:
+				validation = validateSchema(edge, e1NSchema);
+				break;
+			default:
+				validation = validateSchema(edge, e11Schema);
+		}
 
-			if (edge.label === undefined) {
-				errorMessage = `requires property "label"`;
-			} else if (!Object.values(LSIF.EdgeLabels)
-						.includes(edge.label)) {
-				errorMessage = `unknown label`;
-			}
-			errors.push(new Error(edges[key].element, errorMessage!));
+		const validationErrors: ValidationError[] = validation.errors.filter((error) => error.property === 'instance');
+		if (validationErrors.length > 0) {
+			edges[key].invalidate();
+			errors.push(new Error(edges[key].element, validationErrors.join('; ')));
 		}
 	});
 
