@@ -19,8 +19,10 @@ function readInput(format: string, inputPath: string, callback: (input: LSIF.Ele
 	}
 
 	let input: LSIF.Element[] = [];
+	const invalidLines: string[] = [];
 	const buffer: string[] = [];
 	const rd: readline.Interface = readline.createInterface(inputStream);
+
 	rd.on('line', (line: string) => {
 		switch (format) {
 			case 'json':
@@ -31,19 +33,22 @@ function readInput(format: string, inputPath: string, callback: (input: LSIF.Ele
 					const element: LSIF.Element = JSON.parse(line);
 					input.push(element);
 				} catch {
-					// Do nothing for now
+					invalidLines.push(line);
 				}
 		}
 	});
 
 	rd.on('close', () => {
-		if (buffer.length > 0) {
-			input = JSON.parse(buffer.join('\n'));
-		} else if (input.length === 0) {
+		if (invalidLines.length > 0) {
 			yargs.showHelp('log');
-			console.error('\nError: Fail to parse input file. Did you forget --inputFormat=json?');
+			console.error('\nError: The following lines failed to parse. Did you forget --inputFormat=json?');
+			console.error(invalidLines.join('\n'));
 			process.exitCode = 1;
 			return;
+		}
+
+		if (buffer.length > 0) {
+			input = JSON.parse(buffer.join('\n'));
 		}
 
 		callback(input);
