@@ -173,13 +173,7 @@ function checkVertices(ids: string[], protocolPath: string): void {
 					const className: string = vertex.label[0].toUpperCase() + vertex.label.slice(1);
 					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, className, { required: true });
 					const moreValidation: ValidatorResult | null = validateSchema(vertex, specificSchema);
-					errorMessage = '';
-					moreValidation.errors.forEach((error: ValidationError, index: number) => {
-						if (index > 0) {
-							errorMessage += '; ';
-						}
-						errorMessage += `${error.message}`;
-					});
+					errorMessage = moreValidation.errors.join('; ');
 				} catch {
 					// Failed to get more details for the error
 					errorMessage = 'unable to provide details';
@@ -236,16 +230,7 @@ function checkEdges(ids: string[], protocolPath: string): void {
 		const validationErrors: ValidationError[] = validation.errors.filter((error) => error.property === 'instance');
 		if (validationErrors.length > 0) {
 			edges[key].invalidate();
-			let errorMessage: string = '';
-
-			validationErrors.forEach((error: ValidationError, index: number) => {
-				if (index > 0) {
-					errorMessage += '; ';
-				}
-				errorMessage += `${error.message}`;
-			});
-
-			errors.push(new Error(edges[key].element, errorMessage));
+			errors.push(new Error(edges[key].element, validationErrors.join('; ')));
 		}
 	});
 
