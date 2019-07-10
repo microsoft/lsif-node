@@ -1,4 +1,11 @@
 {
 	"typescript.tsc.autoDetect": "off",
-	"npm.autoDetect": "on"
+	"npm.autoDetect": "on",
+	"spellright.language": [
+		"en"
+	],
+	"spellright.documentTypes": [
+		"markdown",
+		"latex"
+	]
 }
