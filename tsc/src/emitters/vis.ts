@@ -30,7 +30,7 @@ function baseName(uri: string): string {
 	return path.basename(URI.parse(uri).fsPath);
 }
 
-const include: Set<VertexLabels> = new Set([VertexLabels.document, VertexLabels.range, VertexLabels.resultSet, VertexLabels.definitionResult]);
+const include: Set<VertexLabels> = new Set([VertexLabels.document, VertexLabels.range, VertexLabels.resultSet, VertexLabels.referenceResult]);
 function filterVertex(element: Vertex): boolean {
 	return !include.has(element.label);
 }
