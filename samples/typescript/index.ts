@@ -1,8 +1,47 @@
-export type PropertyCreator = (
-    instance: any,
-) => void
+import * as mobx from 'mobx';
 
-export type BabelDescriptor = PropertyDescriptor & { initializer?: () => any }
+let map: mobx.ObservableMap = new mobx.ObservableMap();
+
+
+// interface I {
+//   foo(): void;
+// }
+
+// let i: I;
+
+// interface I {
+//   foo(): void;
+// }
+
+// interface II {
+//   foo(): void;
+// }
+
+// class B implements I, II {
+//   foo(): void {
+//   }
+// }
+
+// let i: I;
+// i.foo();
+
+// let b: B;
+// b.foo();
+
+
+
+// export type BabelDescriptor = { initializer?: () => any; } & ( { foo: number } | { bar: number });
+
+
+// export type PropertyCreator = (
+//     instance: any,
+// ) => void
+
+// export interface Init {
+//     initializer?: () => any;
+// }
+
+// export type BabelDescriptor = PropertyCreator & Init
 
 // import * as p from './sub/provide';
 // p.foo();
