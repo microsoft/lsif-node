@@ -198,6 +198,10 @@ function checkEdges(ids: string[], protocolPath: string): void {
 	let count: number = 1;
 	const length: number = ids.length;
 
+	const e11Schema = TJS.generateSchema(program, 'E11', { required: true, noExtraProps: true });
+	const e1NSchema = TJS.generateSchema(program, 'E1N', { required: true, noExtraProps: true });
+	const itemSchema = TJS.generateSchema(program, 'ItemEdge', { required: true, noExtraProps: true });
+
 	ids.forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key].element as LSIF.Edge;
 		outputMessage = `Verifying edge ${count} of ${length}...`;
@@ -215,22 +219,19 @@ function checkEdges(ids: string[], protocolPath: string): void {
 			return;
 		}
 
-		let typeName: string = 'E11';
-		// Special cases
-		if (edge.label === 'item') {
-			typeName = 'ItemEdge';
-		} else if (edge.label === 'contains') {
-			typeName = 'E1N';
+		let validation: ValidatorResult;
+		switch (edge.label) {
+			case LSIF.EdgeLabels.item:
+				validation = validateSchema(edge, itemSchema);
+				break;
+			case LSIF.EdgeLabels.contains:
+				validation = validateSchema(edge, e1NSchema);
+				break;
+			default:
+				validation = validateSchema(edge, e11Schema);
 		}
 
-		const edgeSchema: TJS.Definition | null = TJS.generateSchema(program,
-																	typeName,
-																	{ required: true, noExtraProps: true });
-
-		const validation: ValidatorResult = validateSchema(edge, edgeSchema);
-		const validationErrors: ValidationError[] = validation.errors
-													// Filter out unhelpful errors not related to the instance
-													.filter((error) => error.property === 'instance');
+		const validationErrors: ValidationError[] = validation.errors.filter((error) => error.property === 'instance');
 		if (validationErrors.length > 0) {
 			edges[key].invalidate();
 			let errorMessage: string = '';
