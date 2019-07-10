@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Version, Range, EventKind
+	Version, Range, EventKind, TypeDefinitionResult
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -362,6 +362,10 @@ abstract class SymbolData extends LSIFData {
 	public abstract addReference(sourceFile: ts.SourceFile, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
 	public abstract addReference(sourceFile: ts.SourceFile, reference: ReferenceResult): void;
 
+	public abstract getOrCreateTypeDefintionResult(): TypeDefinitionResult;
+
+	public abstract addTypeDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void;
+
 	public abstract getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition;
 
 	public abstract nodeProcessed(node: ts.Node): boolean;
@@ -371,6 +375,7 @@ class StandardSymbolData extends SymbolData {
 
 	private definitionResult: DefinitionResult | undefined;
 	private referenceResult: ReferenceResult | undefined;
+	private typeDefinitionResult: TypeDefinitionResult | undefined;
 
 	private partitions: Map<string /* filename */, SymbolDataPartition | null> | null | undefined;
 
@@ -407,6 +412,10 @@ class StandardSymbolData extends SymbolData {
 		this.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
 	}
 
+	public addTypeDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
+		this.getOrCreatePartition(sourceFile).addTypeDefinition(definition);
+	}
+
 	public getOrCreateDefinitionResult(): DefinitionResult {
 		if (this.definitionResult === undefined ) {
 			this.definitionResult = this.vertex.definitionResult();
@@ -423,6 +432,15 @@ class StandardSymbolData extends SymbolData {
 			this.emit(this.edge.references(this.resultSet, this.referenceResult));
 		}
 		return this.referenceResult;
+	}
+
+	public getOrCreateTypeDefintionResult(): TypeDefinitionResult {
+		if (this.typeDefinitionResult === undefined) {
+			this.typeDefinitionResult = this.vertex.typeDefinitionResult();
+			this.emit(this.typeDefinitionResult);
+			this.emit(this.edge.typeDefinition(this.resultSet, this.typeDefinitionResult));
+		}
+		return this.typeDefinitionResult;
 	}
 
 	public getOrCreatePartition(sourceFile: ts.SourceFile): SymbolDataPartition {
@@ -652,13 +670,21 @@ class TransientSymbolData extends StandardSymbolData {
 
 class SymbolDataPartition extends LSIFData {
 
-	private definitionRanges: DefinitionRange[] | undefined;
+	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
+	private static EMPTY_MAP= Object.freeze(new Map()) as unknown as Map<any, any>;
 
-	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]> | undefined;
-	private referenceResults: ReferenceResult[] | undefined;
+	private definitionRanges: DefinitionRange[];
+	private typeDefinitionRanges: DefinitionRange[];
+
+	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]>;
+	private referenceResults: ReferenceResult[];
 
 	public constructor(context: SymbolDataContext, private symbolData: SymbolData, private document: Document) {
 		super(context);
+		this.definitionRanges = SymbolDataPartition.EMPTY_ARRAY;
+		this.typeDefinitionRanges = SymbolDataPartition.EMPTY_ARRAY;
+		this.referenceRanges = SymbolDataPartition.EMPTY_MAP;
+		this.referenceResults = SymbolDataPartition.EMPTY_ARRAY;
 	}
 
 	public begin(): void {
@@ -666,7 +692,7 @@ class SymbolDataPartition extends LSIFData {
 	}
 
 	public addDefinition(value: DefinitionRange, recordAsReference: boolean = true): void {
-		if (this.definitionRanges === undefined) {
+		if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
 			this.definitionRanges = [];
 		}
 		this.definitionRanges.push(value);
@@ -676,7 +702,7 @@ class SymbolDataPartition extends LSIFData {
 	}
 
 	public findDefinition(range: lsp.Range): DefinitionRange | undefined {
-		if (this.definitionRanges === undefined) {
+		if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
 			return undefined;
 		}
 		for (let definitionRange of this.definitionRanges) {
@@ -686,6 +712,13 @@ class SymbolDataPartition extends LSIFData {
 			}
 		}
 		return undefined;
+	}
+
+	public addTypeDefinition(range: DefinitionRange): void {
+		if (this.typeDefinitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
+			this.typeDefinitionRanges = [];
+		}
+		this.typeDefinitionRanges.push(range);
 	}
 
 	public addReference(value: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
@@ -702,7 +735,7 @@ class SymbolDataPartition extends LSIFData {
 			}
 			values.push(value);
 		} else if (value.label === 'referenceResult') {
-			if (this.referenceResults === undefined) {
+			if (this.referenceResults === SymbolDataPartition.EMPTY_ARRAY) {
 				this.referenceResults = [];
 			}
 			this.referenceResults.push(value);
@@ -710,18 +743,22 @@ class SymbolDataPartition extends LSIFData {
 	}
 
 	public end(): void {
-		if (this.definitionRanges !== undefined) {
+		if (this.definitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
 			let definitionResult = this.symbolData.getOrCreateDefinitionResult();
 			this.emit(this.edge.item(definitionResult, this.definitionRanges, this.document));
 		}
-		if (this.referenceRanges !== undefined) {
+		if (this.typeDefinitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
+			const typeDefinitionResult = this.symbolData.getOrCreateTypeDefintionResult();
+			this.emit(this.edge.item(typeDefinitionResult, this.typeDefinitionRanges, this.document));
+		}
+		if (this.referenceRanges !== SymbolDataPartition.EMPTY_MAP) {
 			let referenceResult = this.symbolData.getOrCreateReferenceResult();
 			for (let property of this.referenceRanges.keys()) {
 				let values = this.referenceRanges.get(property)!;
 				this.emit(this.edge.item(referenceResult, values, this.document, property))
 			}
 		}
-		if (this.referenceResults !== undefined) {
+		if (this.referenceResults !== SymbolDataPartition.EMPTY_ARRAY) {
 			let referenceResult = this.symbolData.getOrCreateReferenceResult();
 			this.emit(this.edge.item(referenceResult, this.referenceResults, this.document));
 		}
@@ -1914,15 +1951,15 @@ class Visitor implements ResolverContext {
 				}
 			}
 		}
-		// if (SymbolItem.isBlockScopedVariable(this.tsSymbol) && declarations.length === 1) {
-		// 	let type = this.context.typeChecker.getTypeOfSymbolAtLocation(this.tsSymbol, declarations[0]);
+		// if (tss.isBlockScopedVariable(symbol)) {
+		// 	let type = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
 		// 	if (type.symbol) {
-		// 		let typeSymbol = SymbolItem.get(this.context, type.symbol);
+		// 		let typeSymbolData = this.getOrCreateSymbolData(type.symbol);
 		// 		let result: TypeDefinitionResult | undefined;
-		// 		if (Array.isArray(typeSymbol.declarations)) {
-		// 			result = this.context.vertex.typeDefinitionResult(typeSymbol.declarations.map(declaration => declaration.id));
-		// 		} else if (typeSymbol.declarations !== undefined) {
-		// 			result = this.context.vertex.typeDefinitionResult([typeSymbol.declarations.id]);
+		// 		if (Array.isArray(typeSymbolData.declarations)) {
+		// 			result = this.context.vertex.typeDefinitionResult(typeSymbolData.declarations.map(declaration => declaration.id));
+		// 		} else if (typeSymbolData.declarations !== undefined) {
+		// 			result = this.context.vertex.typeDefinitionResult([typeSymbolData.declarations.id]);
 		// 		}
 		// 		if (result !== undefined) {
 		// 			this.context.emit(result);
