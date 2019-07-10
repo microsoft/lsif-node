@@ -181,6 +181,7 @@ function checkVertices(ids: string[], protocolPath: string): void {
 					});
 				} catch {
 					// Failed to get more details for the error
+					errorMessage = 'unable to provide details';
 				}
 			}
 			errors.push(new Error(vertex, errorMessage!));
