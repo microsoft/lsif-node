@@ -4,4 +4,4 @@
 { "id": 4, "type": "edge", "label": "contains", "outV": 1, "inV": 2 }
 { "id": 5, "type": "edge", "label": "contains", "outV": 1, "inVs": [ 3 ] }
 { "id": 6, "type": "vertex", "label": "referenceResult" }
-{ "id": 7, "type": "edge", "label": "item", "property": "references", "outV": 6, "inVs": [3], "document": "1" }
+{ "id": 7, "type": "edge", "label": "item", "property": "references", "outV": 6, "inVs": [ 3 ], "document": "1" }
