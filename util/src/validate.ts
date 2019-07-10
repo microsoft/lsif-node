@@ -64,11 +64,11 @@ class Statistics {
 }
 
 export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath: string): number {
-	readInput(toolOutput);
-
-	checkAllVisited();
-
 	if (fse.pathExistsSync(protocolPath)) {
+		readInput(toolOutput);
+
+		checkAllVisited();
+
 		checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
 								.map((e: LSIF.Element) => e.id.toString()),
 								protocolPath);
@@ -76,7 +76,8 @@ export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath
 								.map((e: LSIF.Element) => e.id.toString()),
 								protocolPath);
 	} else {
-		console.warn(`Skipping thorough validation: ${protocolPath} was not found`);
+		console.error(`Error: ${protocolPath} was not found`);
+		return 1;
 	}
 
 	printOutput(ids);
