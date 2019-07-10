@@ -320,13 +320,21 @@ export interface MetaData extends V {
 	/**
 	 * The project root (in form of a URI) used to compute this dump.
 	 */
-	projectRoot?: Uri;
+	projectRoot: Uri;
+
+	/**
+	 * The string encoding used to compute line and character values in
+	 * positions and ranges. Currently only 'utf-16' is support due to the
+	 * limitations in LSP.
+	 */
+	positionEncoding: 'utf-16'
 
 	/**
 	 * Information about the tool that created the dump
 	 */
 	toolInfo?: {
 		name: string;
+		version?: string;
 		args?: string[];
 	}
 }
