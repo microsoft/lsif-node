@@ -195,7 +195,6 @@ function checkVertices(ids: string[], protocolPath: string): void {
 function checkEdges(ids: string[], protocolPath: string): void {
 	let outputMessage: string | undefined;
 	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath]);
-	const edgeSchema: TJS.Definition | null = TJS.generateSchema(program, 'Edge', { required: true, noExtraProps: true });
 	let count: number = 1;
 	const length: number = ids.length;
 
@@ -205,49 +204,45 @@ function checkEdges(ids: string[], protocolPath: string): void {
 		process.stdout.write(`${outputMessage}\r`);
 		count++;
 
-		const validation: ValidatorResult = validateSchema(edge, edgeSchema);
-		if (!validation.valid) {
-			let errorMessage: string | undefined;
+		if ((!LSIF.Edge.is11(edge) && !(LSIF.Edge.is1N(edge))) || edge.outV === undefined) {
+			// This error was caught before
+			return;
+		}
+
+		if (edge.label === undefined || !Object.values(LSIF.EdgeLabels).includes(edge.label)) {
+			errors.push(new Error(edges[key].element, edge.label ? `requires property "label"` : `unknown label`));
 			edges[key].invalidate();
+			return;
+		}
 
-			if ((!LSIF.Edge.is11(edge) && !(LSIF.Edge.is1N(edge))) || edge.outV === undefined) {
-				// This error was caught before
-				return;
-			}
+		let typeName: string = 'E11';
+		// Special cases
+		if (edge.label === 'item') {
+			typeName = 'ItemEdge';
+		} else if (edge.label === 'contains') {
+			typeName = 'E1N';
+		}
 
-			if (edge.label === undefined) {
-				errorMessage = `requires property "label"`;
-			} else if (!Object.values(LSIF.EdgeLabels)
-						.includes(edge.label)) {
-				errorMessage = `unknown label`;
-			} else {
-				try {
-					let typeName: string = 'E11';
-					// Special cases
-					if (edge.label === 'item') {
-						typeName = 'ItemEdge';
-					} else if (edge.label === 'contains') {
-						typeName = 'E1N';
-					}
+		const edgeSchema: TJS.Definition | null = TJS.generateSchema(program,
+																	typeName,
+																	{ required: true, noExtraProps: true });
 
-					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, typeName, { required: true });
-					const moreValidation: ValidatorResult | null = validateSchema(edge, specificSchema);
-					errorMessage = '';
-					moreValidation.errors
-						// Filter out unhelpful error messages not related to the instance
-						.filter((error) => error.property === 'instance')
-						.forEach((error: ValidationError, index: number) => {
-						if (index > 0) {
-							errorMessage += '; ';
-						}
-						errorMessage += `${error.message}`;
-					});
-				} catch {
-					// Failed to get more details for the error
-					errorMessage = 'unable to provide details';
+		const validation: ValidatorResult = validateSchema(edge, edgeSchema);
+		const validationErrors: ValidationError[] = validation.errors
+													// Filter out unhelpful errors not related to the instance
+													.filter((error) => error.property === 'instance');
+		if (validationErrors.length > 0) {
+			edges[key].invalidate();
+			let errorMessage: string = '';
+
+			validationErrors.forEach((error: ValidationError, index: number) => {
+				if (index > 0) {
+					errorMessage += '; ';
 				}
-			}
-			errors.push(new Error(edges[key].element, errorMessage!));
+				errorMessage += `${error.message}`;
+			});
+
+			errors.push(new Error(edges[key].element, errorMessage));
 		}
 	});
 
