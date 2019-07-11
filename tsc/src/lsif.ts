@@ -719,7 +719,7 @@ class SymbolDataPartition extends LSIFData {
 	public addReference(value: ReferenceResult): void;
 	public addReference(value: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (value.label === 'range' && property !== undefined) {
-			if (this.referenceRanges === undefined) {
+			if (this.referenceRanges === SymbolDataPartition.EMPTY_MAP) {
 				this.referenceRanges = new Map();
 			}
 			let values = this.referenceRanges.get(property);
