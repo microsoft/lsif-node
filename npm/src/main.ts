@@ -373,10 +373,14 @@ export function main(): void {
 		if (element.type === ElementTypes.vertex) {
 			switch(element.label) {
 				case VertexLabels.moniker:
-					if (exportLinker !== undefined) {
-						exportLinker.handleMoniker(element);
+					if (element.kind === MonikerKind.local) {
+						emit(line);
+					} else {
+						if (exportLinker !== undefined) {
+							exportLinker.handleMoniker(element);
+						}
+						importLinker.handleMoniker(element);
 					}
-					importLinker.handleMoniker(element);
 					break;
 				default:
 					emit(line);
