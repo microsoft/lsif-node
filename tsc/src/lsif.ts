@@ -340,16 +340,10 @@ abstract class SymbolData extends LSIFData {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(identifier: string, kind?: MonikerKind): void {
-		if (kind === undefined) {
-			let moniker = this.vertex.moniker('$local', identifier);
-			this.emit(moniker);
-			this.emit(this.edge.moniker(this.resultSet, moniker));
-		} else {
-			let moniker = this.vertex.moniker('tsc', identifier, kind);
-			this.emit(moniker);
-			this.emit(this.edge.moniker(this.resultSet, moniker));
-		}
+	public addMoniker(identifier: string, kind: MonikerKind): void {
+		let moniker = this.vertex.moniker('tsc', identifier, kind);
+		this.emit(moniker);
+		this.emit(this.edge.moniker(this.resultSet, moniker));
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -771,8 +765,13 @@ enum LocationKind {
 	global = 3
 }
 
-interface SymbolTypeAlias {
-	typeAlias: ts.Symbol;
+interface SymbolAlias {
+	/**
+	 * The alias symbol. For example the symbol representing `default` in
+	 * a statement like `export default product` or the symbol representing
+	 * `MyTypeName` in a type declarartion statement like `type MyTypeName = { x: number }`
+	 */
+	alias: ts.Symbol;
 	name: string;
 }
 
@@ -781,28 +780,41 @@ class Symbols {
 	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private exportedPaths: LRUCache<ts.Symbol, string | null>;
-	private typeAliases: Map<string, SymbolTypeAlias>;
+	private symbolAliases: Map<string, SymbolAlias>;
+	private sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportedPaths = new LRUCache(2048);
-		this.typeAliases = new Map();
+		this.symbolAliases = new Map();
+		this.sourceFilesContainingAmbientDeclarations = new Set();
+
+		const ambientModules = this.typeChecker.getAmbientModules();
+		for (let module of ambientModules) {
+			const declarations = module.getDeclarations();
+			if (declarations !== undefined) {
+				for (let declarartion of declarations) {
+					const sourceFile = declarartion.getSourceFile();
+					this.sourceFilesContainingAmbientDeclarations.add(sourceFile.fileName);
+				}
+			}
+		}
 	}
 
-	public storeTypeAlias(symbol: ts.Symbol, typeAlias: SymbolTypeAlias): void {
+	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
-		this.typeAliases.set(key, typeAlias);
+		this.symbolAliases.set(key, typeAlias);
 	}
 
-	public hasTypeAlias(symbol: ts.Symbol): boolean {
+	public hasSymbolAlias(symbol: ts.Symbol): boolean {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
-		return this.typeAliases.has(key);
+		return this.symbolAliases.has(key);
 	}
 
-	public deleteTypeAlias(symbol: ts.Symbol): void {
+	public deleteSymbolAlias(symbol: ts.Symbol): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
-		this.typeAliases.delete(key);
+		this.symbolAliases.delete(key);
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -915,7 +927,7 @@ class Symbols {
 		return result;
 	}
 
-	public getExportPath(symbol: ts.Symbol, kind: LocationKind): string | undefined {
+	public getExportPath(symbol: ts.Symbol, kind: LocationKind | undefined): string | undefined {
 		let result = this.exportedPaths.get(symbol);
 		if (result !== undefined) {
 			return result === null ? undefined : result;
@@ -930,8 +942,8 @@ class Symbols {
 				this.exportedPaths.set(symbol, symbol.getName());
 				return symbol.getName();
 			}
-			const typeAlias = this.typeAliases.get(tss.createSymbolKey(this.typeChecker, symbol));
-			if (typeAlias !== undefined && this.getExportPath(typeAlias.typeAlias, kind) !== undefined) {
+			const typeAlias = this.symbolAliases.get(tss.createSymbolKey(this.typeChecker, symbol));
+			if (typeAlias !== undefined && this.getExportPath(typeAlias.alias, kind) !== undefined) {
 				this.exportedPaths.set(symbol, typeAlias.name);
 				return typeAlias.name;
 			}
@@ -972,6 +984,7 @@ class Symbols {
 		let tsLibraryCount: number = 0;
 		let moduleCount: number = 0;
 		let externalLibraryCount: number = 0;
+		let declarationFileCount: number = 0;
 		for (let sourceFile of sourceFiles) {
 			if (this.typeChecker.getSymbolAtLocation(sourceFile) !== undefined) {
 				moduleCount++;
@@ -985,6 +998,10 @@ class Symbols {
 				externalLibraryCount++;
 				continue;
 			}
+			if (sourceFile.isDeclarationFile && !this.sourceFilesContainingAmbientDeclarations.has(sourceFile.fileName)) {
+				declarationFileCount++;
+				continue;
+			}
 		}
 		const numberOfFiles = sourceFiles.length;
 		if (moduleCount === numberOfFiles) {
@@ -993,7 +1010,7 @@ class Symbols {
 		if (tsLibraryCount === numberOfFiles) {
 			return LocationKind.tsLibrary;
 		}
-		if (externalLibraryCount === numberOfFiles && moduleCount === 0) {
+		if ((externalLibraryCount === numberOfFiles || declarationFileCount === numberOfFiles) && moduleCount === 0) {
 			return LocationKind.global;
 		}
 		return undefined;
@@ -1194,20 +1211,20 @@ class TypeAliasResolver extends StandardResolver {
 		this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
 			// T1 & (T2 | T3) will be expanded into T1 & T2 | T1 & T3. So check if we have already seens
 			// a literal to ensure we are always using the first one
-			if (this.symbols.hasTypeAlias(literalType)) {
+			if (this.symbols.hasSymbolAlias(literalType)) {
 				return index;
 			}
 			// We put the number into the front since it is not a valid
 			// identifier. So it can't be in code.
 			const name = `${index++}_${typeAlias.getName()}`;
-			this.symbols.storeTypeAlias(literalType, { typeAlias: typeAlias, name });
+			this.symbols.storeSymbolAlias(literalType, { alias: typeAlias, name });
 			return index;
 		});
 	}
 
 	public clearForwardSymbolInformation(symbol: ts.Symbol): void {
 		this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
-			this.symbols.deleteTypeAlias(literalType);
+			this.symbols.deleteSymbolAlias(literalType);
 			return index;
 		});
 	}
@@ -1565,6 +1582,16 @@ class Visitor implements ResolverContext {
 			process.stdout.write('.');
 		}
 
+		const exportAssignments: ts.ExportAssignment[] = [];
+		for (let node of sourceFile.statements) {
+			if (ts.isExportAssignment(node)) {
+				exportAssignments.push(node);
+			}
+		}
+		if (exportAssignments.length > 0) {
+			this.handleExportAssignments(exportAssignments);
+		}
+
 		this.currentSourceFile = sourceFile;
 		let documentData = this.getOrCreateDocumentData(sourceFile);
 		this._currentDocumentData = documentData;
@@ -1748,6 +1775,20 @@ class Visitor implements ResolverContext {
 		return true;
 	}
 
+
+	private handleExportAssignments(nodes: ts.ExportAssignment[]): void {
+		let index = 0;
+		for (let node of nodes) {
+			const exportSymbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+			const localSymbol = node.expression !== undefined
+				? this.typeChecker.getSymbolAtLocation(node.expression)  || tss.getSymbolFromNode(node.expression)
+				: undefined;
+			if (exportSymbol !== undefined && localSymbol !== undefined) {
+				this.symbols.storeSymbolAlias(localSymbol, { alias: exportSymbol, name: `${index}_export`});
+			}
+		}
+	}
+
 	private endVisitExportAssignment(node: ts.ExportAssignment): void {
 		// Do nothing;
 	}
@@ -1874,7 +1915,7 @@ class Visitor implements ResolverContext {
 		const declarations: ts.Node[] | undefined = resolver.getDeclarationNodes(symbol, location);
 		const sourceFiles: ts.SourceFile[] = resolver.getSourceFiles(symbol, location);
 		const locationKind = this.symbols.getLocationKind(sourceFiles);
-		const exportPath: string | undefined = locationKind !== undefined ? this.symbols.getExportPath(symbol, locationKind) : undefined;
+		const exportPath: string | undefined = this.symbols.getExportPath(symbol, locationKind);
 		const scope =  this.resolveEmittingNode(symbol, exportPath !== undefined);
 		if (resolver.requiresSourceFile && sourceFiles.length === 0) {
 			throw new Error(`Resolver requires source file but no source file can be found.`);
@@ -1909,7 +1950,7 @@ class Visitor implements ResolverContext {
 			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, exportPath);
 		}
 		if (monikerIdentifer === undefined) {
-			result.addMoniker(id);
+			result.addMoniker(id, MonikerKind.local);
 		} else {
 			if (externalLibrary === true) {
 				result.addMoniker(monikerIdentifer, MonikerKind.import);

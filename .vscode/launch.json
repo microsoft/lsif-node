@@ -188,7 +188,7 @@
 				"-p", "./src/tsconfig.json",
 				"--projectRoot", "./",
 				"--outputFormat", "line",
-				"--out", "test.lsif"
+				"--out", "vscode.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
