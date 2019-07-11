@@ -407,7 +407,13 @@ export enum MonikerKind {
 	/**
 	 * The moniker represents a symbol that is exported from a project
 	 */
-	export = 'export'
+	export = 'export',
+
+	/**
+	 * The moniker represents a symbol that is local to a project (e.g. a local
+	 * variable of a function, a class not visible outside the project, ...)
+	 */
+	local = 'local'
 }
 
 export interface Moniker extends V {

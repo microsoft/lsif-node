@@ -89,7 +89,7 @@ namespace Monikers {
 	}
 
 	export function isLocal(moniker: MonikerData): boolean {
-		return moniker.scheme === '$local';
+		return moniker.kind === MonikerKind.local;
 	}
 }
 
