@@ -1,6 +1,6 @@
 {
 	"name": "lsif-util",
-	"version": "0.2.12",
+	"version": "0.2.13",
 	"description": "Utility tools for LSIF development.",
 	"main": "./lib/main.js",
 	"repository": {
@@ -38,6 +38,7 @@
 		"tslint": "^5.14.0"
 	},
 	"dependencies": {
+		"@types/node": "^12.6.2",
 		"fs-extra": "^7.0.1",
 		"jsonschema": "^1.2.4",
 		"lsif-protocol": "0.4.3",
