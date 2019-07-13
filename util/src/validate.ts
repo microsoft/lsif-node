@@ -12,6 +12,7 @@ import { getInVs } from './shared';
 const vertices: { [id: string]: Element } = {};
 const edges: { [id: string]: Element } = {};
 const visited: { [id: string]: boolean } = {};
+const protocolSubPath: string = 'lsif-protocol/lib/protocol.d.ts';
 
 const errors: Error[] = [];
 
@@ -64,26 +65,40 @@ class Statistics {
 	}
 }
 
-export function validate(toolOutput: LSIF.Element[], ids: string[], protocolPath: string): number {
-	if (fse.pathExistsSync(protocolPath)) {
+export function validate(toolOutput: LSIF.Element[], ids: string[]): number {
+	const nodeModulesPath: string | null = findNodeModulesPath();
+	if (nodeModulesPath !== null) {
 		readInput(toolOutput);
 
 		checkAllVisited();
 
 		checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
 								.map((e: LSIF.Element) => e.id.toString()),
-								protocolPath);
+								nodeModulesPath);
 		checkEdges(	toolOutput.filter((e: LSIF.Element) => e.type === 'edge')
 								.map((e: LSIF.Element) => e.id.toString()),
-								protocolPath);
+								nodeModulesPath);
 	} else {
-		console.error(`Error: ${protocolPath} was not found`);
+		console.error(`Error: protocol.d.ts was not found`);
 		return 1;
 	}
 
 	printOutput(ids);
 
 	return errors.length === 0 ? 0 : 1;
+}
+
+// Returns null if protocol.d.ts is not found
+function findNodeModulesPath(): string | null {
+	let nodeModulesPath: string = path.join(__dirname, '../node_modules');
+	// Package installed globally
+	if (fse.pathExistsSync(path.join(nodeModulesPath, protocolSubPath))) {
+		return nodeModulesPath;
+	}
+
+	// Package installed locally
+	nodeModulesPath = path.join(__dirname, '../..');
+	return fse.pathExistsSync(path.join(nodeModulesPath, protocolSubPath)) ? nodeModulesPath : null;
 }
 
 function readInput(toolOutput: LSIF.Element[]): void {
@@ -147,12 +162,12 @@ function checkAllVisited(): void {
 	});
 }
 
-function checkVertices(ids: string[], protocolPath: string): void {
+function checkVertices(ids: string[], nodeModulesPath: string): void {
 	let outputMessage: string | undefined;
 	const compilerOptions: TJS.CompilerOptions = {
-		baseUrl: path.join(path.dirname(protocolPath), '..\\..'),
+		baseUrl: nodeModulesPath,
 	};
-	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath], compilerOptions);
+	const program: TJS.Program = TJS.getProgramFromFiles([path.join(nodeModulesPath, protocolSubPath)], compilerOptions);
 	const vertexSchema: TJS.Definition | null = TJS.generateSchema(program, 'Vertex', { required: true });
 	let count: number = 1;
 	const length: number = ids.length;
@@ -192,12 +207,12 @@ function checkVertices(ids: string[], protocolPath: string): void {
 	}
 }
 
-function checkEdges(ids: string[], protocolPath: string): void {
+function checkEdges(ids: string[], nodeModulesPath: string): void {
 	let outputMessage: string | undefined;
 	const compilerOptions: TJS.CompilerOptions = {
-		baseUrl: path.join(path.dirname(protocolPath), '..\\..'),
+		baseUrl: nodeModulesPath,
 	};
-	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath], compilerOptions);
+	const program: TJS.Program = TJS.getProgramFromFiles([path.join(nodeModulesPath, protocolSubPath)], compilerOptions);
 	let count: number = 1;
 	const length: number = ids.length;
 
