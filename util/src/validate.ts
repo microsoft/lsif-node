@@ -5,6 +5,7 @@
 import * as fse from 'fs-extra';
 import { validate as validateSchema, ValidationError, ValidatorResult } from 'jsonschema';
 import * as LSIF from 'lsif-protocol';
+import * as path from 'path';
 import * as TJS from 'typescript-json-schema';
 import { getInVs } from './shared';
 
@@ -148,7 +149,10 @@ function checkAllVisited(): void {
 
 function checkVertices(ids: string[], protocolPath: string): void {
 	let outputMessage: string | undefined;
-	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath]);
+	const compilerOptions: TJS.CompilerOptions = {
+		baseUrl: path.join(path.dirname(protocolPath), '..\\..'),
+	};
+	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath], compilerOptions);
 	const vertexSchema: TJS.Definition | null = TJS.generateSchema(program, 'Vertex', { required: true });
 	let count: number = 1;
 	const length: number = ids.length;
@@ -190,7 +194,10 @@ function checkVertices(ids: string[], protocolPath: string): void {
 
 function checkEdges(ids: string[], protocolPath: string): void {
 	let outputMessage: string | undefined;
-	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath]);
+	const compilerOptions: TJS.CompilerOptions = {
+		baseUrl: path.join(path.dirname(protocolPath), '..\\..'),
+	};
+	const program: TJS.Program = TJS.getProgramFromFiles([protocolPath], compilerOptions);
 	let count: number = 1;
 	const length: number = ids.length;
 
