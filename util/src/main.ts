@@ -4,7 +4,6 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fse from 'fs-extra';
 import * as LSIF from 'lsif-protocol';
-import * as path from 'path';
 import * as readline from 'readline';
 import * as yargs from 'yargs';
 import { getFilteredIds, IFilter } from './filter';
@@ -77,10 +76,7 @@ export function main(): void {
 				argv.stdin ? '--stdin' : argv.file as string,
 				(input: LSIF.Element[]) => {
 					const filter: IFilter = argv as unknown as IFilter;
-					process.exitCode = validate(
-						input,
-						getFilteredIds(filter, input),
-						path.join(__dirname, '../node_modules/lsif-protocol/lib/protocol.d.ts'));
+					process.exitCode = validate(input, getFilteredIds(filter, input));
 				});
 		}
 	})
