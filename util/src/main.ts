@@ -23,6 +23,10 @@ function readInput(format: string, inputPath: string, callback: (input: LSIF.Ele
 	const rd: readline.Interface = readline.createInterface(inputStream);
 
 	rd.on('line', (line: string) => {
+		if (line === '') {
+			return;
+		}
+
 		switch (format) {
 			case 'json':
 				buffer.push(line);
