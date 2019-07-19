@@ -154,7 +154,7 @@ function checkAllVisited(): void {
 	Object.keys(vertices)
 	.forEach((key: string) => {
 		const vertex: LSIF.Vertex = vertices[key].element as LSIF.Vertex;
-		if (!visited[key] && vertex.label !== 'metaData') {
+		if (!visited[key] && vertex.label !== 'metaData' && vertex.label !== '$event') {
 			errors.push(new Error(vertex, `not connected to any other vertex`));
 			checks[Check.allVerticesUsed] = false;
 			vertices[key].invalidate();
@@ -163,12 +163,13 @@ function checkAllVisited(): void {
 }
 
 function checkVertices(ids: string[], nodeModulesPath: string): void {
-	let outputMessage: string | undefined;
 	const compilerOptions: TJS.CompilerOptions = {
 		baseUrl: nodeModulesPath,
 	};
 	const program: TJS.Program = TJS.getProgramFromFiles([path.join(nodeModulesPath, protocolSubPath)], compilerOptions);
-	const vertexSchema: TJS.Definition | null = TJS.generateSchema(program, 'Vertex', { required: true });
+	const schema: { [label: string]: TJS.Definition } = {};
+
+	let outputMessage: string | undefined;
 	let count: number = 1;
 	const length: number = ids.length;
 
@@ -178,27 +179,51 @@ function checkVertices(ids: string[], nodeModulesPath: string): void {
 		process.stdout.write(`${outputMessage}\r`);
 		count++;
 
-		const validation: ValidatorResult = validateSchema(vertex, vertexSchema);
-		if (!validation.valid) {
-			let errorMessage: string | undefined;
+		if (vertex.label === undefined) {
 			vertices[key].invalidate();
-
-			if (vertex.label === undefined) {
-				errorMessage = `requires property "label"`;
-			} else if (!Object.values(LSIF.VertexLabels).includes(vertex.label)) {
-				errorMessage = `unknown label`;
-			} else {
-				try {
-					const className: string = vertex.label[0].toUpperCase() + vertex.label.slice(1);
-					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, className, { required: true });
-					const moreValidation: ValidatorResult | null = validateSchema(vertex, specificSchema);
-					errorMessage = moreValidation.errors.join('; ');
-				} catch {
-					// Failed to get more details for the error
-					errorMessage = 'unable to provide details';
+			errors.push(new Error(vertex, `requires property "label"`));
+		} else if (!Object.values(LSIF.VertexLabels).includes(vertex.label)) {
+			vertices[key].invalidate();
+			errors.push(new Error(vertex, `unknown label`));
+		} else {
+			try {
+				let className: string = '';
+				if (vertex.label === LSIF.VertexLabels.event) {
+					if (vertex.scope === undefined) {
+						vertices[key].invalidate();
+						errors.push(new Error(vertex, `requires property "scope"`));
+					} else if (!Object.values(LSIF.EventScope).includes(vertex.scope)) {
+						vertices[key].invalidate();
+						errors.push(new Error(vertex, `unknown scope`));
+					} else {
+						className = vertex.scope[0].toUpperCase() + vertex.scope.slice(1) + 'Event';
+					}
+				} else {
+					className = vertex.label[0].toUpperCase() + vertex.label.slice(1);
 				}
+
+				if (className === '') {
+					return;
+				}
+
+				if (schema[className] === undefined) {
+					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, className, { required: true });
+					if (specificSchema) {
+						schema[className] = specificSchema;
+					} else {
+						throw new SyntaxError(`did not find class ${className}`);
+					}
+				}
+
+				const validation: ValidatorResult | null = validateSchema(vertex, schema[className]);
+				if (!validation.valid) {
+					vertices[key].invalidate();
+					errors.push(new Error(vertex, validation.errors.join('; ')));
+				}
+			} catch (ex) {
+				vertices[key].invalidate();
+				errors.push(new Error(vertex, `unable to validate: ${ex.message}`));
 			}
-			errors.push(new Error(vertex, errorMessage!));
 		}
 	});
 
