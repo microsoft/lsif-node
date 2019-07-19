@@ -179,17 +179,22 @@ function checkVertices(ids: string[], nodeModulesPath: string): void {
 		process.stdout.write(`${outputMessage}\r`);
 		count++;
 
-		let errorMessage: string;
 		if (vertex.label === undefined) {
-			errorMessage = `requires property "label"`;
+			vertices[key].invalidate();
+			errors.push(new Error(vertex, `requires property "label"`));
 		} else if (!Object.values(LSIF.VertexLabels).includes(vertex.label)) {
-			errorMessage = `unknown label`;
+			vertices[key].invalidate();
+			errors.push(new Error(vertex, `unknown label`));
 		} else {
 			try {
 				let className: string = '';
 				if (vertex.label === LSIF.VertexLabels.event) {
 					if (vertex.scope === undefined) {
-						errorMessage = `requires property "scope"`;
+						vertices[key].invalidate();
+						errors.push(new Error(vertex, `requires property "scope"`));
+					} else if (!Object.values(LSIF.EventScope).includes(vertex.scope)) {
+						vertices[key].invalidate();
+						errors.push(new Error(vertex, `unknown scope`));
 					} else {
 						className = vertex.scope[0].toUpperCase() + vertex.scope.slice(1) + 'Event';
 					}
@@ -197,25 +202,27 @@ function checkVertices(ids: string[], nodeModulesPath: string): void {
 					className = vertex.label[0].toUpperCase() + vertex.label.slice(1);
 				}
 
+				if (className === '') {
+					return;
+				}
+
 				if (schema[className] === undefined) {
 					const specificSchema: TJS.Definition | null = TJS.generateSchema(program, className, { required: true });
 					if (specificSchema) {
 						schema[className] = specificSchema;
 					} else {
-						errorMessage = `did not find class ${className}`;
+						throw new SyntaxError(`did not find class ${className}`);
 					}
 				}
 
 				const validation: ValidatorResult | null = validateSchema(vertex, schema[className]);
 				if (!validation.valid) {
 					vertices[key].invalidate();
-					errorMessage = validation.errors.join('; ');
-					errors.push(new Error(vertex, errorMessage));
+					errors.push(new Error(vertex, validation.errors.join('; ')));
 				}
-			} catch {
+			} catch (ex) {
 				vertices[key].invalidate();
-				errorMessage = `unable to validate`;
-				errors.push(new Error(vertex, errorMessage));
+				errors.push(new Error(vertex, `unable to validate: ${ex.message}`));
 			}
 		}
 	});
