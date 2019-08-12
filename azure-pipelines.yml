@@ -27,3 +27,9 @@ steps:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'util/junit.xml'
     testRunTitle: 'Run unit tests'
+
+- task: RichCodeNavIndexer@0
+  inputs:
+    serviceConnection: 'rich-code-navigation'
+    githubServiceConnection: Microsoft
+    languages: typescript
