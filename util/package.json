@@ -30,10 +30,10 @@
 	"preferGlobal": true,
 	"devDependencies": {
 		"@types/fs-extra": "^5.0.5",
-		"@types/jest": "^24.0.13",
+		"@types/jest": "^24.0.17",
 		"@types/yargs": "^13.0.0",
 		"jest": "^24.8.0",
-		"jest-junit": "^6.4.0",
+		"jest-junit": "^7.0.0",
 		"rimraf": "^2.6.3",
 		"tslint": "^5.14.0"
 	},
