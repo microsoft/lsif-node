@@ -22,6 +22,9 @@
 			"type": "npm",
 			"script": "watch",
 			"isBackground": true,
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
 			"problemMatcher": [
 				"$tsc-watch"
 			],

@@ -22,6 +22,10 @@ import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
+interface Disposable {
+	(): void;
+}
+
 namespace Converter {
 
 	const DiagnosticCategory = ts.DiagnosticCategory;
@@ -781,6 +785,8 @@ class Symbols {
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private exportedPaths: LRUCache<ts.Symbol, string | null>;
 	private symbolAliases: Map<string, SymbolAlias>;
+	private parents: Map<string, ts.Symbol>;
+	private exports: Map<string, Set<string>>;
 	private sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
@@ -788,6 +794,8 @@ class Symbols {
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportedPaths = new LRUCache(2048);
 		this.symbolAliases = new Map();
+		this.parents = new Map();
+		this.exports = new Map();
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
@@ -815,6 +823,51 @@ class Symbols {
 	public deleteSymbolAlias(symbol: ts.Symbol): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
 		this.symbolAliases.delete(key);
+	}
+
+	public addParent(symbol: ts.Symbol, parent: ts.Symbol): Disposable {
+		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		this.parents.set(key, parent);
+		return () => {
+			this.parents.delete(key);
+		}
+	}
+
+	private getParent(symbol: ts.Symbol): ts.Symbol | undefined {
+		let result = tss.getSymbolParent(symbol);
+		if (result !== undefined) {
+			return result;
+		}
+		return this.parents.get(tss.createSymbolKey(this.typeChecker, symbol));
+	}
+
+	public addExport(parent: ts.Symbol, symbol: ts.Symbol): Disposable {
+		const parentKey = tss.createSymbolKey(this.typeChecker, parent);
+		const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
+		let values = this.exports.get(parentKey);
+		if (values === undefined) {
+			values = new Set();
+			this.exports.set(parentKey, values);
+		}
+		values.add(symbolKey);
+		return () => {
+			let values = this.exports.get(parentKey);
+			if (values === undefined) {
+				return;
+			}
+			values.delete(symbolKey);
+			if (values.size === 0) {
+				this.exports.delete(parentKey);
+			}
+		};
+	}
+
+	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
+		if (parent.exports !== undefined && parent.exports.has(symbol.getName() as ts.__String)) {
+			return true;
+		}
+		let exports = this.exports.get(tss.createSymbolKey(this.typeChecker, parent));
+		return exports !== undefined && exports.has(tss.createSymbolKey(this.typeChecker, symbol));
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -936,7 +989,7 @@ class Symbols {
 			this.exportedPaths.set(symbol, '');
 			return '';
 		}
-		let parent = tss.getSymbolParent(symbol);
+		let parent = this.getParent(symbol);
 		if (parent === undefined) {
 			if (tss.isValueModule(symbol) || kind === LocationKind.tsLibrary || kind === LocationKind.global) {
 				this.exportedPaths.set(symbol, symbol.getName());
@@ -960,21 +1013,17 @@ class Symbols {
 					result = `${parentValue}.${symbol.getName()}`;
 					this.exportedPaths.set(symbol, result);
 					return result;
-				} else if (parent.exports !== undefined) {
-					if (parent.exports.has(symbol.getName() as ts.__String)) {
-						result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
-						this.exportedPaths.set(symbol, result);
-						return result;
-					} else {
-						this.exportedPaths.set(symbol, null);
-						return undefined;
-					}
+				} else if (this.isExported(parent, symbol)) {
+					result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
+					this.exportedPaths.set(symbol, result);
+					return result;
 				} else {
 					this.exportedPaths.set(symbol, null);
 					return undefined;
 				}
 			}
 		}
+
 	}
 
 	public getLocationKind(sourceFiles: ts.SourceFile[]): LocationKind | undefined {
@@ -1442,6 +1491,7 @@ class Visitor implements ResolverContext {
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
 	private symbols: Symbols;
+	private disposables: Map<string, Disposable[]>;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
@@ -1489,6 +1539,7 @@ class Visitor implements ResolverContext {
 		}
 		this.dataManager = new DataManager(this, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
+		this.disposables = new Map();
 		this.symbolDataResolvers = {
 			standard: new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			alias: new AliasResolver(this.typeChecker, this.symbols, this, this.dataManager),
@@ -1575,6 +1626,7 @@ class Visitor implements ResolverContext {
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
+		let disposables: Disposable[] = [];
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
@@ -1582,10 +1634,43 @@ class Visitor implements ResolverContext {
 			process.stdout.write('.');
 		}
 
+		// things we need to capture to have correct exports
+		// `export =` or an `export default` declaration ==> ExportAssignment
+		// `exports.bar = function foo() { ... }` ==> ExpressionStatement
+		// `export { root }` ==> ExportDeclaration
+		// `export { _root as root }` ==> ExportDeclaration
+		const processSymbol = (disposables: Disposable[], parent: ts.Symbol, symbol: ts.Symbol): void => {
+			if (tss.getSymbolParent(symbol) === undefined) {
+				disposables.push(this.symbols.addParent(symbol, parent));
+			}
+			if (parent.exports === undefined || !parent.exports.has(symbol.getName() as ts.__String)) {
+				disposables.push(this.symbols.addExport(parent, symbol));
+			}
+		}
 		const exportAssignments: ts.ExportAssignment[] = [];
+		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
 		for (let node of sourceFile.statements) {
 			if (ts.isExportAssignment(node)) {
 				exportAssignments.push(node);
+			} else if (ts.isExportDeclaration(node) && sourceFileSymbol !== undefined) {
+				if (node.exportClause !== undefined) {
+					for (let element of node.exportClause.elements) {
+						let exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
+						if (exportSymbol === undefined) {
+							continue;
+						}
+						processSymbol(disposables, sourceFileSymbol, exportSymbol);
+						let localSymbol: ts.Symbol | undefined;
+						if (element.propertyName !== undefined) {
+							localSymbol = this.typeChecker.getSymbolAtLocation(element.propertyName);
+						} else if (tss.isAliasSymbol(exportSymbol)) {
+							localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol);
+						}
+						if (localSymbol !== undefined) {
+							processSymbol(disposables, sourceFileSymbol, localSymbol);
+						}
+					}
+				}
 			}
 		}
 		if (exportAssignments.length > 0) {
@@ -1597,7 +1682,7 @@ class Visitor implements ResolverContext {
 		this._currentDocumentData = documentData;
 		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
-
+		this.disposables.set(sourceFile.fileName, disposables);
 		return true;
 	}
 
@@ -1645,6 +1730,10 @@ class Visitor implements ResolverContext {
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
 		this.dataManager.documemntProcessed(sourceFile.fileName);
+		for (let disposable of this.disposables.get(sourceFile.fileName)!) {
+			disposable();
+		}
+		this.disposables.delete(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
@@ -1774,7 +1863,6 @@ class Visitor implements ResolverContext {
 		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node), node);
 		return true;
 	}
-
 
 	private handleExportAssignments(nodes: ts.ExportAssignment[]): void {
 		let index = 0;

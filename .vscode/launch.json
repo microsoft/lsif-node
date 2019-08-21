@@ -130,11 +130,30 @@
 			"type": "node",
 			"request": "launch",
 			"name": "mobx",
-			"cwd": "${workspaceFolder}/../../connect-demo/mobx",
+			"cwd": "${workspaceFolder}/../Playgrounds/lsif/mobx",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "rxjs",
+			"cwd": "${workspaceFolder}/../Playgrounds/lsif/rxjs",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "tsconfig.json",
+				"--projectRoot", "./",
+				 "--outputFormat", "line",
+				"--out", "rxjs.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
@@ -202,13 +221,13 @@
 			"request": "launch",
 			"name": "Blob Storage",
 			"program": "${workspaceFolder}/sqlite/lib/main.js",
-			"cwd": "${workspaceFolder}/samples/typescript",
+			"cwd": "${workspaceFolder}/../Playgrounds/lsif/mobx",
 			"args": [
 				"--format", "blob",
 				"--projectVersion", "1.0",
 				"--delete",
-				"--in", "./test.lsif",
-				"--out", "./test.db"
+				"--in", "./mobx.1.lsif",
+				"--out", "./mobx.db"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

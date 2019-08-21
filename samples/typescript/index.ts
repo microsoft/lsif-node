@@ -1,6 +1,10 @@
-import * as mobx from 'mobx';
+import { foo, bar } from './sub/provide';
 
-let map: mobx.ObservableMap = new mobx.ObservableMap();
+console.log(foo, bar);
+
+
+// function foo(x: number): void {
+// }
 
 
 // interface I {
