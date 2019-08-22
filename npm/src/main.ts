@@ -235,8 +235,9 @@ class ImportLinker extends Linker {
 			let part = parts[i];
 			if (part === 'node_modules') {
 				// End is exclusive and one for the name
-				packagePath = path.join(this.projectRoot, ...parts.slice(0, i + 2), `package.json`);
-				monikerPath = parts.slice(i + 2).join('/');
+				const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2)
+				packagePath = path.join(this.projectRoot, ...parts.slice(0, packageIndex), `package.json`);
+				monikerPath = parts.slice(packageIndex).join('/');
 				break;
 			}
 		}
