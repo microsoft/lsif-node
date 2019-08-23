@@ -100,7 +100,8 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
-				 "--outputFormat", "line"
+				 "--outputFormat", "line",
+				 "--stdout"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
