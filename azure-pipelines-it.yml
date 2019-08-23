@@ -13,6 +13,13 @@ steps:
   displayName: 'Install Node.js'
 
 - script: |
-    npm install
-    npm run build
-  displayName: 'npm install and build'
+    npm ci
+  displayName: 'Install dependencies'
+
+- script: |
+    npm run compile
+  displayName: 'Compile client'
+
+- script: |
+    npm run test
+  displayName: 'Run unit tests'
