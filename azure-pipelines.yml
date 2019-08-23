@@ -37,4 +37,13 @@ steps:
     npm run symlink
     cd jsonrpc
     node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=jsonrpc.lsif
+    cd ../types
+    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=types.lsif
+    cd ../protocol
+    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=protocol.lsif
+    cd ../server
+    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=server.lsif
+    cd ../client
+    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=client.lsif
+    cd ..
   displayName: 'Testing VS Code LSP'
