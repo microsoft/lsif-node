@@ -27,3 +27,13 @@ steps:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'util/junit.xml'
     testRunTitle: 'Run unit tests'
+
+- script: |
+    mkdir testSetup
+    cd testSetup
+    git clone https://github.com/microsoft/vscode-languageserver-node.git
+    cd vscode-languageserver-node
+    npm install
+    npm run symlink
+    cd jsonrpc
+    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=jsonrpc.lsif
