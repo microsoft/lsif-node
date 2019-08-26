@@ -1,7 +1,6 @@
 {
 	"name": "vscode-eslint",
 	"repository": "https://github.com/microsoft/vscode-eslint.git",
-	"branch": "master",
 	"init": [
 		{ "command": "npm", "args": ["install"] }
 	],

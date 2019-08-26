@@ -1,6 +1,6 @@
 {
-	"name": "rxjs",
-	"repository": "https://github.com/ReactiveX/rxjs.git",
+	"name": "pomodoro",
+	"repository": "https://github.com/vsls-contrib/pomodoro.git",
 	"init": [
 		{ "command": "npm", "args": ["install"] }
 	],

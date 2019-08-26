@@ -1,7 +1,6 @@
 {
 	"name": "mobx",
 	"repository": "https://github.com/mobxjs/mobx.git",
-	"branch": "master",
 	"init": [
 		{ "command": "npm", "args": ["install"] }
 	],

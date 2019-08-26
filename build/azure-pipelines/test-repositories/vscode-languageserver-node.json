@@ -1,7 +1,6 @@
 {
 	"name": "vscode-languageserver-node",
 	"repository": "https://github.com/microsoft/vscode-languageserver-node.git",
-	"branch": "master",
 	"init": [
 		{ "command": "npm", "args": ["install"] },
 		{ "command": "npm", "args": ["run", "symlink"] }
