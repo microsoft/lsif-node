@@ -7,7 +7,7 @@ pool:
 steps:
 - task: NodeTool@0
   inputs:
-    versionSpec: '10.15.1'
+    versionSpec: '10.*'
   displayName: 'Use Node.js 10.15.1'
 
 - script: |
@@ -23,21 +23,9 @@ steps:
   displayName: 'Run unit tests'
 
 - script: |
-    mkdir testSetup
-    cd testSetup
-    git clone https://github.com/microsoft/vscode-languageserver-node.git
-    cd vscode-languageserver-node
-    npm install
-    npm run symlink
-    cd jsonrpc
-    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=jsonrpc.lsif
-    cd ../types
-    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=types.lsif
-    cd ../protocol
-    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=protocol.lsif
-    cd ../server
-    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=server.lsif
-    cd ../client
-    node ../../../tsc/lib/main.js -p ./tsconfig.json --outputFormat=line --out=client.lsif
-    cd ..
-  displayName: 'Testing VS Code LSP'
+    npm run compile:build
+  displayName: 'Compiling test scrips'
+
+- script: |
+    node ./build/azure-pipelines/tasks/lib/runLsif.js ./build/azure-pipelines/test-repositories
+  displayName: 'Running repository tests'

@@ -94,6 +94,15 @@
 				"showReuseMessage": true,
 				"clear": true
 			}
+		},
+		{
+			"type": "npm",
+			"script": "watch:build",
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": "build",
+			"isBackground": true
 		}
 	]
 }

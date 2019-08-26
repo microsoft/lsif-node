@@ -1,0 +1,13 @@
+{
+	"name": "vscode-chat",
+	"repository": "https://github.com/karigari/vscode-chat.git",
+	"branch": "master",
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	],
+	"tests": [
+		{
+			"tsconfig": "./tsconfig.json"
+		}
+	]
+}

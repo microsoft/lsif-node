@@ -1,0 +1,18 @@
+{
+	"name": "vscode-eslint",
+	"repository": "https://github.com/microsoft/vscode-eslint.git",
+	"branch": "master",
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	],
+	"tests": [
+		{
+			"cwd": "server",
+			"tsconfig": "./tsconfig.json"
+		},
+		{
+			"cwd": "client",
+			"tsconfig": "./tsconfig.json"
+		}
+	]
+}
