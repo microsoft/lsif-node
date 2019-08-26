@@ -34,4 +34,4 @@ steps:
     githubServiceConnection: Microsoft
     languages: typescript
     nugetFeed: 'https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-buildservices-staging/nuget/v3/index.json'
-    serviceEndpoint: 'https://int.richcodenav.vsengsaas.visualstudio.com'
+    serviceEndpoint: 'https://int.richnav.vsengsaas.visualstudio.com'
