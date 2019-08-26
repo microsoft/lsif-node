@@ -117,7 +117,7 @@ async function main(pathname: string | undefined): Promise<number | undefined> {
 			let candidate = path.join(pathname, entry);
 			let stats = await stat(candidate);
 			if (stats.isFile() && path.extname(candidate) === '.json') {
-				runTest(candidate);
+				await runTest(candidate);
 			}
 		}
 		return undefined;
