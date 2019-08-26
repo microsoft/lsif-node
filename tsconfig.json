@@ -15,6 +15,7 @@
 		"npm",
 		"tsc",
 		"sqlite",
-		"util"
+		"util",
+		"build"
 	]
 }

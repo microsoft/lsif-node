@@ -78,6 +78,22 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "Repository Tests",
+			"cwd": "${workspaceFolder}",
+			"program": "${workspaceFolder}/build/azure-pipelines/tasks/lib/runLsif.js",
+			"args": [
+				 "${workspaceFolder}/build/azure-pipelines/test-repositories/vscode-chat.json"
+			],
+			"preLaunchTask": "npm: watch:build",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/build/azure-pipelines/tasks/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "LSP Types",
 			"cwd": "${workspaceFolder}/../../LanguageServer/Node/types",
 			"program": "${workspaceFolder}/tsc/lib/main.js",

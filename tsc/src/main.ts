@@ -299,5 +299,8 @@ export async function main(): Promise<void> {
 }
 
 if (require.main === module) {
-	run(ts.sys.args).then(undefined, console.error);
+	run(ts.sys.args).then(undefined, (error) => {
+		console.error(error);
+		process.exitCode = 1;
+	});
 }
