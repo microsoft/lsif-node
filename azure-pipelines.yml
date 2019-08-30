@@ -15,6 +15,7 @@ steps:
   displayName: 'Install dependencies'
 
 - script: |
+    npm run lint
     npm run compile
   displayName: 'Compile client'
 
