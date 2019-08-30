@@ -218,7 +218,7 @@ export class TypingsInstaller {
 				} else {
 					resolve(config);
 				}
-			})
+			});
 		});
 	}
 
@@ -233,7 +233,7 @@ export class TypingsInstaller {
 				promises.push(new Promise<string | undefined>((resolve, reject) => {
 					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
 						if (error) {
-							resolve(undefined)
+							resolve(undefined);
 						}
 						resolve(typing);
 					});

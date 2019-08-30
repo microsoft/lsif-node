@@ -60,7 +60,7 @@ namespace Ranges {
 
 namespace Strings {
 	export function compare(s1: string, s2: string): number {
-		return ( s1 == s2 ) ? 0 : ( s1 > s2 ) ? 1 : -1;
+		return ( s1 === s2 ) ? 0 : ( s1 > s2 ) ? 1 : -1;
 	}
 }
 
@@ -359,7 +359,7 @@ class DocumentData {
 		const id2InlineRange = (id: Id): [number, number, number, number] => {
 			const range = this.blob.ranges[id];
 			return [range.start.line, range.start.character, range.end.line, range.end.character];
-		}
+		};
 
 		let externalDeclarations: ExternalDeclaration[] = [];
 		for (let declaration of this.declarations) {
@@ -384,7 +384,7 @@ class DocumentData {
 			declarations: externalDeclarations.length > 0 ? externalDeclarations : undefined,
 			definitions: externalDefinitions.length > 0 ? externalDefinitions : undefined,
 			references: externalReferences.length > 0 ? externalReferences : undefined,
-		}
+		};
 	}
 
 	private computeHash(): string {
@@ -417,7 +417,7 @@ class DocumentData {
 			const compressor = foldingRangeCompressor;
 			for (let range of this.blob.foldingRanges) {
 				const compressed = compressor.compress(range, options);
-				hash.update(JSON.stringify(compressed, undefined, 0))
+				hash.update(JSON.stringify(compressed, undefined, 0));
 			}
 		}
 		// Unsure if we need to sort the children by range or not?
@@ -439,7 +439,7 @@ class DocumentData {
 					item.push(children);
 				}
 				result.push(item);
-			}
+			};
 			let compressed: any[] = [];
 			for (let symbol of (this.blob.documentSymbols as RangeBasedDocumentSymbol[])) {
 				inline(compressed, symbol);
@@ -624,7 +624,7 @@ export class BlobStore implements DataProvider {
 					this.handleNextEdge(element);
 					break;
 				case EdgeLabels.moniker:
-					this.handleMonikerEdge(element)
+					this.handleMonikerEdge(element);
 					break;
 				case EdgeLabels.textDocument_foldingRange:
 					this.handleFoldingRangeEdge(element);
@@ -995,8 +995,8 @@ export class BlobStore implements DataProvider {
 				this.insertedBlobs.add(blobHash);
 			}
 			const hoverHash = crypto.createHash('md5').update(
-				JSON.stringify({s: moniker.scheme, i: moniker.identifier, b: blobHash }, undefined, 0))
-			.digest('base64');
+				JSON.stringify({s: moniker.scheme, i: moniker.identifier, b: blobHash }, undefined, 0)
+			).digest('base64');
 			if (!this.insertedHovers.has(hoverHash)) {
 				this.hoverInserter.do(moniker.scheme, moniker.identifier, blobHash);
 				this.versionInserter.do(this.version, blobHash);

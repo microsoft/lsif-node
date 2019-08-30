@@ -75,7 +75,7 @@ namespace Converter {
 		return {
 			start: { line: start.line, character: start.character },
 			end: { line: end.line, character: end.character }
-		}
+		};
 	}
 
 	export function rangeFromTextSpan(this: void, file: ts.SourceFile, textSpan: ts.TextSpan): lsp.Range {
@@ -705,8 +705,9 @@ class SymbolDataPartition extends LSIFData {
 		}
 		for (let definitionRange of this.definitionRanges) {
 			if (definitionRange.start.line === range.start.line && definitionRange.start.character === range.start.character &&
-				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character) {
-					return definitionRange;
+				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character)
+			{
+				return definitionRange;
 			}
 		}
 		return undefined;
@@ -753,7 +754,7 @@ class SymbolDataPartition extends LSIFData {
 			let referenceResult = this.symbolData.getOrCreateReferenceResult();
 			for (let property of this.referenceRanges.keys()) {
 				let values = this.referenceRanges.get(property)!;
-				this.emit(this.edge.item(referenceResult, values, this.document, property))
+				this.emit(this.edge.item(referenceResult, values, this.document, property));
 			}
 		}
 		if (this.referenceResults !== SymbolDataPartition.EMPTY_ARRAY) {
@@ -830,7 +831,7 @@ class Symbols {
 		this.parents.set(key, parent);
 		return () => {
 			this.parents.delete(key);
-		}
+		};
 	}
 
 	private getParent(symbol: ts.Symbol): ts.Symbol | undefined {
@@ -1356,7 +1357,7 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.projectData.end();
 		if (!this.options.stdout) {
-			console.log('')
+			console.log('');
 			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
 		}
 	}
@@ -1505,7 +1506,7 @@ class Visitor implements ResolverContext {
 	};
 
 	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
-		this.program = languageService.getProgram()!
+		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
 			idGenerator,
@@ -1519,7 +1520,7 @@ class Visitor implements ResolverContext {
 		}
 		this.dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
-		})
+		});
 		this.projectRoot = options.projectRoot;
 		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
 		this.project = this.vertex.project();
@@ -1547,7 +1548,7 @@ class Visitor implements ResolverContext {
 			unionOrIntersection: new UnionOrIntersectionResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			transient: new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			typeAlias: new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager)
-		}
+		};
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1646,7 +1647,7 @@ class Visitor implements ResolverContext {
 			if (parent.exports === undefined || !parent.exports.has(symbol.getName() as ts.__String)) {
 				disposables.push(this.symbols.addExport(parent, symbol));
 			}
-		}
+		};
 		const exportAssignments: ts.ExportAssignment[] = [];
 		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
 		for (let node of sourceFile.statements) {
@@ -1960,14 +1961,14 @@ class Visitor implements ResolverContext {
 				}
 			}
 			return undefined;
-		}
+		};
 
 		let result = this.dataManager.getDocumentData(sourceFile.fileName);
 		if (result !== undefined) {
 			return result;
 		}
 
-		let document = this.vertex.document(sourceFile.fileName, sourceFile.text)
+		let document = this.vertex.document(sourceFile.fileName, sourceFile.text);
 
 		let monikerPath: string | undefined;
 		let library: boolean = false;

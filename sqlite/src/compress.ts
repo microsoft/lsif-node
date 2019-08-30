@@ -25,7 +25,7 @@ namespace Is {
 
 export type BaseCompressValue =  boolean | number | string | object;
 export type CompressValue = BaseCompressValue | undefined | CompressArray;
-export interface CompressArray extends Array<CompressValue> {};
+export interface CompressArray extends Array<CompressValue> {}
 
 export enum CompressionKind {
 	scalar = 'scalar',
@@ -195,13 +195,13 @@ export class GenericCompressor<T> extends Compressor<T> {
 		let undefinedElements: number = 0;
 		const recordUndefined = () => {
 			undefinedElements++;
-		}
+		};
 		const pushUndefined = () => {
 			for (let i = 0; i < undefinedElements; i++) {
 				result.push(undefined);
 			}
 			undefinedElements = 0;
-		}
+		};
 		function getCompressor(value: Compressor<any> | ((value: any) => Compressor<any> | undefined) | undefined, prop: any, force: true): Compressor<any>;
 		function getCompressor(value: Compressor<any> | ((value: any) => Compressor<any> | undefined) | undefined, prop: any, force?: boolean): Compressor<any> | undefined;
 		function getCompressor(value: Compressor<any> | ((value: any) => Compressor<any> | undefined) | undefined, prop: any, force: boolean = false): Compressor<any> | undefined {
@@ -272,7 +272,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 							return value;
 						}
 						throw new Error(`Any compression kind can't infer conversion for property ${item.name}`);
-					}
+					};
 					let convertedAny: any;
 					if (Array.isArray(value)) {
 						convertedAny = [];

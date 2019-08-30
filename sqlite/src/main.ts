@@ -234,7 +234,7 @@ export function main(): void {
 						}
 					}
 					return result;
-				}
+				};
 				let compressors = Compressor.allCompressors();
 				if (compressors.length > 0) {
 					let compressMetaData: MetaData = element as MetaData;
@@ -262,7 +262,7 @@ export function main(): void {
 				db.close();
 			}
 		});
-	};
+	}
 
 	if(!db) {
 		run();

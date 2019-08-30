@@ -48,7 +48,7 @@ export class VertexBuilder {
 			version,
 			projectRoot,
 			positionEncoding: 'utf-16'
-		}
+		};
 	}
 
 	public event(kind: EventKind, scope: Project): ProjectEvent;
@@ -71,7 +71,7 @@ export class VertexBuilder {
 			type: ElementTypes.vertex,
 			label: VertexLabels.project,
 			kind: 'typescript'
-		}
+		};
 		if (contents) {
 			result.contents = this.encodeString(contents);
 		}
@@ -85,7 +85,7 @@ export class VertexBuilder {
 			label: VertexLabels.document,
 			uri: URI.file(path).toString(true),
 			languageId: 'typescript'
-		}
+		};
 		if (contents) {
 			result.contents = this.encodeString(contents);
 		}
@@ -118,7 +118,7 @@ export class VertexBuilder {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.resultSet
-		}
+		};
 		return result;
 	}
 
@@ -133,7 +133,7 @@ export class VertexBuilder {
 			label: VertexLabels.range,
 			start: range.start,
 			end: range.end,
-		}
+		};
 		if (tag !== undefined) {
 			result.tag = tag;
 		}
@@ -146,7 +146,7 @@ export class VertexBuilder {
 			type: ElementTypes.vertex,
 			label: VertexLabels.location,
 			range: range
-		}
+		};
 	}
 
 	public documentSymbolResult(values: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]): DocumentSymbolResult {
@@ -155,7 +155,7 @@ export class VertexBuilder {
 			type: ElementTypes.vertex,
 			label: VertexLabels.documentSymbolResult,
 			result: values
-		}
+		};
 	}
 
 	public diagnosticResult(values: lsp.Diagnostic[]): DiagnosticResult {
@@ -383,7 +383,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.textDocument_typeDefinition,
 			outV: from.id,
 			inV: to.id
-		}
+		};
 	}
 
 	public references(from: Range | ResultSet, to: ReferenceResult): textDocument_references {
@@ -393,7 +393,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.textDocument_references,
 			outV: from.id,
 			inV: to.id
-		}
+		};
 	}
 
 	public implementation(from: Range | ResultSet, to: ImplementationResult): textDocument_implementation {
@@ -403,7 +403,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.textDocument_implementation,
 			outV: from.id,
 			inV: to.id
-		}
+		};
 	}
 
 	public item(from: DeclarationResult, to: Range[], document: Document): item;

@@ -25,7 +25,7 @@ export function isNode(value: any): value is ts.Node {
 }
 
 export function getDefaultCompilerOptions(configFileName?: string) {
-	const options: ts.CompilerOptions = configFileName && path.basename(configFileName) === "jsconfig.json"
+	const options: ts.CompilerOptions = configFileName && path.basename(configFileName) === 'jsconfig.json'
 		? { allowJs: true, maxNodeModuleJsDepth: 2, allowSyntheticDefaultImports: true, skipLibCheck: true, noEmit: true }
 		: {};
 	return options;
@@ -145,7 +145,7 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 	if (result !== undefined) {
 		return result;
 	}
-	let declarations = symbol.getDeclarations()
+	let declarations = symbol.getDeclarations();
 	if (declarations === undefined) {
 		if (typeChecker.isUnknownSymbol(symbol)) {
 			return Unknown;
@@ -161,8 +161,8 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 			f: declaration.getSourceFile().fileName,
 			s: declaration.getStart(),
 			e: declaration.getEnd()
-		})
-	};
+		});
+	}
 	let hash = crypto.createHash('md5');
 	hash.update(JSON.stringify(fragments, undefined, 0));
 	result = hash.digest('base64');
@@ -306,7 +306,7 @@ function doComputeMoniker(node: ts.Node): string | undefined {
 			// We have an anonymous function declaration => no key.
 			return undefined;
 		}
-	} while ((node = node.parent) !== undefined && !ts.isSourceFile(node))
+	} while ((node = node.parent) !== undefined && !ts.isSourceFile(node));
 	return buffer.join('.');
 }
 
