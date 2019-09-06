@@ -30,8 +30,6 @@ steps:
 
 - task: RichCodeNavIndexer@0
   inputs:
-    serviceConnection: 'rich-code-navigation-int'
+    serviceConnection: 'rich-code-navigation'
     githubServiceConnection: Microsoft
     languages: typescript
-    nugetFeed: 'https://pkgs.dev.azure.com/azure-public/vside/_packaging/vs-buildservices-staging/nuget/v3/index.json'
-    serviceEndpoint: 'https://int.richnav.vsengsaas.visualstudio.com'
