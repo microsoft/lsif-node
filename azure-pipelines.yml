@@ -21,9 +21,9 @@ steps:
 - script: |
     npm run test
   displayName: 'Run unit tests'
+  continueOnError: true
 
 - task: PublishTestResults@2
-  continueOnError: true
   inputs:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'util/junit.xml'
