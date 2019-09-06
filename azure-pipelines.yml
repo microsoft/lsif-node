@@ -23,6 +23,7 @@ steps:
   displayName: 'Run unit tests'
 
 - task: PublishTestResults@2
+  continueOnError: true
   inputs:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'util/junit.xml'
