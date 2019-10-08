@@ -1,133 +1,37 @@
-import { foo, bar } from './sub/provide';
+const map: Map<string, string> = new Map();
+map.set('dirk', 'baeumer');
 
-console.log(foo, bar);
+interface A {
+	x: {
+		y: string;
+	}
+}
+
+interface B {
+	x: {
+		y: number;
+	}
+}
+
+let z: A | B;
+
+let v = z.x.y;
+console.log(v);
+
+// import { mul } from './sub/provide';
 
 
-// function foo(x: number): void {
+// const result: number = mul(10, 20);
+// if (result !== 200) {
+// 	throw new Error(`Multiplication failed`);
 // }
 
 
-// interface I {
-//   foo(): void;
-// }
+// export class MyClass {
+// 	constructor() {
+// 	}
 
-// let i: I;
-
-// interface I {
-//   foo(): void;
-// }
-
-// interface II {
-//   foo(): void;
-// }
-
-// class B implements I, II {
-//   foo(): void {
-//   }
-// }
-
-// let i: I;
-// i.foo();
-
-// let b: B;
-// b.foo();
-
-
-
-// export type BabelDescriptor = { initializer?: () => any; } & ( { foo: number } | { bar: number });
-
-
-// export type PropertyCreator = (
-//     instance: any,
-// ) => void
-
-// export interface Init {
-//     initializer?: () => any;
-// }
-
-// export type BabelDescriptor = PropertyCreator & Init
-
-// import * as p from './sub/provide';
-// p.foo();
-
-// process.env;
-
-// interface A<T> {
-// 	x: T;
-// }
-
-// export function foo(): void {
-// }
-
-// Object.is(1, 1);
-
-// /**
-//  * A longer comment that needs to be fetch
-//  *
-//  * jdjdj
-//  * dkjdkj
-//  */
-// interface I1 {
-// 	/**
-// 	 * A longer comment that needs to be fetch
-// 	 *
-// 	 * jdjdj
-// 	 * dkjdkj
-// 	 */
-// 	get(): void;
-// }
-
-// /**
-//  * A longer comment that needs to be fetch
-//  *
-//  * jdjdj
-//  * dkjdkj
-//  */
-// interface I2 {
-// 	/**
-// 	 * A longer comment that needs to be fetch
-// 	 *
-// 	 * jdjdj
-// 	 * dkjdkj
-// 	 */
-// 	get(): void;
-// }
-
-// let i: I1 | I2;
-// i.get();
-
-// let i2: I1;
-// i2.get();
-
-
-// import * as mobx from 'mobx';
-
-// let x: mobx.ObservableMap;
-
-// let s: Set<string> = new Set();
-// s.add('foo');
-
-// /**
-//  * A longer comment that needs to be fetch
-//  *
-//  * jdjdj
-//  * dkjdkj
-//  */
-// function foo(): number {
-// 	return 10;
-// }
-
-// export default foo();
-
-// /**
-//  * A longer comment that needs to be fetch
-//  *
-//  * jdjdj
-//  * dkjdkj
-//  */
-// export const enum OutlineConfigKeys {
-// 	'icons' = 'outline.icons',
-// 	'problemsEnabled' = 'outline.problems.enabled',
-// 	'problemsColors' = 'outline.problems.colors',
-// 	'problemsBadges' = 'outline.problems.badges'
+// 	public mul(a: number, b: number): number {
+// 		return a * b;
+// 	}
 // }

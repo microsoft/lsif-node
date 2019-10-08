@@ -114,6 +114,7 @@ export function flattenDiagnosticMessageText(messageText: string | ts.Diagnostic
 
 interface InternalSymbol extends ts.Symbol {
 	parent?: ts.Symbol;
+	containingType?: ts.UnionOrIntersectionType;
 	__symbol__data__key__: string | undefined;
 }
 
@@ -237,6 +238,53 @@ export function isTransient(symbol: ts.Symbol): boolean {
 
 export function isTypeAlias(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
+}
+
+export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): boolean {
+	const containingType = (symbol as InternalSymbol).containingType;
+	if (containingType !== undefined && containingType.isUnionOrIntersection()) {
+		return true;
+	}
+
+	if (location !== undefined) {
+		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		if (type.isUnionOrIntersection()) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function getCompositeSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): ts.Symbol[] | undefined {
+	// We have something like x: { prop: number} | { prop: string };
+	const containingType = (symbol as InternalSymbol).containingType;
+	if (containingType !== undefined) {
+		let result: ts.Symbol[] = [];
+		for (let typeElem of containingType.types) {
+			const symbolElem = typeElem.getProperty(symbol.getName());
+			if (symbolElem !== undefined) {
+				result.push(symbolElem);
+			}
+		}
+		return result.length > 0 ? result : undefined;
+	}
+	if (location !== undefined) {
+		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		// we have something like x: A | B;
+		if (type.isUnionOrIntersection()) {
+			let result: ts.Symbol[] = [];
+			for (let typeElem of type.types) {
+				const symbolElem = typeElem.symbol;
+				// This happens for base types like undefined, number, ....
+				if (symbolElem !== undefined) {
+					result.push(symbolElem);
+				}
+			}
+			return result;
+		}
+	}
+	return undefined;
 }
 
 export function isPrivate(symbol: ts.Symbol): boolean {

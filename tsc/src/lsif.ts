@@ -1103,6 +1103,17 @@ abstract class SymbolDataResolver {
 		return sourceFiles[0];
 	}
 
+	public getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+		if (tss.isNamedDeclaration(declaration)) {
+			let name = declaration.name;
+			return [name, name.getText()];
+		}
+		if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
+			return [declaration, ''];
+		}
+		return [undefined, undefined];
+	}
+
 	public abstract resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData;
 }
 
@@ -1193,26 +1204,22 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
-		if (location === undefined) {
-			throw new Error(`Union or intersection resolver requires a location`);
-		}
-		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		if (!type.isUnionOrIntersection()) {
-			throw new Error(`Type is not a union or intersection type`);
-		}
-		if (type.types.length > 0) {
-			let datas: SymbolData[] = [];
-			for (let typeElem of type.types) {
-				let symbol = typeElem.symbol;
-				// This happens for base types like undefined, number, ....
-				if (symbol !== undefined) {
-					datas.push(this.resolverContext.getOrCreateSymbolData(symbol));
-				}
+		const composites = tss.getCompositeSymbols(this.typeChecker, symbol, location);
+		if (composites !== undefined) {
+			const datas: SymbolData[] = [];
+			for (let symbol of composites) {
+				datas.push(this.resolverContext.getOrCreateSymbolData(symbol));
 			}
 			return new UnionOrIntersectionSymbolData(this.symbolDataContext, id, sourceFile, datas);
 		} else {
 			return new StandardSymbolData(this.symbolDataContext, id, undefined);
 		}
+		// We have something like x: { prop: number} | { prop: string };
+		throw new Error(`Union or intersection resolver requires a location`);
+	}
+
+	public getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+		return [declaration, declaration.getText()];
 	}
 }
 
@@ -2051,7 +2058,7 @@ class Visitor implements ResolverContext {
 		let hover: lsp.Hover | undefined;
 		for (let declaration of declarations) {
 			const sourceFile = declaration.getSourceFile();
-			const [identifierNode, identifierText] = this.getIdentifierInformation(sourceFile, symbol, declaration);
+			const [identifierNode, identifierText] = resolver.getIdentifierInformation(sourceFile, symbol, declaration);
 			if (identifierNode !== undefined && identifierText !== undefined) {
 				const documentData = this.getOrCreateDocumentData(sourceFile);
 				const range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);
@@ -2100,17 +2107,6 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	private getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
-		if (tss.isNamedDeclaration(declaration)) {
-			let name = declaration.name;
-			return [name, name.getText()];
-		}
-		if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
-			return [declaration, ''];
-		}
-		return [undefined, undefined];
-	}
-
 	private resolveEmittingNode(symbol: ts.Symbol, isExported: boolean): ts.Node | undefined {
 		// The symbol has a export path so we can't bind this to a node
 		// Note that we even treat private class members like this. Reason being
@@ -2146,11 +2142,16 @@ class Visitor implements ResolverContext {
 
 	private getResolver(symbol: ts.Symbol, location?: ts.Node): SymbolDataResolver {
 		if (location !== undefined && tss.isTransient(symbol)) {
-			let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-			if (type.isUnionOrIntersection()) {
+			if (tss.isComposite(this.typeChecker, symbol, location)) {
 				return this.symbolDataResolvers.unionOrIntersection;
 			} else {
-				return this.symbolDataResolvers.transient;
+				// Problem: Symbols that come from the lib*.d.ts files are marked transient
+				// as well. Check if the symbol has some other meaningful flags
+				if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) !== 0) {
+					return this.symbolDataResolvers.standard;
+				} else {
+					return this.symbolDataResolvers.transient;
+				}
 			}
 		}
 		if (tss.isTypeAlias(symbol)) {

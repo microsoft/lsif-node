@@ -134,6 +134,7 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
+				 "--out", "${workspaceFolder}/tmp/protocol.lsif",
 				 "--outputFormat", "line"
 			],
 			"preLaunchTask": "npm: watch",
