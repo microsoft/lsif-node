@@ -22,7 +22,7 @@ lsif-util [validate|visualize] [file] --inputFormat [line|json] [--stdin] [filte
 
 You can use the `--stdin` flag to **pipe LSIF output**:
 ``` bash
-lsif-tsc -p .\tsconfig.json | lsif-util validate --stdin
+lsif-tsc -p .\tsconfig.json --stdout | lsif-util validate --stdin
 ```
 
 ### Validation
