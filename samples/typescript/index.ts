@@ -1,22 +1,28 @@
-const map: Map<string, string> = new Map();
-map.set('dirk', 'baeumer');
+import { IComputedValue } from 'mobx';
 
-interface A {
-	x: {
-		y: string;
-	}
-}
+let x: IComputedValue<number>;
+console.log(x);
 
-interface B {
-	x: {
-		y: number;
-	}
-}
 
-let z: A | B;
+// const map: Map<string, string> = new Map();
+// map.set('dirk', 'baeumer');
 
-let v = z.x.y;
-console.log(v);
+// interface A {
+// 	x: {
+// 		y: string;
+// 	}
+// }
+
+// interface B {
+// 	x: {
+// 		y: number;
+// 	}
+// }
+
+// let z: A | B;
+
+// let v = z.x.y;
+// console.log(v);
 
 // import { mul } from './sub/provide';
 

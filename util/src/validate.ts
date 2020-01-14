@@ -73,11 +73,11 @@ export function validate(toolOutput: LSIF.Element[], ids: string[]): number {
 		checkAllVisited();
 
 		checkVertices(toolOutput.filter((e: LSIF.Element) => e.type === 'vertex')
-								.map((e: LSIF.Element) => e.id.toString()),
-								nodeModulesPath);
+			.map((e: LSIF.Element) => e.id.toString()),
+		nodeModulesPath);
 		checkEdges(	toolOutput.filter((e: LSIF.Element) => e.type === 'edge')
-								.map((e: LSIF.Element) => e.id.toString()),
-								nodeModulesPath);
+			.map((e: LSIF.Element) => e.id.toString()),
+		nodeModulesPath);
 	} else {
 		console.error(`Error: protocol.d.ts was not found`);
 		return 1;
@@ -151,8 +151,7 @@ function checkVertexBeforeEdge(edge: LSIF.Edge): void {
 }
 
 function checkAllVisited(): void {
-	Object.keys(vertices)
-	.forEach((key: string) => {
+	Object.keys(vertices).forEach((key: string) => {
 		const vertex: LSIF.Vertex = vertices[key].element as LSIF.Vertex;
 		if (!visited[key] && vertex.label !== 'metaData' && vertex.label !== '$event') {
 			errors.push(new Error(vertex, `not connected to any other vertex`));

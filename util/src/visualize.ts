@@ -39,8 +39,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 		});
 	}
 
-	Object.keys(edges)
-	.forEach((key: string) => {
+	Object.keys(edges).forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key] as LSIF.Edge;
 		const inVs: string[] = getInVs(edge);
 		const outV: LSIF.Element = toolOutput.filter((element: LSIF.Element) => element.id === edge.outV)[0];
@@ -59,8 +58,7 @@ export function visualize(toolOutput: LSIF.Element[], ids: string[], distance: n
 function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string]: LSIF.Element }): void {
 	let digraph: string = 'digraph LSIF {\n';
 
-	Object.keys(vertices)
-	.forEach((key: string) => {
+	Object.keys(vertices).forEach((key: string) => {
 		const vertex: LSIF.Vertex = vertices[key] as LSIF.Vertex;
 		let extraText: string = '';
 		const extraInfo: LSIF.Vertex = JSON.parse(JSON.stringify(vertex));
@@ -74,8 +72,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 		delete extraInfo.label;
 		delete extraInfo.type;
 
-		Object.keys(extraInfo)
-		.forEach((property: string) => {
+		Object.keys(extraInfo).forEach((property: string) => {
 			const value: string = JSON.stringify((extraInfo as any)[property]);
 			const re: RegExp = new RegExp('"', 'g');
 			extraText += `\n${property} = ${value.replace(re, '\\"')}`;
@@ -84,8 +81,7 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 		digraph += `  ${vertex.id} [label="[${vertex.id}] ${vertex.label}${extraText}"]\n`;
 	});
 
-	Object.keys(edges)
-	.forEach((key: string) => {
+	Object.keys(edges).forEach((key: string) => {
 		const edge: LSIF.Edge = edges[key] as LSIF.Edge;
 		if (LSIF.Edge.is11(edge)) {
 			digraph += `  ${edge.outV} -> ${edge.inV} [label="${edge.label}"]\n`;
