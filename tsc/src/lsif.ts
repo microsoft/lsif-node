@@ -481,7 +481,7 @@ class StandardSymbolData extends SymbolData {
 			if (parition !== null) {
 				parition.end();
 			}
-			if (this.scope.getSourceFile().isDeclarationFile) {
+			if (!this.scope.getSourceFile().isDeclarationFile) {
 				// TODO - freeze definitions here
 				this.partitions = null;
 				// TODO - need to emit new definitions
