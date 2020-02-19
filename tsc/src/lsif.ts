@@ -481,7 +481,11 @@ class StandardSymbolData extends SymbolData {
 			if (parition !== null) {
 				parition.end();
 			}
-			this.partitions = null;
+			if (this.scope.getSourceFile().isDeclarationFile) {
+				// TODO - freeze definitions here
+				this.partitions = null;
+				// TODO - need to emit new definitions
+			}
 			return true;
 		} else if (ts.isSourceFile(node)) {
 			let fileName = node.fileName;
@@ -1431,7 +1435,9 @@ export class DataManager implements SymbolDataContext {
 		if (datas !== undefined) {
 			for (let symbolData of datas) {
 				if (symbolData.nodeProcessed(node)) {
-					this.symbolDatas.delete(symbolData.getId());
+					if (!node.getSourceFile().isDeclarationFile) {
+						this.symbolDatas.delete(symbolData.getId());
+					}
 				}
 			}
 			this.clearOnNode.delete(node);
