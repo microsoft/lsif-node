@@ -9,17 +9,16 @@ import * as path from 'path';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
-import * as tss from './typescripts';
-
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
 	Version, Range, EventKind, TypeDefinitionResult
 } from 'lsif-protocol';
 
+import { toolVersion } from './consts';
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
-
 import { Emitter } from './emitters/emitter';
+import * as tss from './typescripts';
 import { LRUCache } from './utils/linkedMap';
 
 interface Disposable {
@@ -1538,7 +1537,12 @@ class Visitor implements ResolverContext {
 			return b.length - a.length;
 		});
 		this.projectRoot = options.projectRoot;
-		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
+		const toolInfo = {
+			name: 'lsif-tsc',
+			version: toolVersion,
+			args: ts.sys.args,
+		}
+		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true), toolInfo));
 		this.project = this.vertex.project();
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
