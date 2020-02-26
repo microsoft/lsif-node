@@ -1,21 +1,14 @@
 {
-	"extends": "./tsconfig.base.json",
-	"compilerOptions": {
-	},
-	"references": [
-		{ "path": "./tsc/tsconfig.json" },
-		{ "path": "./npm/tsconfig.json" },
-		{ "path": "./sqlite/tsconfig.json" },
-		{ "path": "./util/tsconfig.json" }
-	],
-	"exclude": [
-		"node_modules",
-		"samples",
-		"protocol",
-		"npm",
-		"tsc",
-		"sqlite",
-		"util",
-		"build"
-	]
+  "extends": "@sourcegraph/tsconfig",
+  "references": [{ "path": "./tsc" }, { "path": "./npm" }, { "path": "./shared" }],
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "commonjs",
+    "allowJs": false,
+    "moduleResolution": "node",
+    "lib": ["esnext"],
+    "composite": true,
+    "rootDir": ".",
+    "allowSyntheticDefaultImports": true
+  }
 }

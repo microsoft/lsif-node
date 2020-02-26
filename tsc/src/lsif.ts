@@ -7,7 +7,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { URI } from 'vscode-uri';
-import * as ts from 'typescript';
+import * as ts from 'typescript-lsif';
 
 import {
 	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
@@ -19,7 +19,7 @@ import { toolVersion } from './consts';
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 import { Emitter } from './emitters/emitter';
 import * as tss from './typescripts';
-import { LRUCache } from './utils/linkedMap';
+import { LRUCache } from '../../shared/linkedMap';
 
 interface Disposable {
 	(): void;
@@ -1217,7 +1217,7 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 			return new StandardSymbolData(this.symbolDataContext, id, undefined);
 		}
 		// We have something like x: { prop: number} | { prop: string };
-		throw new Error(`Union or intersection resolver requires a location`);
+		// throw new Error(`Union or intersection resolver requires a location`);
 	}
 
 	public getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {

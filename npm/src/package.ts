@@ -5,8 +5,8 @@
 
 import * as fs from 'fs';
 
-import * as Is from 'lsif-tsc/lib/utils/is';
-import * as paths from 'lsif-tsc/lib/utils/paths';
+import * as Is from '../../shared/is';
+import * as paths from '../../shared/paths';
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {

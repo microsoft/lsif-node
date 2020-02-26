@@ -1,44 +1,41 @@
 {
-	"name": "lsif-node",
-	"private": true,
-	"version": "0.4.0",
-	"description": "",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/Microsoft/language-server-index-format.git"
-	},
-	"author": "MS",
-	"license": "MIT",
-	"bugs": {
-		"url": "https://github.com/Microsoft/language-server-index-format/issues"
-	},
-	"homepage": "https://github.com/Microsoft/language-server-index-format#readme",
-	"devDependencies": {
-		"@types/node": "^10.14.3",
-		"@types/shelljs": "^0.8.5",
-		"typescript": "3.5.x",
-		"eslint": "^6.2.2",
-		"@typescript-eslint/parser": "^2.0.0",
-		"shelljs": "^0.8.3",
-		"rimraf": "^2.6.3"
-	},
-	"scripts": {
-		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
-		"symlink": "node ./build/bin/symlink.js",
-		"compile": "tsc -b ./tsconfig.json",
-		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",
-		"watch": "tsc -b ./tsconfig.json -w",
-		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
-		"lint": "npm run lint:protocol && npm run lint:tsc && npm run lint:npm && npm run lint:sqlite",
-		"lint:protocol": "eslint --config ./protocol/.eslintrc.json ./protocol/src/*.ts",
-		"lint:tsc": "eslint --config ./tsc/.eslintrc.json ./tsc/src/*.ts",
-		"lint:npm": "eslint --config ./npm/.eslintrc.json ./npm/src/*.ts",
-		"lint:sqlite": "eslint --config ./sqlite/.eslintrc.json ./sqlite/src/*.ts",
-		"lint:util": "eslint --config ./util/.eslintrc.json ./util/src/*.ts",
-		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ..",
-		"lsif-ts": "cd samples/typescript && node ../../tsc/lib/main.js -p ./tsconfig.json  --outputFormat=line --stdout",
-		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc/lib/main.js -p ./client/tsconfig.json --projectRoot . --outputFormat=line",
-		"lsif-js": "cd samples/javascript && node ../../tsc/lib/main.js -p ./jsconfig.json --outputFormat=line",
-		"test": "cd util && npm run test:ci && cd .."
-	}
+  "$schema": "https://raw.githubusercontent.com/sourcegraph/sourcegraph/master/shared/src/schema/extension.schema.json",
+  "name": "lsif-node",
+  "description": "",
+  "private": true,
+  "sideEffects": false,
+  "publisher": "sourcegraph",
+  "version": "0.0.0-DEVELOPMENT",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sourcegraph/lsif-node"
+  },
+  "scripts": {
+    "prettier": "prettier --write --list-different '**/*.{ts,js?(on),md,yml}'",
+    "prettier-check": "yarn run prettier --write=false"
+  },
+  "dependencies": {
+    "lsif-protocol": "0.4.3",
+    "minimist": "^1.2.0",
+    "npm": "^6.10.3",
+    "typescript-lsif": "https://github.com/dbaeumer/TypeScript/releases/download/release%2Flisf%2F3.5.2/typescript-3.5.2-lsif.tgz",
+    "uuid": "^3.3.2",
+    "vscode-uri": "^2.0.2"
+  },
+  "devDependencies": {
+    "@sourcegraph/prettierrc": "^3.0.2",
+    "@sourcegraph/tsconfig": "^4.0.0",
+    "@types/minimist": "^1.2.0",
+    "@types/node": "13.7.4",
+    "@types/npm": "^2.0.30",
+    "@types/shelljs": "^0.8.5",
+    "@types/uuid": "^3.4.4",
+    "prettier": "^1.19.1",
+    "rimraf": "^2.6.3",
+    "shelljs": "^0.8.3",
+    "ts-node": "^8.6.2",
+    "typescript": "^3.7.5",
+    "yarn-deduplicate": "^1.1.1"
+  }
 }

@@ -1,38 +1,17 @@
 {
-	"name": "lsif-npm",
-	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.4.5",
-	"author": "Microsoft Corporation",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/Microsoft/vscode-typescript-sip.git"
-	},
-	"bugs": {
-		"url": "https://github.com/Microsoft/lsif-typescript/issues"
-	},
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
-	"bin": {
-		"lsif-npm": "./bin/lsif-npm"
-	},
-	"dependencies": {
-		"minimist": "^1.2.0",
-		"uuid": "^3.3.2",
-		"lsif-protocol": "0.4.3",
-		"lsif-tsc": "0.4.9"
-	},
-	"devDependencies": {
-		"@types/minimist": "^1.2.0",
-		"@types/uuid": "^3.4.4"
-	},
-	"scripts": {
-		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
-		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
-		"watch": "node ../build/bin/tsc -b ./tsconfig.json -w",
-		"clean": "node ../node_modules/rimraf/bin.js lib",
-		"clean-all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
-		"prepublishOnly": "npm run clean && npm run compile:publish",
-		"postpublish": "node ../build/bin/post-publish.js"
-	}
+  "$schema": "https://raw.githubusercontent.com/sourcegraph/sourcegraph/master/shared/src/schema/extension.schema.json",
+  "name": "lsif-npm",
+  "description": "A tool to rewrite tsc monikers into npm monikers.",
+  "sideEffects": false,
+  "publisher": "sourcegraph",
+  "version": "0.4.5",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sourcegraph/lsif-node"
+  },
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node ../node_modules/typescript/bin/tsc -b ."
+  }
 }

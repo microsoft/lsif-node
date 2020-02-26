@@ -7,9 +7,9 @@
 import * as path from 'path';
 import * as crypto from 'crypto';
 
-import * as ts from 'typescript';
+import * as ts from 'typescript-lsif';
 
-import * as Is from './utils/is';
+import * as Is from '../../shared/is';
 
 export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
 	ts.MethodSignature | ts.ParameterDeclaration;

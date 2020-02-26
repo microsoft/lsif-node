@@ -8,7 +8,7 @@ import * as fs from 'fs';
 
 import * as minimist from 'minimist';
 
-import * as ts from 'typescript';
+import * as ts from 'typescript-lsif';
 import * as tss from './typescripts';
 
 import { Id } from 'lsif-protocol';
@@ -16,7 +16,7 @@ import { toolVersion } from './consts';
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
-import { Writer, StdoutWriter, FileWriter } from './utils/writer';
+import { Writer, StdoutWriter, FileWriter } from '../../shared/writer';
 
 interface Options {
 	help: boolean;

@@ -14,9 +14,9 @@ import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, nextMoniker
 } from 'lsif-protocol';
 
-import * as Is from 'lsif-tsc/lib/utils/is';
-import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
-import { StdoutWriter, FileWriter, Writer } from 'lsif-tsc/lib/utils/writer';
+import * as Is from '../../shared/is';
+import { TscMoniker, NpmMoniker } from '../../shared/moniker';
+import { StdoutWriter, FileWriter, Writer } from '../../shared/writer';
 
 
 interface Options {

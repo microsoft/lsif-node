@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge } from 'lsif-protocol';
-import { Writer } from '../utils/writer';
+import { Writer } from '../../../shared/writer';
 
 export const create: Create = (writer: Writer): Emitter => {
 	let isFirst: boolean = true;
