@@ -37,7 +37,6 @@
 		"rimraf": "^3.0.0"
 	},
 	"dependencies": {
-		"@types/node": "^12.6.2",
 		"fs-extra": "^8.1.0",
 		"jsonschema": "^1.2.5",
 		"lsif-protocol": "0.4.3",
