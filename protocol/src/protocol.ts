@@ -30,6 +30,7 @@ export enum VertexLabels {
 	metaData = 'metaData',
 	event = '$event',
 	project = 'project',
+	group = 'group',
 	range = 'range',
 	location = 'location',
 	document = 'document',
@@ -366,6 +367,43 @@ export interface Project extends V {
 	contents?: string;
 }
 
+export interface Group extends V {
+	/**
+	 * The label property.
+	 */
+	label: VertexLabels.group;
+
+	/**
+	 * The group uri
+	 */
+	uri: Uri;
+
+	/**
+	 * The group name
+	 */
+	name: string;
+
+	/**
+	 * The group description
+	 */
+	description?: string;
+
+	/**
+	 * Optional information about the repository containing the source of the package.
+	 */
+	repository?: {
+		/**
+		 * The repository type. For example GIT
+		 */
+		type: string;
+
+		/**
+		 * The URL to the repository
+		 */
+		url: string;
+	}
+}
+
 export type DocumentId = Id;
 
 /**
@@ -467,7 +505,7 @@ export interface PackageInformation extends V {
 	version?: string;
 
 	/**
-	 * Otional information about the repository containing the source of the package
+	 * Optional information about the repository containing the source of the package.
 	 */
 	repository?: {
 		/**
@@ -638,6 +676,7 @@ export type Vertex =
 	ProjectEvent |
 	DocumentEvent |
 	Project |
+	Group |
 	Document |
 	Moniker |
 	PackageInformation |
@@ -661,6 +700,7 @@ export enum EdgeLabels {
 	moniker = 'moniker',
 	nextMoniker = 'nextMoniker',
 	packageInformation = 'packageInformation',
+	belongsTo = 'belongsTo',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
 	textDocument_foldingRange = 'textDocument/foldingRange',
 	textDocument_documentLink = 'textDocument/documentLink',
@@ -721,7 +761,9 @@ export enum ItemEdgeProperties {
 	definitions = 'definitions',
 	references =  'references',
 	referenceResults = 'referenceResults',
-	implementationResults = 'implementationResults'
+	referenceCascades = 'referenceCascades',
+	implementationResults = 'implementationResults',
+	implementationCascades = 'implementationCascades'
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {
@@ -733,7 +775,6 @@ export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels
  * An edge expressing containment relationship. The relationship exist between:
  *
  * - `Project` -> `Document`
- * - `Package` -> `Document`
  * - `Document` -> `Range`
  */
 export type contains = E1N<Project, Document, EdgeLabels.contains> | E1N<Document, Range, EdgeLabels.contains>;
@@ -755,8 +796,8 @@ export type next = E11<Range, ResultSet, EdgeLabels.next>;
 export type item =
 	ItemEdge<DeclarationResult, Range> | ItemEdge<DefinitionResult, Range> |
 	ItemEdge<TypeDefinitionResult, Range> |
-	ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> |
-	ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult>;
+	ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> | ItemEdge<ReferenceResult, Moniker> |
+	ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult> | ItemEdge<ImplementationResult, Moniker>;
 
 /**
  * An edge associating a range with a moniker. The relationship exists between:
@@ -791,6 +832,13 @@ export type nextMoniker = E11<Moniker, Moniker, EdgeLabels.nextMoniker>;
  * - `Moniker` -> `PackageInformation`
  */
 export type packageInformation = E11<Moniker, PackageInformation, EdgeLabels.packageInformation>;
+
+/**
+ * An edge associating a project with a group. The relationship exists between:
+ *
+ * -  `Project` -> `Group`
+ */
+export type belongsTo = E11<Project, Group, EdgeLabels.belongsTo>;
 
 
 /**
