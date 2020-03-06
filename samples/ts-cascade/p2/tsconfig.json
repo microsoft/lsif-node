@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"outDir": "lib",
+		"baseUrl": "./",
+		"paths": {
+			"p1": ["../p1/lib/main"],
+			"p1/*": ["../p1/lib"]
+		}
+	},
+	"include": [
+		"./main.ts"
+	]
+}

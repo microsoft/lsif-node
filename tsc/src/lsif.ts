@@ -1957,15 +1957,20 @@ class Visitor implements ResolverContext {
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
 		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
 			// A real source file inside this project.
-			if (!sourceFile.isDeclarationFile || (sourceFile.fileName.startsWith(this.rootDir) && sourceFile.fileName.charAt(this.rootDir.length) === '/')) {
-				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir));
+			const fileName = sourceFile.fileName;
+			if (!sourceFile.isDeclarationFile || (fileName.startsWith(this.rootDir) && fileName.charAt(this.rootDir.length) === '/')) {
+				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.rootDir, this.outDir));
 			}
 			// This can come from a dependent project.
-			let fileName = sourceFile.fileName;
 			for (let outDir of this.dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
-					return tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
+					return tss.computeMonikerPath(this.projectRoot, fileName);
 				}
+			}
+			// This can come from a project in the same workspace but referenced
+			// through path directive.
+			if (fileName.startsWith(this.projectRoot)) {
+				return tss.computeMonikerPath(this.projectRoot, fileName);
 			}
 			return undefined;
 		};

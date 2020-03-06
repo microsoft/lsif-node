@@ -61,6 +61,44 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "TS Cascade P1",
+			"cwd": "${workspaceFolder}/samples/ts-cascade/p1",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "tsconfig.json",
+				 "--projectRoot", "..",
+				 "--outputFormat", "line",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "TS Cascade P2",
+			"cwd": "${workspaceFolder}/samples/ts-cascade/p2",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "tsconfig.json",
+				 "--projectRoot", "..",
+				 "--outputFormat", "line",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "lsif-npm",
 			"program": "${workspaceFolder}/npm/lib/main.js",
 			"cwd": "${workspaceFolder}/samples/typescript",
