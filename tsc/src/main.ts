@@ -14,19 +14,36 @@ import * as tss from './typescripts';
 import { Id } from 'lsif-protocol';
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
+import { lsif, ProjectInfo } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
+import { URI } from 'vscode-uri';
 
-interface Options {
+interface CommonOptions {
 	help: boolean;
 	version: boolean;
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
-	projectRoot: string | undefined;
 	noContents: boolean;
 	inferTypings: boolean;
 	out: string | undefined;
 	stdout: boolean;
+}
+
+interface Options extends CommonOptions {
+	group: string | undefined;
+	projectRoot: string | undefined;
+	projectName: string | undefined;
+}
+
+interface GroupConfig {
+	uri?: string;
+	name?: string;
+	conflictResolution?: 'takeDump' | 'takeDB';
+	description? : string;
+	repository?: {
+		type: string;
+		url: string;
+	}
 }
 
 interface OptionDescription {
@@ -44,7 +61,9 @@ namespace Options {
 		version: false,
 		outputFormat: 'line',
 		id: 'number',
+		group: undefined,
 		projectRoot: undefined,
+		projectName: undefined,
 		noContents: false,
 		inferTypings: false,
 		out: undefined,
@@ -55,12 +74,70 @@ namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
+		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
+		{ id: 'projectName', type: 'string', default: undefined, description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
 		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
 	];
+}
+
+interface ResolvedGroupConfig extends GroupConfig {
+	uri: string;
+	name: string;
+	conflictResolution: 'takeDump' | 'takeDB';
+}
+
+namespace ResolvedGroupConfig {
+	export function from(groupConfig: GroupConfig): ResolvedGroupConfig | undefined {
+		if (groupConfig.uri === undefined || groupConfig.name === undefined) {
+			return undefined;
+		}
+		return {
+			uri: groupConfig.uri,
+			name: groupConfig.name,
+			conflictResolution: groupConfig.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB',
+			description: groupConfig.description,
+			repository: groupConfig.repository
+		};
+	}
+}
+
+
+interface ResolvedOptions extends CommonOptions {
+	projectRoot: string;
+	projectName: string;
+	group: ResolvedGroupConfig;
+}
+
+namespace ResolvedOptions {
+	export function from(options: Options, groupConfig: ResolvedGroupConfig): ResolvedOptions | undefined {
+		if (options.projectRoot === undefined || options.projectName === undefined) {
+			return undefined;
+		}
+
+		return {
+			help: options.help,
+			version: options.version,
+			outputFormat: options.outputFormat,
+			id: options.id,
+			noContents: options.noContents,
+			inferTypings: options.inferTypings,
+			out: options.out,
+			stdout: options.stdout,
+			projectRoot: options.projectRoot,
+			projectName: options.projectName,
+			group: {
+				uri: groupConfig.uri,
+				name: groupConfig.name,
+				conflictResolution: groupConfig.conflictResolution,
+				description: groupConfig.description,
+				repository: groupConfig.repository
+			}
+		};
+	}
 }
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
@@ -143,6 +220,16 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		options.projectRoot = process.cwd();
 	}
 	options.projectRoot = tss.makeAbsolute(options.projectRoot);
+	if (options.projectName === undefined) {
+		if (tsconfigFileName !== undefined) {
+			options.projectName = path.basename(path.basename(path.dirname(tsconfigFileName)));
+		}
+		if (options.projectName === undefined) {
+			console.error(`No project name provided.`);
+			process.exitCode = 1;
+			return undefined;
+		}
+	}
 
 	if (options.inferTypings) {
 		if (config.options.types !== undefined) {
@@ -151,6 +238,55 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		} else {
 			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
 		}
+	}
+
+	if (options.group === undefined) {
+		console.error(`No group config file provided.`);
+		process.exitCode = 1;
+		return undefined;
+	}
+
+	let resolvedGroupConfig: ResolvedGroupConfig  | undefined;
+	if (!fs.existsSync(options.group)) {
+		console.error(`Group config file ${options.group} doesn't exist.`);
+		process.exitCode = 1;
+		return undefined;
+	}
+	let groupConfig: GroupConfig | undefined;
+	try {
+		groupConfig = JSON.parse(fs.readFileSync(options.group, { encoding: 'utf8'}));
+	} catch (err) {
+		console.error(`Reading group config file ${options.group} failed.`);
+		if (err) {
+			console.error(err);
+		}
+	}
+	if (groupConfig === undefined) {
+		process.exitCode = 1;
+		return undefined;
+	}
+	if (!groupConfig.uri || URI.parse(groupConfig.uri).scheme !== 'lsif-group') {
+		console.error(`Group config must provide an URI with scheme lsif-group.`);
+		process.exitCode = 1;
+		return undefined;
+	}
+	if (!groupConfig.name) {
+		console.error(`Group config must provide a group name.`);
+		process.exitCode = 1;
+		return undefined;
+
+	}
+	resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
+	if (resolvedGroupConfig === undefined) {
+		console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+		process.exitCode = 1;
+		return undefined;
+	}
+	const resolvedOptions = ResolvedOptions.from(options, resolvedGroupConfig);
+	if (resolvedOptions === undefined) {
+		console.error(`Couldn't resolve all options to proper values:\n\r${JSON.stringify(options, undefined, 4)}`);
+		process.exitCode = 1;
+		return undefined;
 	}
 
 	// Bind all symbols
@@ -221,12 +357,12 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
+	return lsif(languageService, resolvedOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
 }
 
 async function run(this: void, args: string[]): Promise<void> {
 
-	let minOpts: minimist.Opts = {
+	const minOpts: minimist.Opts = {
 		string: [],
 		boolean: [],
 		default: Object.create(null),
@@ -250,7 +386,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
-	let buffer: string[] = [];
+	const buffer: string[] = [];
 	if (options.help) {
 		buffer.push(`Languag Server Index Format tool for TypeScript`);
 		buffer.push(`Version: ${require('../package.json').version}`);

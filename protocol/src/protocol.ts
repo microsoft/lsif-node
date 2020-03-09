@@ -357,6 +357,11 @@ export interface Project extends V {
 	kind: string;
 
 	/**
+	 * The project name
+	 */
+	name: string;
+
+	/**
 	 * The resource URI of the project file.
 	 */
 	resource?: Uri;
@@ -377,6 +382,16 @@ export interface Group extends V {
 	 * The group uri
 	 */
 	uri: Uri;
+
+	/**
+	 * Groups are usually shared between project dumps. This property indicates how a DB should
+	 * handle group information coming from different project dumps. In case of a conflict (the group
+	 * already exists in a DB) the values' meaning are:
+	 *
+	 * - `takeDump`: information of the group should overwrite information in a DB.
+	 * - `takeDB`: information of the group is ignored. The DB values stay as is.
+	 */
+	conflictResolution: 'takeDump' | 'takeDB';
 
 	/**
 	 * The group name
@@ -929,6 +944,7 @@ export type Edge =
 	moniker |
 	nextMoniker |
 	packageInformation |
+	belongsTo |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
 	textDocument_documentLink |

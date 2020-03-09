@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
+	lsp, Vertex, Edge, Project, Group, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
 	Version, Range, EventKind, TypeDefinitionResult
 } from 'lsif-protocol';
@@ -21,6 +21,8 @@ import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
 import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
+
+import * as paths from './utils/paths';
 
 interface Disposable {
 	(): void;
@@ -195,7 +197,7 @@ class ProjectData extends LSIFData {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: SymbolDataContext, private project: Project) {
+	public constructor(context: SymbolDataContext, private group: Group, private project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -203,6 +205,7 @@ class ProjectData extends LSIFData {
 
 	public begin(): void {
 		this.emit(this.project);
+		this.emit(this.edge.belongsTo(this.project, this.group));
 		this.emit(this.vertex.event(EventKind.begin, this.project));
 	}
 
@@ -239,7 +242,7 @@ class DocumentData extends LSIFData {
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public externalLibrary: boolean) {
+	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public external: boolean) {
 		super(context);
 		this.ranges = [];
 	}
@@ -1309,10 +1312,23 @@ class TypeAliasResolver extends StandardResolver {
 	}
 }
 
-export interface Options {
+interface GroupInfo {
+	uri: string;
+	name: string;
+	conflictResolution: 'takeDump' | 'takeDB';
+	description? : string;
+	repository?: {
+		type: string;
+		url: string;
+	}
+}
+
+interface Options {
 	projectRoot: string;
+	projectName: string;
 	noContents: boolean;
 	stdout: boolean;
+	group: GroupInfo;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1324,8 +1340,8 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, project: Project, private options: Options) {
-		this.projectData = new ProjectData(this, project);
+	public constructor(private context: EmitContext, group: Group, project: Project, private options: Options) {
+		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.documentStats = 0;
 		this.symbolStats = 0;
@@ -1377,10 +1393,10 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, externalLibrary: boolean): DocumentData {
+	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
 		let result = this.getDocumentData(fileName);
 		if (result === undefined) {
-			result = new DocumentData(this, document, monikerPath, externalLibrary);
+			result = new DocumentData(this, document, monikerPath, external);
 			this.documentDatas.set(fileName, result);
 			result.begin();
 			this.projectData.addDocument(document);
@@ -1530,7 +1546,12 @@ class Visitor implements ResolverContext {
 		});
 		this.projectRoot = options.projectRoot;
 		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
-		this.project = this.vertex.project();
+		this.project = this.vertex.project(options.projectName);
+		const group = this.vertex.group(options.group.uri, options.group.name);
+		group.conflictResolution = options.group.conflictResolution;
+		group.description = options.group.description;
+		group.repository = options.group.repository;
+		this.emit(group);
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
@@ -1545,7 +1566,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, this.project, options);
+		this.dataManager = new DataManager(this, group, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1955,24 +1976,30 @@ class Visitor implements ResolverContext {
 	}
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
-		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
-			// A real source file inside this project.
+		const isFromExternalLibrary = (sourceFile: ts.SourceFile): boolean => {
+			return tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile);
+		};
+
+		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
 			const fileName = sourceFile.fileName;
-			if (!sourceFile.isDeclarationFile || (fileName.startsWith(this.rootDir) && fileName.charAt(this.rootDir.length) === '/')) {
-				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.rootDir, this.outDir));
+			return !sourceFile.isDeclarationFile || paths.isParent(this.rootDir, fileName);
+		};
+
+		const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
+			if (!sourceFile.isDeclarationFile) {
+				return false;
 			}
-			// This can come from a dependent project.
+			const fileName = sourceFile.fileName;
 			for (let outDir of this.dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
-					return tss.computeMonikerPath(this.projectRoot, fileName);
+					return true;
 				}
 			}
-			// This can come from a project in the same workspace but referenced
-			// through path directive.
-			if (fileName.startsWith(this.projectRoot)) {
-				return tss.computeMonikerPath(this.projectRoot, fileName);
-			}
-			return undefined;
+			return false;
+		};
+
+		const isFromProjectRoot = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(this.projectRoot, sourceFile.fileName);
 		};
 
 		let result = this.dataManager.getDocumentData(sourceFile.fileName);
@@ -1980,18 +2007,26 @@ class Visitor implements ResolverContext {
 			return result;
 		}
 
-		let document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+		const fileName = sourceFile.fileName;
 
 		let monikerPath: string | undefined;
-		let library: boolean = false;
-		if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
-			library = true;
-			monikerPath = tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
-		} else {
-			monikerPath = computeMonikerPath(sourceFile);
+		let external: boolean = false;
+		if (isFromProjectSources(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.rootDir, this.outDir));
+		} else if (isFromExternalLibrary(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
+		} else if (isFromDependentProject(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
+		} else if (isFromProjectRoot(sourceFile)) {
+			external = sourceFile.isDeclarationFile;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
 		}
 
-		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, library);
+		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, external);
+
 		// In TS source files have symbols and can be referenced in import statements with * imports.
 		// So even if we don't parse the source file we need to create a symbol data so that when
 		// referenced we have the data.
@@ -2023,19 +2058,19 @@ class Visitor implements ResolverContext {
 		}
 		// Make sure we create all document data before we create the symbol.
 		let monikerPath: string | undefined | null;
-		let externalLibrary: boolean = false;
+		let external: boolean = false;
 		for (let sourceFile of sourceFiles.values()) {
 			let documentData = this.getOrCreateDocumentData(sourceFile);
 			if (monikerPath === undefined) {
 				monikerPath = documentData.monikerPath;
-				externalLibrary = documentData.externalLibrary;
+				external = documentData.external;
 			} else if (monikerPath !== documentData.monikerPath) {
 				monikerPath = null;
 			}
 		}
 		if (monikerPath === null) {
 			monikerPath = undefined;
-			externalLibrary = false;
+			external = false;
 		}
 		result = this.dataManager.getOrCreateSymbolData(id, () => {
 			return resolver.requiresSourceFile ? resolver.resolve(resolver.getPartitionScope(sourceFiles), id, symbol, location, scope) : resolver.resolve(undefined, id, symbol, location, scope);
@@ -2053,7 +2088,7 @@ class Visitor implements ResolverContext {
 		if (monikerIdentifer === undefined) {
 			result.addMoniker(id, MonikerKind.local);
 		} else {
-			if (externalLibrary === true) {
+			if (external === true) {
 				result.addMoniker(monikerIdentifer, MonikerKind.import);
 			} else {
 				result.addMoniker(monikerIdentifer, MonikerKind.export);

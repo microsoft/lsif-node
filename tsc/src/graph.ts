@@ -8,13 +8,13 @@ import { URI } from 'vscode-uri';
 
 import {
 	lsp, Id, Vertex, E,
-	Project, Document, HoverResult, ReferenceResult,
+	Group, Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
 	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next
+	DeclarationResult, textDocument_declaration, next, belongsTo
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -54,7 +54,7 @@ export class VertexBuilder {
 	public event(kind: EventKind, scope: Project): ProjectEvent;
 	public event(kind: EventKind, scope: Document): DocumentEvent;
 	public event(kind: EventKind, scope: Project | Document): Event {
-		let result: ProjectEvent | DocumentEvent = {
+		const result: ProjectEvent | DocumentEvent = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.event,
@@ -65,12 +65,13 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public project(contents?: string): Project {
-		let result: Project = {
+	public project(name: string, contents?: string): Project {
+		const result: Project = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.project,
-			kind: 'typescript'
+			kind: 'typescript',
+			name
 		};
 		if (contents) {
 			result.contents = this.encodeString(contents);
@@ -78,8 +79,20 @@ export class VertexBuilder {
 		return result;
 	}
 
+	public group(uri: string, name: string): Group {
+		const result: Group = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.group,
+			uri,
+			conflictResolution: 'takeDB',
+			name
+		};
+		return result;
+	}
+
 	public document(path: string, contents?: string): Document {
-		let result: Document = {
+		const result: Document = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.document,
@@ -114,7 +127,7 @@ export class VertexBuilder {
 	}
 
 	public resultSet(): ResultSet {
-		let result: ResultSet = {
+		const result: ResultSet = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.resultSet
@@ -127,7 +140,7 @@ export class VertexBuilder {
 	public range(range: lsp.Range, tag: DefinitionTag): DefinitionRange;
 	public range(range: lsp.Range, tag: ReferenceTag): ReferenceRange;
 	public range(range: lsp.Range, tag?: RangeTag): Range {
-		let result: Range = {
+		const result: Range = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.range,
@@ -282,6 +295,16 @@ export class EdgeBuilder {
 		};
 	}
 
+	public belongsTo(from: Project, to: Group): belongsTo {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.belongsTo,
+			outV: from.id,
+			inV: to.id
+		};
+	}
+
 	public next(from: Range, to: ResultSet): next;
 	public next(from: ResultSet, to: ResultSet): next;
 	public next(from: Range | ResultSet, to: ResultSet): next {
@@ -414,9 +437,8 @@ export class EdgeBuilder {
 	public item(from: ImplementationResult, to: Range[], document: Document): item;
 	public item(from: ImplementationResult, to: ImplementationResult[], document: Document): item;
 	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], document: Document, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
-		let result: item;
 		if (to.length === 0) {
-			let result: item = {
+			const result: item = {
 				id: this.nextId(),
 				type: ElementTypes.edge,
 				label: EdgeLabels.item,
@@ -429,8 +451,8 @@ export class EdgeBuilder {
 			}
 			return result;
 		}
-		let toKind = to[0].label;
-		result = {
+		const toKind = to[0].label;
+		const result: item = {
 			id: this.nextId(),
 			type: ElementTypes.edge,
 			label: EdgeLabels.item,

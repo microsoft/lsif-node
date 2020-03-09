@@ -1,4 +1,4 @@
-import { Foo } from '../p1/lib/main';
+import { Foo } from 'p1';
 
 class Bar implements Foo {
 	public foo(): void {

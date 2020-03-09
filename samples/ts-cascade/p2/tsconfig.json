@@ -1,4 +1,5 @@
 {
+	"name": "p1",
 	"compilerOptions": {
 		"module": "commonjs",
 		"outDir": "lib",
