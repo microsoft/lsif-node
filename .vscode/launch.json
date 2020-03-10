@@ -87,6 +87,7 @@
 				 "-p", "tsconfig.json",
 				 "--projectRoot", "..",
 				 "--outputFormat", "line",
+				 "--group", "../group.json",
 				 "--stdout"
 			],
 			"preLaunchTask": "npm: watch",

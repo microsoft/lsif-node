@@ -434,6 +434,7 @@ export class EdgeBuilder {
 	public item(from: TypeDefinitionResult, to: Range[], document: Document): item;
 	public item(from: ReferenceResult, to: ReferenceResult[], document: Document): item;
 	public item(from: ReferenceResult, to: Range[], document: Document, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
+	public item(from: ReferenceResult, to: Moniker[], document: Document): item;
 	public item(from: ImplementationResult, to: Range[], document: Document): item;
 	public item(from: ImplementationResult, to: ImplementationResult[], document: Document): item;
 	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], document: Document, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
@@ -446,6 +447,7 @@ export class EdgeBuilder {
 				inVs: [],
 				document: document.id
 			};
+			// We have an empty to array. So treat the empty set as references or use the property provided.
 			if (from.label === 'referenceResult') {
 				result.property = property !== undefined ? property : ItemEdgeProperties.references;
 			}
@@ -466,11 +468,31 @@ export class EdgeBuilder {
 			case 'definitionResult':
 				break;
 			case 'referenceResult':
-				result.property = property !== undefined ? property : ItemEdgeProperties.referenceResults;
+				switch (toKind) {
+					case VertexLabels.range:
+						if (property === undefined) {
+							throw new Error(`An item edge pointing to ranges needs to define a property.`);
+						}
+						result.property = property;
+						break;
+					case VertexLabels.referenceResult:
+						result.property = ItemEdgeProperties.referenceResults;
+						break;
+					case VertexLabels.moniker:
+						result.property = ItemEdgeProperties.referenceCascades;
+						break;
+					default:
+						throw new Error('Should never happen.');
+				}
 				break;
 			case 'implementationResult':
-				if (toKind === 'implementationResult') {
-					result.property = ItemEdgeProperties.implementationResults;
+				switch (toKind) {
+					case VertexLabels.implementationResult:
+						result.property = ItemEdgeProperties.implementationResults;
+						break;
+					case VertexLabels.moniker:
+						result.property = ItemEdgeProperties.implementationCascades;
+						break;
 				}
 				break;
 			default:
