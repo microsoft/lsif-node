@@ -71,6 +71,7 @@ export enum EventKind {
  * The event scopes
  */
 export enum EventScope {
+	dump= 'dump',
 	project = 'project',
 	document = 'document'
 }
@@ -87,6 +88,16 @@ export interface Event extends V {
 	 * The event scope.
 	 */
 	scope: EventScope;
+}
+
+export interface DumpEvent extends Event {
+
+	scope: EventScope.dump;
+
+	/**
+	 * Dump events don't carry any data right now.
+	 */
+	data: undefined;
 }
 
 export interface ProjectEvent extends Event {
@@ -469,6 +480,34 @@ export enum MonikerKind {
 	local = 'local'
 }
 
+export enum UniquenessLevel {
+	/**
+	 * The moniker is only unique inside a file
+	 */
+	file = 'file',
+
+	/**
+	 * The moniker is unique inside a project for which a dump got created
+	 */
+	project = 'project',
+
+	/**
+	 * The moniker is unique inside the group to which a project belongs
+	 */
+	group = 'group',
+
+	/**
+	 * The moniker is unique inside the package mamanger, usually expressed through
+	 * the moniker scheme
+	 */
+	packageManager = 'packageManager',
+
+	/**
+	 * The moniker is gloabally unique
+	 */
+	global = 'global'
+}
+
 export interface Moniker extends V {
 
 	label: VertexLabels.moniker;
@@ -483,6 +522,11 @@ export interface Moniker extends V {
 	 * schema owners are allowed to define the structure if they want.
 	 */
 	identifier: string;
+
+	/**
+	 * The scope in which the moniker is unique
+	 */
+	unique: UniquenessLevel;
 
 	/**
 	 * The moniker kind if known.
@@ -688,6 +732,7 @@ export interface HoverResult extends V {
  */
 export type Vertex =
 	MetaData |
+	DumpEvent |
 	ProjectEvent |
 	DocumentEvent |
 	Project |
@@ -713,7 +758,7 @@ export enum EdgeLabels {
 	item = 'item',
 	next = 'next',
 	moniker = 'moniker',
-	nextMoniker = 'nextMoniker',
+	attach = 'attach',
 	packageInformation = 'packageInformation',
 	belongsTo = 'belongsTo',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
@@ -839,7 +884,7 @@ export type moniker =
  *
  * - `Moniker` -> `Moniker`
  */
-export type nextMoniker = E11<Moniker, Moniker, EdgeLabels.nextMoniker>;
+export type attach = E11<Moniker, Moniker, EdgeLabels.attach>;
 
 /**
  * An edge associating a moniker with a package information. The relationship exists between:
@@ -942,7 +987,7 @@ export type Edge =
 	item |
 	next |
 	moniker |
-	nextMoniker |
+	attach |
 	packageInformation |
 	belongsTo |
 	textDocument_documentSymbol |

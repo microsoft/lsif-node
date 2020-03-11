@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Group, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Version, Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels
+	Version, Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -349,7 +349,8 @@ abstract class SymbolData extends LSIFData {
 	}
 
 	public addMoniker(identifier: string, kind: MonikerKind): void {
-		const moniker = this.vertex.moniker('tsc', identifier, kind);
+		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.file : UniquenessLevel.project;
+		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
 		this.moniker = moniker;
@@ -1572,6 +1573,7 @@ class Visitor implements ResolverContext {
 		});
 		this.projectRoot = options.projectRoot;
 		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
+		this.emit(this.vertex.event(EventKind.begin));
 		const group = this.vertex.group(options.group.uri, options.group.name);
 		group.conflictResolution = options.group.conflictResolution;
 		group.description = options.group.description;
@@ -1621,6 +1623,7 @@ class Visitor implements ResolverContext {
 
 	public endVisitProgram(): void {
 		this.dataManager.projectProcessed();
+		this.emit(this.vertex.event(EventKind.end));
 	}
 
 	protected visit(node: ts.Node): void {

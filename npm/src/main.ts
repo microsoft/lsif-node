@@ -11,7 +11,7 @@ import * as uuid from 'uuid';
 
 import PackageJson from './package';
 import {
-	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, nextMoniker
+	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel
 } from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
@@ -131,22 +131,23 @@ class Linker {
 		return result;
 	}
 
-	protected createMoniker(identifier: string, kind: MonikerKind, scheme: string): Moniker {
+	protected createMoniker(scheme: string, identifier: string, unique: UniquenessLevel, kind: MonikerKind): Moniker {
 		return {
 			id: this.idGenerator(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.moniker,
-			kind: kind,
 			scheme: scheme,
-			identifier: identifier
-		} as Moniker;
+			identifier: identifier,
+			unique,
+			kind: kind
+		};
 	}
 
-	protected createNextMonikerEdge(outV: Id, inV: Id): nextMoniker {
+	protected createAttachEdge(outV: Id, inV: Id): attach {
 		return {
 			id: this.idGenerator(),
 			type: ElementTypes.edge,
-			label: EdgeLabels.nextMoniker,
+			label: EdgeLabels.attach,
 			outV: outV,
 			inV: inV
 		};
@@ -186,10 +187,10 @@ class ExportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, tscMoniker.path, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(npmIdentifier, moniker.kind, NpmMoniker.scheme);
+			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.packageManager, moniker.kind);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id));
-			emit(this.createNextMonikerEdge(moniker.id, npmMoniker.id));
+			emit(this.createAttachEdge(moniker.id, npmMoniker.id));
 		}
 	}
 
@@ -264,10 +265,10 @@ class ImportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(packageData.packageJson.name, monikerPath, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(npmIdentifier, moniker.kind, NpmMoniker.scheme);
+			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.packageManager, moniker.kind);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id));
-			emit(this.createNextMonikerEdge(npmMoniker.id, moniker.id));
+			emit(this.createAttachEdge(moniker.id, npmMoniker.id));
 		}
 	}
 }

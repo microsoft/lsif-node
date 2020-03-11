@@ -10,7 +10,7 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, DumpEvent, Id
 } from 'lsif-protocol';
 
 namespace Is {
@@ -719,7 +719,7 @@ const scopeShortForm = function() {
 	]);
 }();
 
-const eventCompressor = new GenericCompressor<ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
+const eventCompressor = new GenericCompressor<DumpEvent | ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('kind', next(), kindShortForm),
 	GenericCompressorProperty.scalar('scope', next(), scopeShortForm),
 	GenericCompressorProperty.scalar('data', next(), scopeShortForm),
@@ -770,8 +770,8 @@ Compressor.registerEdgeCompressor(EdgeLabels.next, nextCompressor);
 export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.moniker, monikerEdgeCompressor);
 
-export const nextMonikerCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
-Compressor.registerEdgeCompressor(EdgeLabels.nextMoniker, nextMonikerCompressor);
+export const attachCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+Compressor.registerEdgeCompressor(EdgeLabels.attach, attachCompressor);
 
 export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
 Compressor.registerEdgeCompressor(EdgeLabels.packageInformation, packageInformationEdgeCompressor);
@@ -812,7 +812,10 @@ export const itemPropertyShortForms = function() {
 		[ItemEdgeProperties.declarations, shortCounter++],
 		[ItemEdgeProperties.definitions, shortCounter++],
 		[ItemEdgeProperties.references, shortCounter++],
-		[ItemEdgeProperties.referenceResults, shortCounter++]
+		[ItemEdgeProperties.referenceResults, shortCounter++],
+		[ItemEdgeProperties.referenceCascades, shortCounter++],
+		[ItemEdgeProperties.implementationResults, shortCounter++],
+		[ItemEdgeProperties.implementationCascades, shortCounter++]
 	]);
 }();
 
