@@ -109,16 +109,16 @@ namespace ResolvedGroupConfig {
 interface ResolvedOptions extends CommonOptions {
 	projectRoot: string;
 	projectName: string;
-	group: ResolvedGroupConfig;
+	group: ResolvedGroupConfig | undefined;
 }
 
 namespace ResolvedOptions {
-	export function from(options: Options, groupConfig: ResolvedGroupConfig): ResolvedOptions | undefined {
+	export function from(options: Options, groupConfig: ResolvedGroupConfig | undefined): ResolvedOptions | undefined {
 		if (options.projectRoot === undefined || options.projectName === undefined) {
 			return undefined;
 		}
 
-		return {
+		const result: ResolvedOptions = {
 			help: options.help,
 			version: options.version,
 			outputFormat: options.outputFormat,
@@ -129,14 +129,18 @@ namespace ResolvedOptions {
 			stdout: options.stdout,
 			projectRoot: options.projectRoot,
 			projectName: options.projectName,
-			group: {
+			group: undefined
+		};
+		if (groupConfig !== undefined) {
+			result.group = {
 				uri: groupConfig.uri,
 				name: groupConfig.name,
 				conflictResolution: groupConfig.conflictResolution,
 				description: groupConfig.description,
 				repository: groupConfig.repository
-			}
-		};
+			};
+		}
+		return result;
 	}
 }
 
@@ -193,6 +197,70 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
+async function readGroupConfig(options: Options): Promise<GroupConfig | undefined | number> {
+	const group = options.group;
+	if (group === undefined) {
+		return undefined;
+	}
+	if (group === 'stdin') {
+		try {
+			const result: GroupConfig = await new Promise((resolve, reject) => {
+				const stdin = process.stdin;
+				let buffer: Buffer | undefined;
+				stdin.on('data', (data) => {
+					if (buffer === undefined) {
+						buffer = data;
+					} else {
+						buffer = Buffer.concat([buffer, data]);
+					}
+				});
+				stdin.on('end', () => {
+					try {
+						if (buffer === undefined) {
+							resolve(undefined);
+						} else {
+							resolve(JSON.parse(buffer.toString('utf8')));
+						}
+					} catch (err) {
+						reject(err);
+					}
+				});
+				stdin.on('error', (err) => {
+					reject(err);
+				});
+			});
+			if (result === undefined) {
+				return 1;
+			}
+			return result;
+		} catch (err) {
+			if (err) {
+				console.error(err);
+			}
+			return 1;
+		}
+	} else {
+		const fileName = group;
+		if (!fs.existsSync(fileName)) {
+			console.error(`Group config file ${options.group} doesn't exist.`);
+			return 1;
+		}
+		let groupConfig: GroupConfig | undefined;
+		try {
+			groupConfig = JSON.parse(fs.readFileSync(fileName, { encoding: 'utf8'}));
+		} catch (err) {
+			console.error(`Reading group config file ${options.group} failed.`);
+			if (err) {
+				console.error(err);
+			}
+		}
+		if (groupConfig === undefined) {
+			return 1;
+		}
+		return groupConfig;
+	}
+}
+
 async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
@@ -240,48 +308,31 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		}
 	}
 
-	if (options.group === undefined) {
-		console.error(`No group config file provided.`);
-		process.exitCode = 1;
-		return undefined;
-	}
-
 	let resolvedGroupConfig: ResolvedGroupConfig  | undefined;
-	if (!fs.existsSync(options.group)) {
-		console.error(`Group config file ${options.group} doesn't exist.`);
-		process.exitCode = 1;
-		return undefined;
+	const groupConfig = await readGroupConfig(options);
+	if (typeof groupConfig === 'number') {
+		process.exitCode = groupConfig;
+		return;
 	}
-	let groupConfig: GroupConfig | undefined;
-	try {
-		groupConfig = JSON.parse(fs.readFileSync(options.group, { encoding: 'utf8'}));
-	} catch (err) {
-		console.error(`Reading group config file ${options.group} failed.`);
-		if (err) {
-			console.error(err);
+	if (groupConfig !== undefined) {
+		if (!groupConfig.uri || URI.parse(groupConfig.uri).scheme !== 'lsif-group') {
+			console.error(`Group config must provide an URI with scheme lsif-group.`);
+			process.exitCode = 1;
+			return;
+		}
+		if (!groupConfig.name) {
+			console.error(`Group config must provide a group name.`);
+			process.exitCode = 1;
+			return;
+		}
+		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
+		if (resolvedGroupConfig === undefined) {
+			console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+			process.exitCode = 1;
+			return;
 		}
 	}
-	if (groupConfig === undefined) {
-		process.exitCode = 1;
-		return undefined;
-	}
-	if (!groupConfig.uri || URI.parse(groupConfig.uri).scheme !== 'lsif-group') {
-		console.error(`Group config must provide an URI with scheme lsif-group.`);
-		process.exitCode = 1;
-		return undefined;
-	}
-	if (!groupConfig.name) {
-		console.error(`Group config must provide a group name.`);
-		process.exitCode = 1;
-		return undefined;
 
-	}
-	resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
-	if (resolvedGroupConfig === undefined) {
-		console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
-		process.exitCode = 1;
-		return undefined;
-	}
 	const resolvedOptions = ResolvedOptions.from(options, resolvedGroupConfig);
 	if (resolvedOptions === undefined) {
 		console.error(`Couldn't resolve all options to proper values:\n\r${JSON.stringify(options, undefined, 4)}`);

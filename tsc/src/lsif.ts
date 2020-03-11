@@ -197,7 +197,7 @@ class ProjectData extends LSIFData {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: SymbolDataContext, private group: Group, private project: Project) {
+	public constructor(context: SymbolDataContext, private group: Group | undefined, private project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -205,7 +205,9 @@ class ProjectData extends LSIFData {
 
 	public begin(): void {
 		this.emit(this.project);
-		this.emit(this.edge.belongsTo(this.project, this.group));
+		if (this.group !== undefined) {
+			this.emit(this.edge.belongsTo(this.project, this.group));
+		}
 		this.emit(this.vertex.event(EventKind.begin, this.project));
 	}
 
@@ -1355,7 +1357,7 @@ interface Options {
 	projectName: string;
 	noContents: boolean;
 	stdout: boolean;
-	group: GroupInfo;
+	group: GroupInfo | undefined;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1367,7 +1369,7 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, group: Group, project: Project, private options: Options) {
+	public constructor(private context: EmitContext, group: Group | undefined, project: Project, private options: Options) {
 		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.documentStats = 0;
@@ -1574,11 +1576,14 @@ class Visitor implements ResolverContext {
 		this.projectRoot = options.projectRoot;
 		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
 		this.emit(this.vertex.event(EventKind.begin));
-		const group = this.vertex.group(options.group.uri, options.group.name);
-		group.conflictResolution = options.group.conflictResolution;
-		group.description = options.group.description;
-		group.repository = options.group.repository;
-		this.emit(group);
+		let group: Group | undefined;
+		if (options.group !== undefined) {
+			group = this.vertex.group(options.group.uri, options.group.name);
+			group.conflictResolution = options.group.conflictResolution;
+			group.description = options.group.description;
+			group.repository = options.group.repository;
+			this.emit(group);
+		}
 		this.project = this.vertex.project(options.projectName);
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
