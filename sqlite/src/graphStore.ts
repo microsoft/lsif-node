@@ -5,12 +5,18 @@
 import * as fs from 'fs';
 import * as Sqlite from 'better-sqlite3';
 
-import { Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains, PackageInformation, item } from 'lsif-protocol';
+import {
+	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,
+	PackageInformation, item, Group
+} from 'lsif-protocol';
 
 import { itemPropertyShortForms } from './compress';
 import { Inserter } from './inserter';
+import { Store } from 'store';
 
-export class GraphStore {
+type Mode = 'create' | 'import';
+
+export class GraphStore extends Store {
 
 	private db: Sqlite.Database;
 	private insertContentStmt: Sqlite.Statement;
@@ -19,23 +25,38 @@ export class GraphStore {
 	private itemInserter: Inserter;
 	private rangeInserter: Inserter;
 	private documentInserter: Inserter;
+	private groupInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
 
-	public constructor(filename: string, private stringify: (element: Vertex | Edge) => string, private shortForm: (element: Vertex | Edge) => number) {
+	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, mode: Mode) {
+		super(input);
 		this.pendingRanges = new Map();
-		try {
-			fs.unlinkSync(filename);
-		} catch (err) {
+		if (mode === 'import' && fs.existsSync(filename)) {
+			this.db = new Sqlite(filename);
+			const format = this.db.prepare('Select * from format f').get().format;
+			if (format !== 'graph') {
+				this.db.close();
+				throw new Error(`Can only import an additional dump into a graph DB. Format was ${format}`);
+			}
+			this.db.prepare('Select ');
+		} else {
+			if (mode === 'create') {
+				try {
+					fs.unlinkSync(filename);
+				} catch (err) {
+				}
+			}
+			this.db = new Sqlite(filename);
+			this.createTables();
+			this.db.exec(`Insert into format (format) Values ('graph')`);
 		}
-		this.db = new Sqlite(filename);
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
-		this.createTables();
-		this.db.exec(`Insert into format (format) Values ('graph')`);
 
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
+		this.groupInserter = new Inserter(this.db, 'Insert Into groups (uri, id)', 2, 5);
 		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
 
 		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
@@ -50,6 +71,7 @@ export class GraphStore {
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
 		this.db.exec('Create Table documents (uri Text Unique Primary Key, id Integer Not Null)');
 		this.db.exec('Create Table contents (id Integer Unique Primary Key, content Blob Not Null)');
+		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
 
 		// Edge information
 		this.db.exec('Create Table edges (id Integer Not Null, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
@@ -65,10 +87,24 @@ export class GraphStore {
 		this.db.exec('Create Index items_inv on items (inV)');
 	}
 
-	public runInsertTransaction(cb: (db: GraphStore) => void): void {
-		this.db.transaction(() => {
-			cb(this);
-		})();
+	public close(): void {
+		this.vertexInserter.finish();
+		this.edgeInserter.finish();
+		this.rangeInserter.finish();
+		this.documentInserter.finish();
+		this.itemInserter.finish();
+		if(this.pendingRanges.size > 0) {
+			console.error(`Pending ranges exists before DB is closed.`);
+		}
+		this.createIndices();
+		this.db.close();
+	}
+
+	public async run(): Promise<void> {
+		// Begin transaction
+		await super.run();
+		this.close();
+		// End transation
 	}
 
 	public insert(element: Edge | Vertex): void {
@@ -76,6 +112,9 @@ export class GraphStore {
 			switch (element.label) {
 				case VertexLabels.metaData:
 					this.insertMetaData(element);
+					break;
+				case VertexLabels.group:
+					this.insertGroup(element);
 					break;
 				case VertexLabels.project:
 					this.insertProject(element);
@@ -106,15 +145,15 @@ export class GraphStore {
 		}
 	}
 
-	private insertVertex(vertex: Vertex): void {
-		let value = this.stringify(vertex);
-		let label = this.shortForm(vertex);
-		this.vertexInserter.do(vertex.id, label, value);
+	private insertMetaData(vertex: MetaData): void {
+		let value = this.compress(vertex);
+		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 	}
 
-	private insertMetaData(vertex: MetaData): void {
-		let value = this.stringify(vertex);
-		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
+	private insertVertex(vertex: Vertex): void {
+		let value = this.compress(vertex);
+		let label = this.shortForm(vertex);
+		this.vertexInserter.do(vertex.id, label, value);
 	}
 
 	private insertContent(vertex: Document | Project | PackageInformation): void {
@@ -123,6 +162,11 @@ export class GraphStore {
 		}
 		let contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
 		this.insertContentStmt.run(vertex.id, contents);
+	}
+
+	private insertGroup(group: Group): void {
+		this.groupInserter.do(group.uri, group.id);
+		this.insertVertex(group);
 	}
 
 	private insertProject(project: Project): void {
@@ -190,18 +234,5 @@ export class GraphStore {
 				this.itemInserter.do(item.id, item.outV, inV, item.document, null);
 			}
 		}
-	}
-
-	public close(): void {
-		this.vertexInserter.finish();
-		this.edgeInserter.finish();
-		this.rangeInserter.finish();
-		this.documentInserter.finish();
-		this.itemInserter.finish();
-		if(this.pendingRanges.size > 0) {
-			console.error(`Pending ranges exists before DB is closed.`);
-		}
-		this.createIndices();
-		this.db.close();
 	}
 }
