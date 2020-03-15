@@ -7,7 +7,7 @@ import * as Sqlite from 'better-sqlite3';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,
-	PackageInformation, item, Group
+	PackageInformation, item, Group, Id
 } from 'lsif-protocol';
 
 import { itemPropertyShortForms } from './compress';
@@ -38,7 +38,17 @@ export class GraphStore extends Store {
 				this.db.close();
 				throw new Error(`Can only import an additional dump into a graph DB. Format was ${format}`);
 			}
-			this.db.prepare('Select ');
+			const maxVertices: Id | undefined = this.db.prepare('Select Max([id]) as max from vertices').get().max;
+			const maxEdges: Id | undefined = this.db.prepare('Select Max([id]) as max from edges').get().max;
+			if (typeof maxVertices === 'number' && typeof maxEdges === 'number') {
+				const delta = Math.max(maxVertices, maxEdges);
+				this.setIdTransformer((value: Id) => {
+					if (typeof value !== 'number') {
+						throw new Error(`Expected number Id but received ${value}`);
+					}
+					return value + delta;
+				});
+			}
 		} else {
 			if (mode === 'create') {
 				try {
