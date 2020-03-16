@@ -257,7 +257,8 @@ export class GraphStore extends Store {
 		const id = this.transformId(item.id);
 		const outV = this.transformId(item.outV);
 		const document = this.transformId(item.document);
-		for (let inV of item.inVs) {
+		for (let element of item.inVs) {
+			const inV = this.transformId(element);
 			if (item.property !== undefined) {
 				this.itemInserter.do(id, outV, inV, document, itemPropertyShortForms.get(item.property));
 			} else {

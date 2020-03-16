@@ -391,7 +391,8 @@ class ElementCompressor extends Compressor<Element> {
 
 	public compress(element: Element, options: CompressorOptions): [Id, number] {
 		if (options.mode === 'store') {
-			return [element.id, elementShortForms.get(element.type)!];
+			const id = typeof options.idTransformer === 'function' ? options.idTransformer(element.id) : element.id;
+			return [id, elementShortForms.get(element.type)!];
 		} else {
 			return [-1, -1];
 		}
