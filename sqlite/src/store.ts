@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 
 
-import { Edge, Vertex, ElementTypes, VertexLabels, Id} from 'lsif-protocol';
+import { Edge, Vertex, ElementTypes, VertexLabels, Id } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
 import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor, CompressorOptions } from './compress';
 
@@ -101,6 +101,10 @@ export abstract class Store {
 			throw new Error(`No compressor found for ${element.label}`);
 		}
 		return JSON.stringify(compressor.compress(element, this.compressorOptions));
+	}
+
+	protected transformId(id: Id): Id {
+		return this.compressorOptions.idTransformer !== undefined ? this.compressorOptions.idTransformer(id): id;
 	}
 
 	protected shortForm(element: Vertex | Edge): number {

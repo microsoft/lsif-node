@@ -6,7 +6,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 
 import { Edge, Vertex } from 'lsif-protocol';
-import { Store } from 'store';
+import { Store } from './store';
 
 const __stdout = process.stdout;
 const __eol = os.EOL;

@@ -20,7 +20,7 @@ import {
 
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 import { Inserter } from './inserter';
-import { Store } from 'store';
+import { Store } from './store';
 
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {

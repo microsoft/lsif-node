@@ -12,7 +12,7 @@ import {
 
 import { itemPropertyShortForms } from './compress';
 import { Inserter } from './inserter';
-import { Store } from 'store';
+import { Store } from './store';
 
 type Mode = 'create' | 'import';
 
@@ -28,7 +28,7 @@ export class GraphStore extends Store {
 	private groupInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
 
-	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, mode: Mode) {
+	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, private mode: Mode) {
 		super(input);
 		this.pendingRanges = new Map();
 		if (mode === 'import' && fs.existsSync(filename)) {
@@ -106,7 +106,9 @@ export class GraphStore extends Store {
 		if(this.pendingRanges.size > 0) {
 			console.error(`Pending ranges exists before DB is closed.`);
 		}
-		this.createIndices();
+		if (this.mode === 'create') {
+			this.createIndices();
+		}
 		this.db.close();
 	}
 
@@ -156,92 +158,110 @@ export class GraphStore extends Store {
 	}
 
 	private insertMetaData(vertex: MetaData): void {
-		let value = this.compress(vertex);
-		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
+		if (this.mode === 'create') {
+			const value = this.compress(vertex);
+			this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
+		} else {
+			const stored: MetaData = JSON.parse(this.db.prepare(`Select id, value from meta`).get().value);
+			if (vertex.version !== stored.version || vertex.positionEncoding !== stored.positionEncoding || vertex.projectRoot !== stored.projectRoot) {
+				this.db.close();
+				throw new Error(`Index can't be merged into DB. Version, position encoding or project root differs.`);
+			}
+		}
 	}
 
 	private insertVertex(vertex: Vertex): void {
-		let value = this.compress(vertex);
-		let label = this.shortForm(vertex);
-		this.vertexInserter.do(vertex.id, label, value);
+		const value = this.compress(vertex);
+		const label = this.shortForm(vertex);
+		this.vertexInserter.do(this.transformId(vertex.id), label, value);
 	}
 
 	private insertContent(vertex: Document | Project | PackageInformation): void {
 		if (vertex.contents === undefined || vertex.contents === null) {
 			return;
 		}
-		let contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
-		this.insertContentStmt.run(vertex.id, contents);
+		const contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
+		this.insertContentStmt.run(this.transformId(vertex.id), contents);
 	}
 
 	private insertGroup(group: Group): void {
-		this.groupInserter.do(group.uri, group.id);
+		this.groupInserter.do(group.uri, this.transformId(group.id));
 		this.insertVertex(group);
 	}
 
 	private insertProject(project: Project): void {
 		if (project.resource !== undefined && project.contents !== undefined) {
-			this.documentInserter.do(project.resource, project.id);
+			this.documentInserter.do(project.resource, this.transformId(project.id));
 			this.insertContent(project);
 		}
-		let newProject = Object.assign(Object.create(null) as object, project);
+		const newProject = Object.assign(Object.create(null) as object, project);
 		newProject.contents = undefined;
 		this.insertVertex(newProject);
 	}
 
 	private insertDocument(document: Document): void {
-		this.documentInserter.do(document.uri, document.id);
+		this.documentInserter.do(document.uri, this.transformId(document.id));
 		this.insertContent(document);
-		let newDocument = Object.assign(Object.create(null) as object, document);
+		const newDocument = Object.assign(Object.create(null) as object, document);
 		newDocument.contents = undefined;
 		this.insertVertex(newDocument);
 	}
 
 	private insertPackageInformation(info: PackageInformation): void {
 		if (info.uri !== undefined && info.contents !== undefined) {
-			this.documentInserter.do(info.uri, info.id);
+			this.documentInserter.do(info.uri, this.transformId(info.id));
 			this.insertContent(info);
 		}
-		let newInfo = Object.assign(Object.create(null) as object, info);
+		const newInfo = Object.assign(Object.create(null) as object, info);
 		newInfo.contents = undefined;
 		this.insertVertex(newInfo);
 	}
 
 	private insertRange(range: Range): void {
 		this.insertVertex(range);
-		this.pendingRanges.set(range.id, range);
+		const id = this.transformId(range.id);
+		this.pendingRanges.set(id, range);
 	}
 
 	private insertEdge(edge: Edge): void {
-		let label = this.shortForm(edge);
+		const label = this.shortForm(edge);
 		if (Edge.is11(edge)) {
-			this.edgeInserter.do(edge.id, label, edge.outV, edge.inV);
+			this.edgeInserter.do(this.transformId(edge.id), label, this.transformId(edge.outV), this.transformId(edge.inV));
 		} else if (Edge.is1N(edge)) {
+			const id = this.transformId(edge.id);
+			const outV = this.transformId(edge.outV);
 			for (let inV of edge.inVs) {
-				this.edgeInserter.do(edge.id, label, edge.outV, inV);
+				this.edgeInserter.do(id, label, outV, this.transformId(inV));
 			}
 		}
 	}
 
 	private insertContains(contains: contains): void {
-		let label = this.shortForm(contains);
-		for (let inV of contains.inVs) {
+		const label = this.shortForm(contains);
+		const id = this.transformId(contains.id);
+		const outV = this.transformId(contains.outV);
+
+		for (let element of contains.inVs) {
+			const inV = this.transformId(element);
 			const range = this.pendingRanges.get(inV);
 			if (range === undefined) {
-				this.edgeInserter.do(contains.id, label, contains.outV, inV);
+				this.edgeInserter.do(this.transformId(id), label, outV, inV);
 			} else {
 				this.pendingRanges.delete(inV);
-				this.rangeInserter.do(range.id, contains.outV, range.start.line, range.start.character, range.end.line, range.end.character);
+				this.rangeInserter.do(this.transformId(range.id), outV, range.start.line, range.start.character, range.end.line, range.end.character);
 			}
 		}
 	}
 
 	private insertItem(item: item): void {
+		const id = this.transformId(item.id);
+		const outV = this.transformId(item.outV);
+		const document = this.transformId(item.document);
 		for (let inV of item.inVs) {
 			if (item.property !== undefined) {
-				this.itemInserter.do(item.id, item.outV, inV, item.document, itemPropertyShortForms.get(item.property));
+				this.itemInserter.do(id, outV, inV, document, itemPropertyShortForms.get(item.property));
 			} else {
-				this.itemInserter.do(item.id, item.outV, inV, item.document, null);
+				this.itemInserter.do(id, outV, inV, document, null);
 			}
 		}
 	}
