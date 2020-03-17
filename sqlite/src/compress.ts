@@ -10,7 +10,7 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, DumpEvent, Id, Group
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, DumpEvent, Id, Group, MonikerKind, UniquenessLevel
 } from 'lsif-protocol';
 
 namespace Is {
@@ -399,9 +399,13 @@ class ElementCompressor extends Compressor<Element> {
 	}
 
 	public metaData(): CompressorProperty[] {
-		return [
+		const shortForms: [string, string | number][] = [];
+		for (const entry of elementShortForms) {
+			shortForms.push([entry[0], entry[1]]);
+		}
+		return[
 			CompressorProperty.id('id', 1),
-			CompressorProperty.scalar('type', 2)
+			CompressorProperty.scalar('type', 2, shortForms)
 		];
 	}
 
@@ -625,9 +629,29 @@ const documentCompressor = new GenericCompressor<Document>(vertexCompressor, Com
 ]);
 Compressor.registerVertexCompressor(VertexLabels.document, documentCompressor);
 
+export const monikerKindShortFroms = function() {
+	let shortCounter: number = 1;
+	return new Map<MonikerKind, number>([
+		[MonikerKind.local, shortCounter++],
+		[MonikerKind.import, shortCounter++],
+		[MonikerKind.export, shortCounter++]
+	]);
+}();
+
+export const monikerUniqueShortFroms = function() {
+	return new Map<UniquenessLevel, number>([
+		[UniquenessLevel.file, 1000],
+		[UniquenessLevel.project, 2000],
+		[UniquenessLevel.group, 3000],
+		[UniquenessLevel.packageManager, 4000],
+		[UniquenessLevel.global, 5000]
+	]);
+}();
 const monikerCompressor = new GenericCompressor<Moniker>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('scheme', next()),
-	GenericCompressorProperty.scalar('identifier', next())
+	GenericCompressorProperty.scalar('identifier', next()),
+	GenericCompressorProperty.scalar('kind', next(), monikerKindShortFroms),
+	GenericCompressorProperty.scalar('unique', next(), monikerUniqueShortFroms)
 ]);
 Compressor.registerVertexCompressor(VertexLabels.moniker, monikerCompressor);
 

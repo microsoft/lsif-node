@@ -7,7 +7,7 @@ import * as Sqlite from 'better-sqlite3';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,
-	PackageInformation, item, Group, Id
+	PackageInformation, item, Group, Id, Moniker
 } from 'lsif-protocol';
 
 import { itemPropertyShortForms } from './compress';
@@ -26,6 +26,7 @@ export class GraphStore extends Store {
 	private rangeInserter: Inserter;
 	private documentInserter: Inserter;
 	private groupInserter: Inserter;
+	private monikerInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
 
 	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, private mode: Mode) {
@@ -67,6 +68,7 @@ export class GraphStore extends Store {
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
 		this.groupInserter = new Inserter(this.db, 'Insert Into groups (uri, id)', 2, 5);
+		this.monikerInserter = new Inserter(this.db, 'Insert into monikers (identifier, scheme, kind, uniqueness, id)', 5, 128);
 		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
 
 		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
@@ -82,7 +84,7 @@ export class GraphStore extends Store {
 		this.db.exec('Create Table documents (uri Text Unique Primary Key, id Integer Not Null)');
 		this.db.exec('Create Table contents (id Integer Unique Primary Key, content Blob Not Null)');
 		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
-
+		this.db.exec('Create Table monikers (identifier Text Not Null, scheme Text Not Null, kind Integer, uniqueness Integer Not Null, id Integer Unique)');
 		// Edge information
 		this.db.exec('Create Table edges (id Integer Not Null, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
 		this.db.exec('Create Table items (id Integer Not Null, outV Integer Not Null, inV Integer Not Null, document Integer Not Null, property Integer)');
@@ -92,16 +94,20 @@ export class GraphStore extends Store {
 		// Index label, outV and inV on edges
 		this.db.exec('Create Index edges_outv on edges (outV, label)');
 		this.db.exec('Create Index edges_inv on edges (inV, label)');
-		this.db.exec('Create Index ranges_index on ranges (belongsTo, startLine, endLine, startCharacter, endCharacter)',);
+		this.db.exec('Create Index ranges_index on ranges (belongsTo, startLine, endLine, startCharacter, endCharacter)');
 		this.db.exec('Create Index items_outv on items (outV)');
 		this.db.exec('Create Index items_inv on items (inV)');
+		this.db.exec('Create Index monikers_index on monikers (identifier, scheme, uniqueness)');
 	}
 
 	public close(): void {
 		this.vertexInserter.finish();
-		this.edgeInserter.finish();
 		this.rangeInserter.finish();
 		this.documentInserter.finish();
+		this.groupInserter.finish();
+		this.monikerInserter.finish();
+
+		this.edgeInserter.finish();
 		this.itemInserter.finish();
 		if(this.pendingRanges.size > 0) {
 			console.error(`Pending ranges exists before DB is closed.`);
@@ -139,6 +145,9 @@ export class GraphStore extends Store {
 					break;
 				case VertexLabels.range:
 					this.insertRange(element);
+					break;
+				case VertexLabels.moniker:
+					this.insertMoniker(element);
 					break;
 				default:
 					this.insertVertex(element);
@@ -197,6 +206,13 @@ export class GraphStore extends Store {
 		const newProject = Object.assign(Object.create(null) as object, project);
 		newProject.contents = undefined;
 		this.insertVertex(newProject);
+	}
+
+	private insertMoniker(moniker: Moniker): void {
+		const kind: number = this.shortFormMonikerKind(moniker.kind);
+		const unique: number = this.shortFormMonikerUnique(moniker.unique);
+		this.monikerInserter.do(moniker.identifier, moniker.scheme, kind, unique, this.transformId(moniker.id));
+		this.insertVertex(moniker);
 	}
 
 	private insertDocument(document: Document): void {

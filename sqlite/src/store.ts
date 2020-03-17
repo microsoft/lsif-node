@@ -6,9 +6,9 @@ import * as fs from 'fs';
 import * as readline from 'readline';
 
 
-import { Edge, Vertex, ElementTypes, VertexLabels, Id } from 'lsif-protocol';
+import { Edge, Vertex, ElementTypes, VertexLabels, Id, MonikerKind, UniquenessLevel } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
-import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor, CompressorOptions } from './compress';
+import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor, CompressorOptions, monikerKindShortFroms, monikerUniqueShortFroms } from './compress';
 
 export abstract class Store {
 
@@ -37,18 +37,18 @@ export abstract class Store {
 					throw err;
 				}
 				if (element.type === ElementTypes.vertex && element.label === VertexLabels.metaData) {
-					let convertMetaData = (data: CompressorProperty): CompressorPropertyDescription => {
-						let result: CompressorPropertyDescription = {
+					const convertMetaData = (data: CompressorProperty): CompressorPropertyDescription => {
+						const result: CompressorPropertyDescription = {
 							name: data.name as string,
 							index: data.index,
 							compressionKind: data.compressionKind
 						};
 						if (data.shortForm !== undefined) {
-							let long: Set<string> = new Set();
-							let short: Set<string | number> = new Set();
+							const long: Set<string> = new Set();
+							const short: Set<string | number> = new Set();
 							result.shortForm = [];
-							for (let elem of data.shortForm) {
-								let [key, value] = elem;
+							for (const elem of data.shortForm) {
+								const [key, value] = elem;
 								if (long.has(key)) {
 									throw new Error(`Duplicate key ${key} in short form.`);
 								}
@@ -62,9 +62,9 @@ export abstract class Store {
 						}
 						return result;
 					};
-					let compressors = Compressor.allCompressors();
+					const compressors = Compressor.allCompressors();
 					if (compressors.length > 0) {
-						let compressMetaData: MetaData = element as MetaData;
+						const compressMetaData: MetaData = element as MetaData;
 						compressMetaData.compressors = {
 							vertexCompressor: vertexCompressor.id,
 							edgeCompressor: edge11Compressor.id,
@@ -118,5 +118,23 @@ export abstract class Store {
 			throw new Error(`Can't compute short form for ${element.label}`);
 		}
 		return result;
+	}
+
+	protected shortFormMonikerKind(kind: MonikerKind | undefined): number {
+		if (kind === undefined) {
+			return -1;
+		}
+
+		const result = monikerKindShortFroms.get(kind);
+		return result === undefined ? -1 : result;
+	}
+
+	protected shortFormMonikerUnique(level: UniquenessLevel | undefined): number {
+		if (level === undefined) {
+			return -1;
+		}
+
+		const result = monikerUniqueShortFroms.get(level);
+		return result === undefined ? -1 : result;
 	}
 }
