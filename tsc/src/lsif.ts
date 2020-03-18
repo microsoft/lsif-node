@@ -1343,8 +1343,9 @@ class TypeAliasResolver extends StandardResolver {
 
 interface GroupInfo {
 	uri: string;
-	name: string;
 	conflictResolution: 'takeDump' | 'takeDB';
+	name: string;
+	rootUri: string;
 	description? : string;
 	repository?: {
 		type: string;
@@ -1353,11 +1354,10 @@ interface GroupInfo {
 }
 
 interface Options {
-	projectRoot: string;
 	projectName: string;
 	noContents: boolean;
 	stdout: boolean;
-	group: GroupInfo | undefined;
+	group: GroupInfo;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1573,12 +1573,12 @@ class Visitor implements ResolverContext {
 		this.dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
 		});
-		this.projectRoot = options.projectRoot;
-		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
+		this.projectRoot = tss.normalizePath(URI.parse(options.group.rootUri).fsPath);
+		this.emit(this.vertex.metaData(Version));
 		this.emit(this.vertex.event(EventKind.begin));
 		let group: Group | undefined;
 		if (options.group !== undefined) {
-			group = this.vertex.group(options.group.uri, options.group.name);
+			group = this.vertex.group(options.group.uri, options.group.name, options.group.rootUri);
 			group.conflictResolution = options.group.conflictResolution;
 			group.description = options.group.description;
 			group.repository = options.group.repository;

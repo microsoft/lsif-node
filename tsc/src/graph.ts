@@ -14,7 +14,7 @@ import {
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, DumpEvent
+	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, DumpEvent, Uri
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -40,13 +40,12 @@ export class VertexBuilder {
 		return this.options.emitSource;
 	}
 
-	public metaData(version: string, projectRoot: string): MetaData {
+	public metaData(version: string): MetaData {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.metaData,
 			version,
-			projectRoot,
 			positionEncoding: 'utf-16'
 		};
 	}
@@ -78,6 +77,19 @@ export class VertexBuilder {
 		}
 	}
 
+	public group(uri: Uri, name: string, rootUri: Uri): Group {
+		const result: Group = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.group,
+			uri,
+			conflictResolution: 'takeDB',
+			name,
+			rootUri
+		};
+		return result;
+	}
+
 	public project(name: string, contents?: string): Project {
 		const result: Project = {
 			id: this.nextId(),
@@ -89,18 +101,6 @@ export class VertexBuilder {
 		if (contents) {
 			result.contents = this.encodeString(contents);
 		}
-		return result;
-	}
-
-	public group(uri: string, name: string): Group {
-		const result: Group = {
-			id: this.nextId(),
-			type: ElementTypes.vertex,
-			label: VertexLabels.group,
-			uri,
-			conflictResolution: 'takeDB',
-			name
-		};
 		return result;
 	}
 

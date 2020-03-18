@@ -78,12 +78,13 @@ export class GraphStore extends Store {
 	private createTables(): void {
 		// Vertex information
 		this.db.exec('Create Table format (format Text Not Null)');
-		this.db.exec('Create Table vertices (id Integer Unique Primary Key, label Integer Not Null, value Text Not Null)');
+		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
+		this.db.exec('Create table projects (uri Text Unique Primay Key, id Integer Not Null');
+		this.db.exec('Create Table vertices (id Integer Unique Primary, Key, label Integer Not Null, value Text Not Null)');
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
 		this.db.exec('Create Table documents (uri Text Unique Primary Key, id Integer Not Null)');
 		this.db.exec('Create Table contents (id Integer Unique Primary Key, content Blob Not Null)');
-		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
 		this.db.exec('Create Table monikers (identifier Text Not Null, scheme Text Not Null, kind Integer, uniqueness Integer Not Null, id Integer Unique)');
 		// Edge information
 		this.db.exec('Create Table edges (id Integer Not Null, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
@@ -172,7 +173,7 @@ export class GraphStore extends Store {
 			this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 		} else {
 			const stored: MetaData = JSON.parse(this.db.prepare(`Select id, value from meta`).get().value);
-			if (vertex.version !== stored.version || vertex.positionEncoding !== stored.positionEncoding || vertex.projectRoot !== stored.projectRoot) {
+			if (vertex.version !== stored.version || vertex.positionEncoding !== stored.positionEncoding) {
 				this.db.close();
 				throw new Error(`Index can't be merged into DB. Version, position encoding or project root differs.`);
 			}

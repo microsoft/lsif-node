@@ -33,7 +33,13 @@ export function getDefaultCompilerOptions(configFileName?: string) {
 
 const isWindows = process.platform === 'win32';
 export function normalizePath(value: string): string {
-	let result = path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
+	if (isWindows) {
+		value = value.replace(/\\/g, '/');
+		if (/^[a-z]:/.test(value)) {
+			value = value.charAt(0).toUpperCase() + value.substring(1);
+		}
+	}
+	let result = path.posix.normalize(value);
 	return result.length > 0 && result.charAt(result.length - 1) === '/' ? result.substr(0, result.length - 1) : result;
 }
 

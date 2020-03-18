@@ -330,11 +330,6 @@ export interface MetaData extends V {
 	version: string;
 
 	/**
-	 * The project root (in form of a URI) used to compute this dump.
-	 */
-	projectRoot: Uri;
-
-	/**
 	 * The string encoding used to compute line and character values in
 	 * positions and ranges. Currently only 'utf-16' is support due to the
 	 * limitations in LSP.
@@ -348,6 +343,58 @@ export interface MetaData extends V {
 		name: string;
 		version?: string;
 		args?: string[];
+	}
+}
+
+export interface Group extends V {
+	/**
+	 * The label property.
+	 */
+	label: VertexLabels.group;
+
+	/**
+	 * The group uri
+	 */
+	uri: Uri;
+
+	/**
+	 * Groups are usually shared between project dumps. This property indicates how a DB should
+	 * handle group information coming from different project dumps. In case of a conflict (the group
+	 * already exists in a DB) the values' meaning are:
+	 *
+	 * - `takeDump`: information of the group should overwrite information in a DB.
+	 * - `takeDB`: information of the group is ignored. The DB values stay as is.
+	 */
+	conflictResolution: 'takeDump' | 'takeDB';
+
+	/**
+	 * The group name
+	 */
+	name: string;
+
+	/**
+	 * The group root folder uri
+	 */
+	rootUri: Uri;
+
+	/**
+	 * The group description
+	 */
+	description?: string;
+
+	/**
+	 * Optional information about the repository containing the source of the package.
+	 */
+	repository?: {
+		/**
+		 * The repository type. For example GIT
+		 */
+		type: string;
+
+		/**
+		 * The URL to the repository
+		 */
+		url: string;
 	}
 }
 
@@ -381,53 +428,6 @@ export interface Project extends V {
 	 * Optional the content of the project file, `base64` encoded.
 	 */
 	contents?: string;
-}
-
-export interface Group extends V {
-	/**
-	 * The label property.
-	 */
-	label: VertexLabels.group;
-
-	/**
-	 * The group uri
-	 */
-	uri: Uri;
-
-	/**
-	 * Groups are usually shared between project dumps. This property indicates how a DB should
-	 * handle group information coming from different project dumps. In case of a conflict (the group
-	 * already exists in a DB) the values' meaning are:
-	 *
-	 * - `takeDump`: information of the group should overwrite information in a DB.
-	 * - `takeDB`: information of the group is ignored. The DB values stay as is.
-	 */
-	conflictResolution: 'takeDump' | 'takeDB';
-
-	/**
-	 * The group name
-	 */
-	name: string;
-
-	/**
-	 * The group description
-	 */
-	description?: string;
-
-	/**
-	 * Optional information about the repository containing the source of the package.
-	 */
-	repository?: {
-		/**
-		 * The repository type. For example GIT
-		 */
-		type: string;
-
-		/**
-		 * The URL to the repository
-		 */
-		url: string;
-	}
 }
 
 export type DocumentId = Id;

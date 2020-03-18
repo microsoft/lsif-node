@@ -63,11 +63,11 @@
 			"type": "node",
 			"request": "launch",
 			"name": "TS Cascade P1",
-			"cwd": "${workspaceFolder}/samples/ts-cascade/p1",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "tsconfig.json",
-				 "--projectRoot", "..",
+				 "-p", "./p1/tsconfig.json",
+				 "--group", ".",
 				 "--outputFormat", "line",
 				 "--stdout"
 			],
@@ -82,13 +82,12 @@
 			"type": "node",
 			"request": "launch",
 			"name": "TS Cascade P2",
-			"cwd": "${workspaceFolder}/samples/ts-cascade/p2",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "tsconfig.json",
-				 "--projectRoot", "..",
+				 "-p", "./p2/tsconfig.json",
+				 "--group", ".",
 				 "--outputFormat", "line",
-				 "--group", "../group.json",
 				 "--stdout"
 			],
 			"preLaunchTask": "npm: watch",

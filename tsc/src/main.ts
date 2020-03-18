@@ -31,14 +31,14 @@ interface CommonOptions {
 
 interface Options extends CommonOptions {
 	group: string | undefined;
-	projectRoot: string | undefined;
 	projectName: string | undefined;
 }
 
 interface GroupConfig {
 	uri?: string;
-	name?: string;
 	conflictResolution?: 'takeDump' | 'takeDB';
+	name?: string;
+	rootUri?: string;
 	description? : string;
 	repository?: {
 		type: string;
@@ -62,7 +62,6 @@ namespace Options {
 		outputFormat: 'line',
 		id: 'number',
 		group: undefined,
-		projectRoot: undefined,
 		projectName: undefined,
 		noContents: false,
 		inferTypings: false,
@@ -74,8 +73,7 @@ namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
-		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
+		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.'},
 		{ id: 'projectName', type: 'string', default: undefined, description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
@@ -86,19 +84,21 @@ namespace Options {
 
 interface ResolvedGroupConfig extends GroupConfig {
 	uri: string;
-	name: string;
 	conflictResolution: 'takeDump' | 'takeDB';
+	name: string;
+	rootUri: string;
 }
 
 namespace ResolvedGroupConfig {
 	export function from(groupConfig: GroupConfig): ResolvedGroupConfig | undefined {
-		if (groupConfig.uri === undefined || groupConfig.name === undefined) {
+		if (groupConfig.uri === undefined || groupConfig.name === undefined || groupConfig.rootUri === undefined) {
 			return undefined;
 		}
 		return {
 			uri: groupConfig.uri,
-			name: groupConfig.name,
 			conflictResolution: groupConfig.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB',
+			name: groupConfig.name,
+			rootUri: groupConfig.rootUri,
 			description: groupConfig.description,
 			repository: groupConfig.repository
 		};
@@ -107,14 +107,13 @@ namespace ResolvedGroupConfig {
 
 
 interface ResolvedOptions extends CommonOptions {
-	projectRoot: string;
 	projectName: string;
-	group: ResolvedGroupConfig | undefined;
+	group: ResolvedGroupConfig;
 }
 
 namespace ResolvedOptions {
-	export function from(options: Options, groupConfig: ResolvedGroupConfig | undefined): ResolvedOptions | undefined {
-		if (options.projectRoot === undefined || options.projectName === undefined) {
+	export function from(options: Options, groupConfig: ResolvedGroupConfig): ResolvedOptions | undefined {
+		if (options.projectName === undefined || groupConfig === undefined) {
 			return undefined;
 		}
 
@@ -127,19 +126,16 @@ namespace ResolvedOptions {
 			inferTypings: options.inferTypings,
 			out: options.out,
 			stdout: options.stdout,
-			projectRoot: options.projectRoot,
 			projectName: options.projectName,
-			group: undefined
-		};
-		if (groupConfig !== undefined) {
-			result.group = {
+			group: {
 				uri: groupConfig.uri,
-				name: groupConfig.name,
 				conflictResolution: groupConfig.conflictResolution,
+				name: groupConfig.name,
+				rootUri: groupConfig.rootUri,
 				description: groupConfig.description,
 				repository: groupConfig.repository
-			};
-		}
+			}
+		};
 		return result;
 	}
 }
@@ -199,9 +195,6 @@ function createIdGenerator(options: Options): () => Id {
 
 async function readGroupConfig(options: Options): Promise<GroupConfig | undefined | number> {
 	const group = options.group;
-	if (group === undefined) {
-		return undefined;
-	}
 	if (group === 'stdin') {
 		try {
 			const result: GroupConfig = await new Promise((resolve, reject) => {
@@ -240,24 +233,39 @@ async function readGroupConfig(options: Options): Promise<GroupConfig | undefine
 			return 1;
 		}
 	} else {
-		const fileName = group;
-		if (!fs.existsSync(fileName)) {
-			console.error(`Group config file ${options.group} doesn't exist.`);
-			return 1;
-		}
-		let groupConfig: GroupConfig | undefined;
+		const filePath = group !== undefined ? group : process.cwd();
 		try {
-			groupConfig = JSON.parse(fs.readFileSync(fileName, { encoding: 'utf8'}));
-		} catch (err) {
-			console.error(`Reading group config file ${options.group} failed.`);
-			if (err) {
-				console.error(err);
+			const stat = fs.statSync(filePath);
+			if (stat.isFile()) {
+				let groupConfig: GroupConfig | undefined;
+				try {
+					groupConfig = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf8'}));
+				} catch (err) {
+					console.error(`Reading group config file ${options.group} failed.`);
+					if (err) {
+						console.error(err);
+					}
+				}
+				if (groupConfig === undefined) {
+					return 1;
+				}
+				return groupConfig;
+			} else if (stat.isDirectory()) {
+				const absolute = tss.makeAbsolute(filePath);
+				const uri: string = URI.file(absolute).toString(true);
+				return {
+					uri: uri,
+					conflictResolution: 'takeDB',
+					name: path.basename(absolute),
+					rootUri: uri
+				};
+			} else {
+				return 1;
 			}
-		}
-		if (groupConfig === undefined) {
+		} catch (error) {
+			console.error(`Group config file system path ${options.group} doesn't exist.`);
 			return 1;
 		}
-		return groupConfig;
 	}
 }
 
@@ -284,39 +292,27 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		return undefined;
 	}
 
-	if (options.projectRoot === undefined) {
-		options.projectRoot = process.cwd();
-	}
-	options.projectRoot = tss.makeAbsolute(options.projectRoot);
 	if (options.projectName === undefined) {
 		if (tsconfigFileName !== undefined) {
-			options.projectName = path.basename(path.basename(path.dirname(tsconfigFileName)));
+			options.projectName = path.basename(path.dirname(tsconfigFileName));
 		}
-		if (options.projectName === undefined) {
+		if (options.projectName === undefined || options.projectName.length === 0) {
 			console.error(`No project name provided.`);
 			process.exitCode = 1;
 			return undefined;
 		}
 	}
 
-	if (options.inferTypings) {
-		if (config.options.types !== undefined) {
-			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
-			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
-		} else {
-			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
-		}
-	}
-
-	let resolvedGroupConfig: ResolvedGroupConfig  | undefined;
-	const groupConfig = await readGroupConfig(options);
+	let groupConfig = await readGroupConfig(options);
 	if (typeof groupConfig === 'number') {
 		process.exitCode = groupConfig;
 		return;
 	}
+
+	let resolvedGroupConfig: ResolvedGroupConfig | undefined;
 	if (groupConfig !== undefined) {
-		if (!groupConfig.uri || URI.parse(groupConfig.uri).scheme !== 'lsif-group') {
-			console.error(`Group config must provide an URI with scheme lsif-group.`);
+		if (!groupConfig.uri) {
+			console.error(`Group config must provide an URI.`);
 			process.exitCode = 1;
 			return;
 		}
@@ -325,11 +321,25 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 			process.exitCode = 1;
 			return;
 		}
-		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
-		if (resolvedGroupConfig === undefined) {
-			console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+		if (!groupConfig.rootUri) {
+			console.error(`Group config must provide a file system root URI.`);
 			process.exitCode = 1;
 			return;
+		}
+		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
+	}
+	if (resolvedGroupConfig === undefined) {
+		console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+		process.exitCode = 1;
+		return;
+	}
+	if (options.inferTypings) {
+		const projectRoot = URI.parse(resolvedGroupConfig.rootUri).fsPath;
+		if (config.options.types !== undefined) {
+			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
+			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
+		} else {
+			await typingsInstaller.guessTypings(projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
 		}
 	}
 
@@ -472,10 +482,6 @@ async function run(this: void, args: string[]): Promise<void> {
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
-	let projectRoot = options.projectRoot;
-	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
-		projectRoot = path.join(process.cwd(), projectRoot);
-	}
 	emitter.start();
 	await processProject(config, options, emitter, idGenerator, new TypingsInstaller());
 	emitter.end();
