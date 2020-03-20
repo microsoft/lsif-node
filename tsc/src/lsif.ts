@@ -1536,6 +1536,7 @@ class Visitor implements ResolverContext {
 	private typeChecker: ts.TypeChecker;
 
 	private builder: Builder;
+	private group: Group;
 	private project: Project;
 	private projectRoot: string;
 	private rootDir: string;
@@ -1575,15 +1576,12 @@ class Visitor implements ResolverContext {
 		});
 		this.projectRoot = tss.normalizePath(URI.parse(options.group.rootUri).fsPath);
 		this.emit(this.vertex.metaData(Version));
-		this.emit(this.vertex.event(EventKind.begin));
-		let group: Group | undefined;
-		if (options.group !== undefined) {
-			group = this.vertex.group(options.group.uri, options.group.name, options.group.rootUri);
-			group.conflictResolution = options.group.conflictResolution;
-			group.description = options.group.description;
-			group.repository = options.group.repository;
-			this.emit(group);
-		}
+		this.group = this.vertex.group(options.group.uri, options.group.name, options.group.rootUri);
+		this.group.conflictResolution = options.group.conflictResolution;
+		this.group.description = options.group.description;
+		this.group.repository = options.group.repository;
+		this.emit(this.group);
+		this.emit(this.vertex.event(EventKind.begin, this.group));
 		this.project = this.vertex.project(options.projectName);
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
@@ -1599,7 +1597,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, group, this.project, options);
+		this.dataManager = new DataManager(this, this.group, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1628,7 +1626,7 @@ class Visitor implements ResolverContext {
 
 	public endVisitProgram(): void {
 		this.dataManager.projectProcessed();
-		this.emit(this.vertex.event(EventKind.end));
+		this.emit(this.vertex.event(EventKind.end, this.group));
 	}
 
 	protected visit(node: ts.Node): void {

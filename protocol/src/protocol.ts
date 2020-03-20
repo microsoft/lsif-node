@@ -71,7 +71,7 @@ export enum EventKind {
  * The event scopes
  */
 export enum EventScope {
-	dump= 'dump',
+	group = 'group',
 	project = 'project',
 	document = 'document'
 }
@@ -80,24 +80,25 @@ export interface Event extends V {
 	label: VertexLabels.event;
 
 	/**
+	 * The event scope.
+	 */
+	scope: EventScope;
+
+	/**
 	 * The event kind.
 	 */
 	kind: EventKind;
 
-	/**
-	 * The event scope.
-	 */
-	scope: EventScope;
 }
 
-export interface DumpEvent extends Event {
+export interface GroupEvent extends Event {
 
-	scope: EventScope.dump;
+	scope: EventScope.group;
 
 	/**
-	 * Dump events don't carry any data right now.
+	 * The id of the group vertex.
 	 */
-	data: undefined;
+	data: Id;
 }
 
 export interface ProjectEvent extends Event {
@@ -732,9 +733,7 @@ export interface HoverResult extends V {
  */
 export type Vertex =
 	MetaData |
-	DumpEvent |
-	ProjectEvent |
-	DocumentEvent |
+	Event |
 	Project |
 	Group |
 	Document |

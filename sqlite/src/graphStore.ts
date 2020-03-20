@@ -3,11 +3,13 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
+import * as crypto from 'crypto';
+import * as assert from 'assert';
 import * as Sqlite from 'better-sqlite3';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,
-	PackageInformation, item, Group, Id, Moniker
+	PackageInformation, item, Group, Id, Moniker, Event, EventScope, EventKind, ProjectEvent, belongsTo
 } from 'lsif-protocol';
 
 import { itemPropertyShortForms } from './compress';
@@ -18,14 +20,21 @@ type Mode = 'create' | 'import';
 
 export class GraphStore extends Store {
 
+	private activeGroup: Id | undefined;
+	private activeProject: Id | undefined;
+
 	private db: Sqlite.Database;
+	private checkContentStmt: Sqlite.Statement;
 	private insertContentStmt: Sqlite.Statement;
+
 	private vertexInserter: Inserter;
+	private groupInserter: Inserter;
+	private projectInserter: Inserter;
+
 	private edgeInserter: Inserter;
 	private itemInserter: Inserter;
 	private rangeInserter: Inserter;
 	private documentInserter: Inserter;
-	private groupInserter: Inserter;
 	private monikerInserter: Inserter;
 	private pendingRanges: Map<number | string, Range>;
 
@@ -64,30 +73,39 @@ export class GraphStore extends Store {
 		this.db.pragma('synchronous = OFF');
 		this.db.pragma('journal_mode = MEMORY');
 
-		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
-		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
-		this.documentInserter = new Inserter(this.db, 'Insert Into documents (uri, id)', 2, 5);
+		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, projectId, label, value)', 4, 128);
 		this.groupInserter = new Inserter(this.db, 'Insert Into groups (uri, id)', 2, 5);
+		this.projectInserter = new Inserter(this.db, 'Insert Into projects (groupId, name, id)', 3, 1);
+		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.monikerInserter = new Inserter(this.db, 'Insert into monikers (identifier, scheme, kind, uniqueness, id)', 5, 128);
-		this.insertContentStmt = this.db.prepare('Insert Into contents (id, content) VALUES (?, ?)');
+		this.documentInserter = new Inserter(this.db, 'Insert Into documents (groupId, projectId, uri, id, documentHash)', 5, 5);
+		this.insertContentStmt = this.db.prepare('Insert Into contents (documentHash, content) VALUES (?, ?)');
+		this.checkContentStmt = this.db.prepare('Select documentHash from contents Where documentHash = $documentHash');
 
 		this.edgeInserter = new Inserter(this.db, 'Insert Into edges (id, label, outV, inV)', 4, 128);
 		this.itemInserter = new Inserter(this.db, 'Insert Into items (id, outV, inV, document, property)', 5, 128);
 	}
 
 	private createTables(): void {
-		// Vertex information
+		// Meta information
 		this.db.exec('Create Table format (format Text Not Null)');
-		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
-		this.db.exec('Create table projects (uri Text Unique Primay Key, id Integer Not Null');
-		this.db.exec('Create Table vertices (id Integer Unique Primary, Key, label Integer Not Null, value Text Not Null)');
 		this.db.exec('Create Table meta (id Integer Unique Primary Key, value Text Not Null)');
+
+		// Vertex information
+		this.db.exec('Create Table vertices (id Integer Unique Primary Key, projectId Integer Not Null, label Integer Not Null, value Text Not Null)');
+
+		// Search tables for vertices.
+		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
+		this.db.exec('Create table projects (groupId Integer Not Null, name Text Not Null, id Integer Not Null, Primary Key(groupId, name))');
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
-		this.db.exec('Create Table documents (uri Text Unique Primary Key, id Integer Not Null)');
-		this.db.exec('Create Table contents (id Integer Unique Primary Key, content Blob Not Null)');
 		this.db.exec('Create Table monikers (identifier Text Not Null, scheme Text Not Null, kind Integer, uniqueness Integer Not Null, id Integer Unique)');
+		this.db.exec('Create Table documents (groupId Integer Not Null, projectId Integer Not Null, uri Text Not Null, id Integer Not Null, documentHash Text Not Null, Primary Key(groupId, projectId, uri))');
+		this.db.exec('Create Table contents (documentHash Text Unique Primary Key, content Blob Not Null)');
+
 		// Edge information
 		this.db.exec('Create Table edges (id Integer Not Null, label Integer Not Null, outV Integer Not Null, inV Integer Not Null)');
+
+		// Search tables for edges.
 		this.db.exec('Create Table items (id Integer Not Null, outV Integer Not Null, inV Integer Not Null, document Integer Not Null, property Integer)');
 	}
 
@@ -103,10 +121,11 @@ export class GraphStore extends Store {
 
 	public close(): void {
 		this.vertexInserter.finish();
-		this.rangeInserter.finish();
-		this.documentInserter.finish();
 		this.groupInserter.finish();
+		this.projectInserter.finish();
+		this.rangeInserter.finish();
 		this.monikerInserter.finish();
+		this.documentInserter.finish();
 
 		this.edgeInserter.finish();
 		this.itemInserter.finish();
@@ -131,6 +150,9 @@ export class GraphStore extends Store {
 			switch (element.label) {
 				case VertexLabels.metaData:
 					this.insertMetaData(element);
+					break;
+				case VertexLabels.event:
+					this.handleEvent(element);
 					break;
 				case VertexLabels.group:
 					this.insertGroup(element);
@@ -161,9 +183,32 @@ export class GraphStore extends Store {
 				case EdgeLabels.item:
 					this.insertItem(element);
 					break;
+				case EdgeLabels.belongsTo:
+					this.insertBelongsTo(element);
 				default:
 					this.insertEdge(element);
 			}
+		}
+	}
+
+	private handleEvent(event: Event): void {
+		switch (event.scope) {
+			case EventScope.group:
+				if (event.kind === EventKind.end) {
+					this.activeGroup = undefined;
+				}
+				break;
+			case EventScope.project:
+				if (event.kind === EventKind.begin) {
+					if (this.activeProject === undefined) {
+						this.activeProject = this.transformId((event as ProjectEvent).data);
+					} else {
+						assert.strictEqual(this.activeProject, this.transformId((event as ProjectEvent).data), 'Project ids are the same.');
+					}
+				} else {
+					assert.strictEqual(this.activeProject, this.transformId((event as ProjectEvent).data), 'Project ids are the same.');
+					this.activeProject = undefined;
+				}
 		}
 	}
 
@@ -180,33 +225,41 @@ export class GraphStore extends Store {
 		}
 	}
 
-	private insertVertex(vertex: Vertex): void {
-		const value = this.compress(vertex);
-		const label = this.shortForm(vertex);
-		this.vertexInserter.do(this.transformId(vertex.id), label, value);
-	}
-
-	private insertContent(vertex: Document | Project | PackageInformation): void {
-		if (vertex.contents === undefined || vertex.contents === null) {
-			return;
-		}
-		const contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
-		this.insertContentStmt.run(this.transformId(vertex.id), contents);
-	}
-
 	private insertGroup(group: Group): void {
-		this.groupInserter.do(group.uri, this.transformId(group.id));
-		this.insertVertex(group);
+		const id = this.transformId(group.id);
+		if (this.mode === 'create') {
+			this.activeGroup = id;
+			this.insertVertex(group, -1);
+			this.groupInserter.do(group.uri, id);
+		} else {
+			const existingGroup: Id = this.db.prepare('Select id from groups Where uri = $uri').get({ uri: group.uri }).id;
+			if (existingGroup === undefined) {
+				this.activeGroup = id;
+				this.insertVertex(group, -1);
+				this.groupInserter.do(group.uri, id);
+			} else {
+				this.activeGroup = existingGroup;
+			}
+		}
 	}
 
 	private insertProject(project: Project): void {
+		const id = this.transformId(project.id);
+		this.activeProject = id;
+		this.projectInserter.do(this.activeGroup, project.name, id);
 		if (project.resource !== undefined && project.contents !== undefined) {
-			this.documentInserter.do(project.resource, this.transformId(project.id));
+			this.documentInserter.do(project.resource, id);
 			this.insertContent(project);
 		}
 		const newProject = Object.assign(Object.create(null) as object, project);
 		newProject.contents = undefined;
 		this.insertVertex(newProject);
+	}
+
+	private insertRange(range: Range): void {
+		this.insertVertex(range);
+		const id = this.transformId(range.id);
+		this.pendingRanges.set(id, range);
 	}
 
 	private insertMoniker(moniker: Moniker): void {
@@ -217,8 +270,10 @@ export class GraphStore extends Store {
 	}
 
 	private insertDocument(document: Document): void {
-		this.documentInserter.do(document.uri, this.transformId(document.id));
-		this.insertContent(document);
+		const hash = this.insertContent(document);
+		if (hash !== undefined) {
+			this.documentInserter.do(this.activeGroup, this.activeProject, document.uri, this.transformId(document.id), hash);
+		}
 		const newDocument = Object.assign(Object.create(null) as object, document);
 		newDocument.contents = undefined;
 		this.insertVertex(newDocument);
@@ -226,18 +281,37 @@ export class GraphStore extends Store {
 
 	private insertPackageInformation(info: PackageInformation): void {
 		if (info.uri !== undefined && info.contents !== undefined) {
-			this.documentInserter.do(info.uri, this.transformId(info.id));
-			this.insertContent(info);
+			const hash = this.insertContent(info);
+			if (hash !== undefined) {
+				this.documentInserter.do(this.activeProject, info.uri, hash);
+			}
 		}
 		const newInfo = Object.assign(Object.create(null) as object, info);
 		newInfo.contents = undefined;
 		this.insertVertex(newInfo);
 	}
 
-	private insertRange(range: Range): void {
-		this.insertVertex(range);
-		const id = this.transformId(range.id);
-		this.pendingRanges.set(id, range);
+	private insertContent(vertex: Document | Project | PackageInformation): string | undefined {
+		if (vertex.contents === undefined || vertex.contents === null) {
+			return undefined;
+		}
+		const contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
+		const hash = crypto.createHash('md5').update(contents).digest('base64');
+		if (this.mode === 'create') {
+			this.insertContentStmt.run(hash, contents);
+		} else {
+			const exist = this.checkContentStmt.get({ documentHash: hash });
+			if (exist === undefined) {
+				this.insertContentStmt.run(hash, contents);
+			}
+		}
+		return hash;
+	}
+
+	private insertVertex(vertex: Vertex, projectId?: number): void {
+		const value = this.compress(vertex);
+		const label = this.shortForm(vertex);
+		this.vertexInserter.do(this.transformId(vertex.id), projectId !== undefined ? projectId : this.activeProject, label, value);
 	}
 
 	private insertEdge(edge: Edge): void {
@@ -282,5 +356,14 @@ export class GraphStore extends Store {
 				this.itemInserter.do(id, outV, inV, document, null);
 			}
 		}
+	}
+
+	private insertBelongsTo(belongsTo: belongsTo): void {
+		if (this.activeGroup === undefined) {
+			throw new Error(`No active group id`);
+		}
+		const newEdge = Object.assign(Object.create(null) as object, belongsTo);
+		newEdge.inV = this.activeGroup;
+		this.insertEdge(newEdge);
 	}
 }

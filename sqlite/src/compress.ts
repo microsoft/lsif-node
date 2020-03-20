@@ -10,7 +10,7 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, DumpEvent, Id, Group, MonikerKind, UniquenessLevel
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Group, MonikerKind, UniquenessLevel, GroupEvent
 } from 'lsif-protocol';
 
 namespace Is {
@@ -796,7 +796,7 @@ const scopeShortForm = function() {
 	]);
 }();
 
-const eventCompressor = new GenericCompressor<DumpEvent | ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
+const eventCompressor = new GenericCompressor<GroupEvent | ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('kind', next(), kindShortForm),
 	GenericCompressorProperty.scalar('scope', next(), scopeShortForm),
 	GenericCompressorProperty.id('data', next()),

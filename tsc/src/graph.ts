@@ -14,7 +14,7 @@ import {
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, DumpEvent, Uri
+	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, Uri, GroupEvent
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -28,6 +28,12 @@ export interface ResolvedBuilderOptions {
 }
 
 export class VertexBuilder {
+
+	private static label2Scope: Map<VertexLabels, EventScope> = new Map([
+		[VertexLabels.group, EventScope.group],
+		[VertexLabels.project, EventScope.project],
+		[VertexLabels.document, EventScope.document]
+	]);
 
 	constructor(private options: ResolvedBuilderOptions) {
 	}
@@ -50,31 +56,23 @@ export class VertexBuilder {
 		};
 	}
 
-	public event(kind: EventKind): DumpEvent;
+	public event(kind: EventKind, scope: Group): GroupEvent;
 	public event(kind: EventKind, scope: Project): ProjectEvent;
 	public event(kind: EventKind, scope: Document): DocumentEvent;
-	public event(kind: EventKind, scope?: Project | Document): Event {
-		if (scope === undefined) {
-			const result: DumpEvent  = {
-				id: this.nextId(),
-				type: ElementTypes.vertex,
-				label: VertexLabels.event,
-				scope: EventScope.dump,
-				kind,
-				data: undefined
-			};
-			return result;
-		} else {
-			const result: ProjectEvent | DocumentEvent = {
-				id: this.nextId(),
-				type: ElementTypes.vertex,
-				label: VertexLabels.event,
-				kind,
-				scope: scope.label === 'project' ? EventScope.project : EventScope.document,
-				data: scope.id
-			};
-			return result;
+	public event(kind: EventKind, scope: Group | Project | Document): Event {
+		const eventScope: EventScope | undefined = VertexBuilder.label2Scope.get(scope.label);
+		if (eventScope === undefined) {
+			throw new Error(`No event scope for ${scope.label}`);
 		}
+		const result: ProjectEvent | GroupEvent | DocumentEvent = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.event,
+			kind,
+			scope: eventScope,
+			data: scope.id
+		};
+		return result;
 	}
 
 	public group(uri: Uri, name: string, rootUri: Uri): Group {
