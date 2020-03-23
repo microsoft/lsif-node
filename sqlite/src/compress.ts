@@ -609,6 +609,7 @@ const groupCompressor = new GenericCompressor<Group>(vertexCompressor, Compresso
 	GenericCompressorProperty.scalar('uri', next()),
 	GenericCompressorProperty.scalar('conflictResolution', next()),
 	GenericCompressorProperty.scalar('name', next()),
+	GenericCompressorProperty.scalar('rootUri', next()),
 	GenericCompressorProperty.scalar('description', next()),
 	GenericCompressorProperty.literal('repository', next(), groupRepositoryCompressor)
 ]);
