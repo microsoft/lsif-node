@@ -436,3 +436,21 @@ export namespace Program {
 		return interal.isSourceFileDefaultLibrary(sourceFile);
 	}
 }
+
+interface InternalCompilerOptions extends ts.CompilerOptions {
+	configFilePath?: string;
+}
+
+export namespace CompileOptions {
+	export function getConfigFilePath(options: ts.CompilerOptions): string | undefined {
+		if (options.project) {
+			const projectPath = path.resolve(options.project);
+			if (ts.sys.directoryExists(projectPath)) {
+				return path.join(projectPath, 'tsconfig.json');
+			} else {
+				return projectPath;
+			}
+		}
+		return (options as InternalCompilerOptions).configFilePath;
+	}
+}

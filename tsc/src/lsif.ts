@@ -12,9 +12,9 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Group, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
+	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Version, Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -1341,23 +1341,12 @@ class TypeAliasResolver extends StandardResolver {
 	}
 }
 
-interface GroupInfo {
-	uri: string;
-	conflictResolution: 'takeDump' | 'takeDB';
-	name: string;
-	rootUri: string;
-	description? : string;
-	repository?: {
-		type: string;
-		url: string;
-	}
-}
-
-interface Options {
+export interface Options {
+	group: Group;
+	projectRoot: string;
 	projectName: string;
-	noContents: boolean;
+	tsConfigFile: string | undefined;
 	stdout: boolean;
-	group: GroupInfo;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1535,8 +1524,6 @@ class Visitor implements ResolverContext {
 	private program: ts.Program;
 	private typeChecker: ts.TypeChecker;
 
-	private builder: Builder;
-	private group: Group;
 	private project: Project;
 	private projectRoot: string;
 	private rootDir: string;
@@ -1558,13 +1545,9 @@ class Visitor implements ResolverContext {
 		typeAlias: TypeAliasResolver;
 	};
 
-	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private emitter: Emitter, private builder: Builder, private languageService: ts.LanguageService, dependsOn: ProjectInfo[], private options: Options) {
 		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
-		this.builder = new Builder({
-			idGenerator,
-			emitSource: !options.noContents
-		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
 		this.dependentOutDirs = [];
@@ -1574,16 +1557,9 @@ class Visitor implements ResolverContext {
 		this.dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
 		});
-		this.projectRoot = tss.normalizePath(URI.parse(options.group.rootUri).fsPath);
-		this.emit(this.vertex.metaData(Version));
-		this.group = this.vertex.group(options.group.uri, options.group.name, options.group.rootUri);
-		this.group.conflictResolution = options.group.conflictResolution;
-		this.group.description = options.group.description;
-		this.group.repository = options.group.repository;
-		this.emit(this.group);
-		this.emit(this.vertex.event(EventKind.begin, this.group));
+		this.projectRoot = options.projectRoot;
 		this.project = this.vertex.project(options.projectName);
-		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
+		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
 			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
@@ -1597,7 +1573,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, this.group, this.project, options);
+		this.dataManager = new DataManager(this, this.options.group, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1626,7 +1602,6 @@ class Visitor implements ResolverContext {
 
 	public endVisitProgram(): void {
 		this.dataManager.projectProcessed();
-		this.emit(this.vertex.event(EventKind.end, this.group));
 	}
 
 	protected visit(node: ts.Node): void {
@@ -2290,8 +2265,8 @@ class Visitor implements ResolverContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo | undefined {
-	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile);
+export function lsif(emitter: Emitter, builder: Builder, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+	let visitor = new Visitor(emitter, builder, languageService, dependsOn, options);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
 	return result;

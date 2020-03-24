@@ -4,3 +4,7 @@ export interface Foo {
 
 let f: Foo;
 f.foo();
+
+// let c = new class implements Foo {
+// 	foo() { }
+// }();

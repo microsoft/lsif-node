@@ -100,6 +100,25 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "LSIF Repository",
+			"cwd": "${workspaceFolder}",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "./tsconfig.json",
+				 "--group", ".",
+				 "--outputFormat", "line",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "Create Cascade DB",
 			"cwd": "${workspaceFolder}/samples/ts-cascade",
 			"program": "${workspaceFolder}/sqlite/lib/main.js",

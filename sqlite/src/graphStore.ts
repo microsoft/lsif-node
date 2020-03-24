@@ -297,13 +297,9 @@ export class GraphStore extends Store {
 		}
 		const contents = Buffer.from(vertex.contents, 'base64').toString('utf8');
 		const hash = crypto.createHash('md5').update(contents).digest('base64');
-		if (this.mode === 'create') {
+		const exist = this.checkContentStmt.get({ documentHash: hash });
+		if (exist === undefined) {
 			this.insertContentStmt.run(hash, contents);
-		} else {
-			const exist = this.checkContentStmt.get({ documentHash: hash });
-			if (exist === undefined) {
-				this.insertContentStmt.run(hash, contents);
-			}
 		}
 		return hash;
 	}
