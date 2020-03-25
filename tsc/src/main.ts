@@ -27,7 +27,7 @@ interface CommonOptions {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
 	noContents: boolean;
-	inferTypings: boolean;
+	typeAcquisition: boolean;
 	out: string | undefined;
 	stdout: boolean;
 }
@@ -67,7 +67,7 @@ namespace Options {
 		group: undefined,
 		projectName: undefined,
 		noContents: false,
-		inferTypings: false,
+		typeAcquisition: false,
 		out: undefined,
 		stdout: false
 	};
@@ -79,7 +79,7 @@ namespace Options {
 		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.'},
 		{ id: 'projectName', type: 'string', default: undefined, description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
-		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
+		{ id: 'typeAcquisition', type: 'boolean', default: false, description: 'Run automatic type acquisition for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
 		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
 	];
@@ -247,7 +247,7 @@ interface ProcessProjectOptions {
 	group: Group;
 	projectRoot: string;
 	projectName?:string;
-	inferTypings: boolean;
+	typeAcquisition: boolean;
 	stdout: boolean;
 	processed: Map<String, ProjectInfo>;
 }
@@ -267,7 +267,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, bu
 		config = loadConfigFile(configFilePath);
 	}
 
-	if (options.inferTypings) {
+	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
 		const projectRoot = options.projectRoot;
 		if (config.options.types !== undefined) {
 			const start = configFilePath !== undefined ? configFilePath : process.cwd();
@@ -493,7 +493,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		group: group,
 		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
 		projectName: options.projectName,
-		inferTypings: options.inferTypings,
+		typeAcquisition: options.typeAcquisition,
 		stdout: options.stdout,
 		processed: new Map()
 	};
