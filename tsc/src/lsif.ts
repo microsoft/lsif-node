@@ -1689,7 +1689,7 @@ class Visitor implements ResolverContext {
 			if (ts.isExportAssignment(node)) {
 				exportAssignments.push(node);
 			} else if (ts.isExportDeclaration(node) && sourceFileSymbol !== undefined) {
-				if (node.exportClause !== undefined) {
+				if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
 					for (let element of node.exportClause.elements) {
 						let exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
 						if (exportSymbol === undefined) {
