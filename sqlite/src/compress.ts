@@ -641,10 +641,10 @@ export const monikerKindShortFroms = function() {
 
 export const monikerUniqueShortFroms = function() {
 	return new Map<UniquenessLevel, number>([
-		[UniquenessLevel.file, 1000],
+		[UniquenessLevel.document, 1000],
 		[UniquenessLevel.project, 2000],
 		[UniquenessLevel.group, 3000],
-		[UniquenessLevel.packageManager, 4000],
+		[UniquenessLevel.scheme, 4000],
 		[UniquenessLevel.global, 5000]
 	]);
 }();

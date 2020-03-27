@@ -351,7 +351,7 @@ abstract class SymbolData extends LSIFData {
 	}
 
 	public addMoniker(identifier: string, kind: MonikerKind): void {
-		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.file : UniquenessLevel.group;
+		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.group;
 		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));

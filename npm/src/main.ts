@@ -187,7 +187,7 @@ class ExportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, tscMoniker.path, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.packageManager, moniker.kind);
+			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id));
 			emit(this.createAttachEdge(moniker.id, npmMoniker.id));
@@ -265,7 +265,7 @@ class ImportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(packageData.packageJson.name, monikerPath, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.packageManager, moniker.kind);
+			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
 			emit(npmMoniker);
 			emit(this.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id));
 			emit(this.createAttachEdge(moniker.id, npmMoniker.id));

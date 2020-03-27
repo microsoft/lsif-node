@@ -483,9 +483,9 @@ export enum MonikerKind {
 
 export enum UniquenessLevel {
 	/**
-	 * The moniker is only unique inside a file
+	 * The moniker is only unique inside a document
 	 */
-	file = 'file',
+	document = 'document',
 
 	/**
 	 * The moniker is unique inside a project for which a dump got created
@@ -498,10 +498,9 @@ export enum UniquenessLevel {
 	group = 'group',
 
 	/**
-	 * The moniker is unique inside the package mamanger, usually expressed through
-	 * the moniker scheme
+	 * The moniker is unique inside the moniker scheme.
 	 */
-	packageManager = 'packageManager',
+	scheme = 'scheme',
 
 	/**
 	 * The moniker is gloabally unique
