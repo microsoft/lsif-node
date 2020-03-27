@@ -1,11 +1,3 @@
-import { IDisposable } from 'mobx';
+import * as Is from 'is';
 
-class A implements IDisposable {
-	public dispose(): void {
-	}
-}
-
-class B implements IDisposable {
-	public dispose(): void {
-	}
-}
+Is.boolean(10);

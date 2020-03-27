@@ -71,6 +71,7 @@ export enum EventKind {
  * The event scopes
  */
 export enum EventScope {
+	group = 'group',
 	project = 'project',
 	document = 'document'
 }
@@ -79,14 +80,25 @@ export interface Event extends V {
 	label: VertexLabels.event;
 
 	/**
+	 * The event scope.
+	 */
+	scope: EventScope;
+
+	/**
 	 * The event kind.
 	 */
 	kind: EventKind;
 
+}
+
+export interface GroupEvent extends Event {
+
+	scope: EventScope.group;
+
 	/**
-	 * The event scope.
+	 * The id of the group vertex.
 	 */
-	scope: EventScope;
+	data: Id;
 }
 
 export interface ProjectEvent extends Event {
@@ -319,11 +331,6 @@ export interface MetaData extends V {
 	version: string;
 
 	/**
-	 * The project root (in form of a URI) used to compute this dump.
-	 */
-	projectRoot: Uri;
-
-	/**
 	 * The string encoding used to compute line and character values in
 	 * positions and ranges. Currently only 'utf-16' is support due to the
 	 * limitations in LSP.
@@ -340,33 +347,6 @@ export interface MetaData extends V {
 	}
 }
 
-/**
- * A project vertex.
- */
-export interface Project extends V {
-
-	/**
-	 * The label property.
-	 */
-	label: VertexLabels.project;
-
-	/**
-	 * The project kind like 'typescript' or 'csharp'. See also the language ids
-	 * in the [specification](https://microsoft.github.io/language-server-protocol/specification)
-	 */
-	kind: string;
-
-	/**
-	 * The resource URI of the project file.
-	 */
-	resource?: Uri;
-
-	/**
-	 * Optional the content of the project file, `base64` encoded.
-	 */
-	contents?: string;
-}
-
 export interface Group extends V {
 	/**
 	 * The label property.
@@ -379,9 +359,24 @@ export interface Group extends V {
 	uri: Uri;
 
 	/**
+	 * Groups are usually shared between project dumps. This property indicates how a DB should
+	 * handle group information coming from different project dumps. In case of a conflict (the group
+	 * already exists in a DB) the values' meaning are:
+	 *
+	 * - `takeDump`: information of the group should overwrite information in a DB.
+	 * - `takeDB`: information of the group is ignored. The DB values stay as is.
+	 */
+	conflictResolution: 'takeDump' | 'takeDB';
+
+	/**
 	 * The group name
 	 */
 	name: string;
+
+	/**
+	 * The group root folder uri
+	 */
+	rootUri: Uri;
 
 	/**
 	 * The group description
@@ -402,6 +397,38 @@ export interface Group extends V {
 		 */
 		url: string;
 	}
+}
+
+/**
+ * A project vertex.
+ */
+export interface Project extends V {
+
+	/**
+	 * The label property.
+	 */
+	label: VertexLabels.project;
+
+	/**
+	 * The project kind like 'typescript' or 'csharp'. See also the language ids
+	 * in the [specification](https://microsoft.github.io/language-server-protocol/specification)
+	 */
+	kind: string;
+
+	/**
+	 * The project name
+	 */
+	name: string;
+
+	/**
+	 * The resource URI of the project file.
+	 */
+	resource?: Uri;
+
+	/**
+	 * Optional the content of the project file, `base64` encoded.
+	 */
+	contents?: string;
 }
 
 export type DocumentId = Id;
@@ -454,6 +481,33 @@ export enum MonikerKind {
 	local = 'local'
 }
 
+export enum UniquenessLevel {
+	/**
+	 * The moniker is only unique inside a document
+	 */
+	document = 'document',
+
+	/**
+	 * The moniker is unique inside a project for which a dump got created
+	 */
+	project = 'project',
+
+	/**
+	 * The moniker is unique inside the group to which a project belongs
+	 */
+	group = 'group',
+
+	/**
+	 * The moniker is unique inside the moniker scheme.
+	 */
+	scheme = 'scheme',
+
+	/**
+	 * The moniker is gloabally unique
+	 */
+	global = 'global'
+}
+
 export interface Moniker extends V {
 
 	label: VertexLabels.moniker;
@@ -468,6 +522,11 @@ export interface Moniker extends V {
 	 * schema owners are allowed to define the structure if they want.
 	 */
 	identifier: string;
+
+	/**
+	 * The scope in which the moniker is unique
+	 */
+	unique: UniquenessLevel;
 
 	/**
 	 * The moniker kind if known.
@@ -673,8 +732,7 @@ export interface HoverResult extends V {
  */
 export type Vertex =
 	MetaData |
-	ProjectEvent |
-	DocumentEvent |
+	Event |
 	Project |
 	Group |
 	Document |
@@ -698,7 +756,7 @@ export enum EdgeLabels {
 	item = 'item',
 	next = 'next',
 	moniker = 'moniker',
-	nextMoniker = 'nextMoniker',
+	attach = 'attach',
 	packageInformation = 'packageInformation',
 	belongsTo = 'belongsTo',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
@@ -761,13 +819,13 @@ export enum ItemEdgeProperties {
 	definitions = 'definitions',
 	references =  'references',
 	referenceResults = 'referenceResults',
-	referenceCascades = 'referenceCascades',
+	referenceLinks = 'referenceLinks',
 	implementationResults = 'implementationResults',
-	implementationCascades = 'implementationCascades'
+	implementationLinks = 'implementationLinks'
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {
-	document: Id;
+	document: DocumentId;
 	property?: ItemEdgeProperties;
 }
 
@@ -824,7 +882,7 @@ export type moniker =
  *
  * - `Moniker` -> `Moniker`
  */
-export type nextMoniker = E11<Moniker, Moniker, EdgeLabels.nextMoniker>;
+export type attach = E11<Moniker, Moniker, EdgeLabels.attach>;
 
 /**
  * An edge associating a moniker with a package information. The relationship exists between:
@@ -927,8 +985,9 @@ export type Edge =
 	item |
 	next |
 	moniker |
-	nextMoniker |
+	attach |
 	packageInformation |
+	belongsTo |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
 	textDocument_documentLink |

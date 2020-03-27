@@ -20,6 +20,7 @@ import {
 
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 import { Inserter } from './inserter';
+import { Store } from './store';
 
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {
@@ -461,7 +462,7 @@ class DocumentData {
 	}
 }
 
-export class BlobStore implements DataProvider {
+export class BlobStore extends Store implements DataProvider {
 
 	private forceDelete: boolean;
 	private version: string;
@@ -496,7 +497,8 @@ export class BlobStore implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor(filename: string, version: string, forceDelete: boolean = false) {
+	constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, version: string, forceDelete: boolean = false) {
+		super(input);
 		this.forceDelete = forceDelete;
 		this.version = version;
 		this.knownHashes = new Set();

@@ -5,28 +5,48 @@
 import * as path from 'path';
 import * as uuid from 'uuid';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 
+import { URI } from 'vscode-uri';
 import * as minimist from 'minimist';
 
 import * as ts from 'typescript';
-import * as tss from './typescripts';
 
-import { Id } from 'lsif-protocol';
+import { Id, Version, EventKind, Group } from 'lsif-protocol';
+
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
+import { lsif, ProjectInfo, Options as LSIFOptions } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
+import { Builder } from './graph';
+import * as tss from './typescripts';
 
-interface Options {
+interface CommonOptions {
 	help: boolean;
 	version: boolean;
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
-	projectRoot: string | undefined;
 	noContents: boolean;
-	inferTypings: boolean;
+	typeAcquisition: boolean;
 	out: string | undefined;
 	stdout: boolean;
+}
+
+interface Options extends CommonOptions {
+	group: string | undefined;
+	projectName: string | undefined;
+}
+
+interface GroupConfig {
+	uri?: string;
+	conflictResolution?: 'takeDump' | 'takeDB';
+	name?: string;
+	rootUri?: string;
+	description? : string;
+	repository?: {
+		type: string;
+		url: string;
+	}
 }
 
 interface OptionDescription {
@@ -44,9 +64,10 @@ namespace Options {
 		version: false,
 		outputFormat: 'line',
 		id: 'number',
-		projectRoot: undefined,
+		group: undefined,
+		projectName: undefined,
 		noContents: false,
-		inferTypings: false,
+		typeAcquisition: false,
 		out: undefined,
 		stdout: false
 	};
@@ -55,12 +76,36 @@ namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
 		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
+		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.'},
+		{ id: 'projectName', type: 'string', default: undefined, description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.'},
 		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
-		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
+		{ id: 'typeAcquisition', type: 'boolean', default: false, description: 'Run automatic type acquisition for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
 		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
 	];
+}
+
+interface ResolvedGroupConfig extends GroupConfig {
+	uri: string;
+	conflictResolution: 'takeDump' | 'takeDB';
+	name: string;
+	rootUri: string;
+}
+
+namespace ResolvedGroupConfig {
+	export function from(groupConfig: GroupConfig): ResolvedGroupConfig | undefined {
+		if (groupConfig.uri === undefined || groupConfig.name === undefined || groupConfig.rootUri === undefined) {
+			return undefined;
+		}
+		return {
+			uri: groupConfig.uri,
+			conflictResolution: groupConfig.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB',
+			name: groupConfig.name,
+			rootUri: groupConfig.rootUri,
+			description: groupConfig.description,
+			repository: groupConfig.repository
+		};
+	}
 }
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
@@ -116,40 +161,119 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
-	let tsconfigFileName: string | undefined;
-	if (config.options.project) {
-		const projectPath = path.resolve(config.options.project);
-		if (ts.sys.directoryExists(projectPath)) {
-			tsconfigFileName = path.join(projectPath, 'tsconfig.json');
-		} else {
-			tsconfigFileName = projectPath;
+async function readGroupConfig(options: Options): Promise<GroupConfig | undefined | number> {
+	const group = options.group;
+	if (group === 'stdin') {
+		try {
+			const result: GroupConfig = await new Promise((resolve, reject) => {
+				const stdin = process.stdin;
+				let buffer: Buffer | undefined;
+				stdin.on('data', (data) => {
+					if (buffer === undefined) {
+						buffer = data;
+					} else {
+						buffer = Buffer.concat([buffer, data]);
+					}
+				});
+				stdin.on('end', () => {
+					try {
+						if (buffer === undefined) {
+							resolve(undefined);
+						} else {
+							resolve(JSON.parse(buffer.toString('utf8')));
+						}
+					} catch (err) {
+						reject(err);
+					}
+				});
+				stdin.on('error', (err) => {
+					reject(err);
+				});
+			});
+			if (result === undefined) {
+				return 1;
+			}
+			return result;
+		} catch (err) {
+			if (err) {
+				console.error(err);
+			}
+			return 1;
 		}
-		if (!ts.sys.fileExists(tsconfigFileName)) {
-			console.error(`Project configuration file ${tsconfigFileName} does not exist`);
-			process.exitCode = 1;
-			return undefined;
+	} else {
+		const filePath = group !== undefined ? group : process.cwd();
+		try {
+			const stat = fs.statSync(filePath);
+			if (stat.isFile()) {
+				let groupConfig: GroupConfig | undefined;
+				try {
+					groupConfig = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf8'}));
+				} catch (err) {
+					console.error(`Reading group config file ${options.group} failed.`);
+					if (err) {
+						console.error(err);
+					}
+				}
+				if (groupConfig === undefined) {
+					return 1;
+				}
+				return groupConfig;
+			} else if (stat.isDirectory()) {
+				const absolute = tss.makeAbsolute(filePath);
+				const uri: string = URI.file(absolute).toString(true);
+				return {
+					uri: uri,
+					conflictResolution: 'takeDB',
+					name: path.basename(absolute),
+					rootUri: uri
+				};
+			} else {
+				return 1;
+			}
+		} catch (error) {
+			console.error(`Group config file system path ${options.group} doesn't exist.`);
+			return 1;
 		}
-		config = loadConfigFile(tsconfigFileName);
+	}
+}
+
+function makeKey(config: ts.ParsedCommandLine): string {
+	let hash = crypto.createHash('md5');
+	hash.update(JSON.stringify(config.options, undefined, 0));
+	return  hash.digest('base64');
+}
+
+interface ProcessProjectOptions {
+	group: Group;
+	projectRoot: string;
+	projectName?:string;
+	typeAcquisition: boolean;
+	stdout: boolean;
+	processed: Map<String, ProjectInfo>;
+}
+
+async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, builder: Builder, typingsInstaller: TypingsInstaller, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
+	const configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
+	const key = configFilePath ?? makeKey(config);
+	if (options.processed.has(key)) {
+		return options.processed.get(key)!;
+	}
+	if (configFilePath && !ts.sys.fileExists(configFilePath)) {
+		console.error(`Project configuration file ${configFilePath} does not exist`);
+		return 1;
+	}
+	// we have a config file path that came from a -p option. Load the file.
+	if (configFilePath && config.options.project) {
+		config = loadConfigFile(configFilePath);
 	}
 
-	if (config.fileNames.length === 0) {
-		console.error(`No input files specified.`);
-		process.exitCode = 1;
-		return undefined;
-	}
-
-	if (options.projectRoot === undefined) {
-		options.projectRoot = process.cwd();
-	}
-	options.projectRoot = tss.makeAbsolute(options.projectRoot);
-
-	if (options.inferTypings) {
+	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
+		const projectRoot = options.projectRoot;
 		if (config.options.types !== undefined) {
-			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
-			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
+			const start = configFilePath !== undefined ? configFilePath : process.cwd();
+			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
 		} else {
-			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
+			await typingsInstaller.guessTypings(projectRoot, configFilePath !== undefined ? path.dirname(configFilePath) : process.cwd());
 		}
 	}
 
@@ -187,8 +311,8 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 			return result;
 		},
 		getCurrentDirectory: () => {
-			if (tsconfigFileName !== undefined) {
-				return path.dirname(tsconfigFileName);
+			if (configFilePath !== undefined) {
+				return path.dirname(configFilePath);
 			} else {
 				return process.cwd();
 			}
@@ -205,28 +329,64 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	if (program === undefined) {
 		console.error('Couldn\'t create language service with underlying program.');
 		process.exitCode = -1;
-		return undefined;
+		return -1;
 	}
 	const dependsOn: ProjectInfo[] = [];
 	const references = program.getResolvedProjectReferences();
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, typingsInstaller);
-				if (projectInfo !== undefined) {
-					dependsOn.push(projectInfo);
+				const result = await processProject(reference.commandLine, emitter, builder, typingsInstaller, options);
+				if (typeof result === 'number') {
+					return result;
 				}
+				dependsOn.push(result);
 			}
 		}
 	}
-
+	if ((!references || references.length === 0) && config.fileNames.length === 0) {
+		console.error(`No input files specified.`);
+		return 1;
+	}
 	program.getTypeChecker();
-	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, tsconfigFileName);
+	const level: number = options.processed.size;
+	let projectName: string | undefined;
+	if (options.projectName !== undefined && level === 0 && (!references || references.length === 0)) {
+		projectName = options.projectName;
+	}
+	if (projectName === undefined && configFilePath !== undefined) {
+		projectName = path.basename(path.dirname(configFilePath));
+	}
+	if (projectName === undefined) {
+		if (options.projectName !== undefined) {
+			projectName = `${options.projectName}/${level + 1}`;
+		} else {
+			projectName =`${path.basename(options.projectRoot)}/${level + 1}`;
+		}
+	}
+	if (projectName === undefined) {
+		console.error(`No project name provided.`);
+		return 1;
+	}
+
+	const lsifOptions: LSIFOptions = {
+		group: options.group,
+		projectRoot: options.projectRoot,
+		projectName: projectName,
+		tsConfigFile: configFilePath,
+		stdout: options.stdout
+	};
+
+	const result = lsif(emitter, builder, languageService, dependsOn, lsifOptions);
+	if (typeof result !== 'number') {
+		options.processed.set(key, result);
+	}
+	return result;
 }
 
 async function run(this: void, args: string[]): Promise<void> {
 
-	let minOpts: minimist.Opts = {
+	const minOpts: minimist.Opts = {
 		string: [],
 		boolean: [],
 		default: Object.create(null),
@@ -250,7 +410,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
-	let buffer: string[] = [];
+	const buffer: string[] = [];
 	if (options.help) {
 		buffer.push(`Languag Server Index Format tool for TypeScript`);
 		buffer.push(`Version: ${require('../package.json').version}`);
@@ -282,15 +442,63 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
+	let groupConfig = await readGroupConfig(options);
+	if (typeof groupConfig === 'number') {
+		process.exitCode = groupConfig;
+		return;
+	}
+
+	let resolvedGroupConfig: ResolvedGroupConfig | undefined;
+	if (groupConfig !== undefined) {
+		if (!groupConfig.uri) {
+			console.error(`Group config must provide an URI.`);
+			process.exitCode = 1;
+			return;
+		}
+		if (!groupConfig.name) {
+			console.error(`Group config must provide a group name.`);
+			process.exitCode = 1;
+			return;
+		}
+		if (!groupConfig.rootUri) {
+			console.error(`Group config must provide a file system root URI.`);
+			process.exitCode = 1;
+			return;
+		}
+		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
+	}
+	if (resolvedGroupConfig === undefined) {
+		console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+		process.exitCode = 1;
+		return;
+	}
+
+
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
-	let projectRoot = options.projectRoot;
-	if (projectRoot !== undefined && !path.isAbsolute(projectRoot)) {
-		projectRoot = path.join(process.cwd(), projectRoot);
-	}
 	emitter.start();
-	await processProject(config, options, emitter, idGenerator, new TypingsInstaller());
+	const builder = new Builder({
+		idGenerator,
+		emitSource: !options.noContents
+	});
+	emitter.emit(builder.vertex.metaData(Version));
+	const group = builder.vertex.group(resolvedGroupConfig.uri, resolvedGroupConfig.name, resolvedGroupConfig.rootUri);
+	group.conflictResolution = resolvedGroupConfig.conflictResolution;
+	group.description = resolvedGroupConfig.description;
+	group.repository = resolvedGroupConfig.repository;
+	emitter.emit(group);
+	emitter.emit(builder.vertex.event(EventKind.begin, group));
+	const processProjectOptions: ProcessProjectOptions = {
+		group: group,
+		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
+		projectName: options.projectName,
+		typeAcquisition: options.typeAcquisition,
+		stdout: options.stdout,
+		processed: new Map()
+	};
+	await processProject(config, emitter, builder, new TypingsInstaller(),  processProjectOptions);
+	emitter.emit(builder.vertex.event(EventKind.end, group));
 	emitter.end();
 }
 

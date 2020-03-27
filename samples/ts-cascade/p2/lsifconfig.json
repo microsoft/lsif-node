@@ -1,0 +1,11 @@
+{
+	"project": "tsconfig.json",
+	"projectRoot": "..",
+	"projectName": "p2",
+	"stdout": true,
+	"outputFormat": "line",
+	"group": {
+		"uri": "lsif-group://com.microsoft/lsif-node/samples/cascade",
+		"name": "cascade"
+	}
+}

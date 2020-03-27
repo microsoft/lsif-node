@@ -8,13 +8,13 @@ import { URI } from 'vscode-uri';
 
 import {
 	lsp, Id, Vertex, E,
-	Project, Document, HoverResult, ReferenceResult,
+	Group, Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
 	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next
+	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, Uri, GroupEvent
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -29,6 +29,12 @@ export interface ResolvedBuilderOptions {
 
 export class VertexBuilder {
 
+	private static label2Scope: Map<VertexLabels, EventScope> = new Map([
+		[VertexLabels.group, EventScope.group],
+		[VertexLabels.project, EventScope.project],
+		[VertexLabels.document, EventScope.document]
+	]);
+
 	constructor(private options: ResolvedBuilderOptions) {
 	}
 
@@ -40,37 +46,55 @@ export class VertexBuilder {
 		return this.options.emitSource;
 	}
 
-	public metaData(version: string, projectRoot: string): MetaData {
+	public metaData(version: string): MetaData {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.metaData,
 			version,
-			projectRoot,
 			positionEncoding: 'utf-16'
 		};
 	}
 
+	public event(kind: EventKind, scope: Group): GroupEvent;
 	public event(kind: EventKind, scope: Project): ProjectEvent;
 	public event(kind: EventKind, scope: Document): DocumentEvent;
-	public event(kind: EventKind, scope: Project | Document): Event {
-		let result: ProjectEvent | DocumentEvent = {
+	public event(kind: EventKind, scope: Group | Project | Document): Event {
+		const eventScope: EventScope | undefined = VertexBuilder.label2Scope.get(scope.label);
+		if (eventScope === undefined) {
+			throw new Error(`No event scope for ${scope.label}`);
+		}
+		const result: ProjectEvent | GroupEvent | DocumentEvent = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.event,
 			kind,
-			scope: scope.label === 'project' ? EventScope.project : EventScope.document,
+			scope: eventScope,
 			data: scope.id
 		};
 		return result;
 	}
 
-	public project(contents?: string): Project {
-		let result: Project = {
+	public group(uri: Uri, name: string, rootUri: Uri): Group {
+		const result: Group = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.group,
+			uri,
+			conflictResolution: 'takeDB',
+			name,
+			rootUri
+		};
+		return result;
+	}
+
+	public project(name: string, contents?: string): Project {
+		const result: Project = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.project,
-			kind: 'typescript'
+			kind: 'typescript',
+			name
 		};
 		if (contents) {
 			result.contents = this.encodeString(contents);
@@ -79,7 +103,7 @@ export class VertexBuilder {
 	}
 
 	public document(path: string, contents?: string): Document {
-		let result: Document = {
+		const result: Document = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.document,
@@ -92,15 +116,19 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public moniker(scheme: string, identifier: string, kind?: MonikerKind): Moniker {
-		return {
+	public moniker(scheme: string, identifier: string, unique: UniquenessLevel, kind?: MonikerKind): Moniker {
+		const result: Moniker = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.moniker,
-			kind,
 			scheme,
-			identifier
+			identifier,
+			unique
 		};
+		if (kind !== undefined) {
+			result.kind = kind;
+		}
+		return result;
 	}
 
 	public packageInformation(name: string, manager: string): PackageInformation {
@@ -114,7 +142,7 @@ export class VertexBuilder {
 	}
 
 	public resultSet(): ResultSet {
-		let result: ResultSet = {
+		const result: ResultSet = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.resultSet
@@ -127,7 +155,7 @@ export class VertexBuilder {
 	public range(range: lsp.Range, tag: DefinitionTag): DefinitionRange;
 	public range(range: lsp.Range, tag: ReferenceTag): ReferenceRange;
 	public range(range: lsp.Range, tag?: RangeTag): Range {
-		let result: Range = {
+		const result: Range = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.range,
@@ -282,6 +310,16 @@ export class EdgeBuilder {
 		};
 	}
 
+	public belongsTo(from: Project, to: Group): belongsTo {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.belongsTo,
+			outV: from.id,
+			inV: to.id
+		};
+	}
+
 	public next(from: Range, to: ResultSet): next;
 	public next(from: ResultSet, to: ResultSet): next;
 	public next(from: Range | ResultSet, to: ResultSet): next {
@@ -411,12 +449,12 @@ export class EdgeBuilder {
 	public item(from: TypeDefinitionResult, to: Range[], document: Document): item;
 	public item(from: ReferenceResult, to: ReferenceResult[], document: Document): item;
 	public item(from: ReferenceResult, to: Range[], document: Document, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
+	public item(from: ReferenceResult, to: Moniker[], document: Document): item;
 	public item(from: ImplementationResult, to: Range[], document: Document): item;
 	public item(from: ImplementationResult, to: ImplementationResult[], document: Document): item;
 	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], document: Document, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
-		let result: item;
 		if (to.length === 0) {
-			let result: item = {
+			const result: item = {
 				id: this.nextId(),
 				type: ElementTypes.edge,
 				label: EdgeLabels.item,
@@ -424,13 +462,14 @@ export class EdgeBuilder {
 				inVs: [],
 				document: document.id
 			};
+			// We have an empty to array. So treat the empty set as references or use the property provided.
 			if (from.label === 'referenceResult') {
 				result.property = property !== undefined ? property : ItemEdgeProperties.references;
 			}
 			return result;
 		}
-		let toKind = to[0].label;
-		result = {
+		const toKind = to[0].label;
+		const result: item = {
 			id: this.nextId(),
 			type: ElementTypes.edge,
 			label: EdgeLabels.item,
@@ -444,11 +483,31 @@ export class EdgeBuilder {
 			case 'definitionResult':
 				break;
 			case 'referenceResult':
-				result.property = property !== undefined ? property : ItemEdgeProperties.referenceResults;
+				switch (toKind) {
+					case VertexLabels.range:
+						if (property === undefined) {
+							throw new Error(`An item edge pointing to ranges needs to define a property.`);
+						}
+						result.property = property;
+						break;
+					case VertexLabels.referenceResult:
+						result.property = ItemEdgeProperties.referenceResults;
+						break;
+					case VertexLabels.moniker:
+						result.property = ItemEdgeProperties.referenceLinks;
+						break;
+					default:
+						throw new Error('Should never happen.');
+				}
 				break;
 			case 'implementationResult':
-				if (toKind === 'implementationResult') {
-					result.property = ItemEdgeProperties.implementationResults;
+				switch (toKind) {
+					case VertexLabels.implementationResult:
+						result.property = ItemEdgeProperties.implementationResults;
+						break;
+					case VertexLabels.moniker:
+						result.property = ItemEdgeProperties.implementationLinks;
+						break;
 				}
 				break;
 			default:

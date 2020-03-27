@@ -3,6 +3,9 @@
 		"module": "commonjs",
 		"outDir": "lib"
 	},
+	"typeAcquisition": {
+		"enable": true
+	},
 	"include": [
 		"./index.ts"
 	]

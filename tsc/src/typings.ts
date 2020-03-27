@@ -174,9 +174,6 @@ export class TypingsInstaller {
 			}
 		}
 
-		if (toInstall.length === 0) {
-			return [];
-		}
 		return toInstall;
 	}
 
@@ -212,7 +209,7 @@ export class TypingsInstaller {
 		const prefix = path.dirname(packageFile);
 		let npm = await import('npm');
 		await new Promise((resolve, reject) => {
-			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix }, (error, config) => {
+			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix, spin: false, loglevel: 'silent', 'progress': false, 'audit': false } as any, (error, config) => {
 				if (error) {
 					reject(error);
 				} else {
@@ -258,7 +255,13 @@ export class TypingsInstaller {
 		}
 		let npm = await import('npm');
 		return new Promise((resolve, reject) => {
+			// NPM can't be made really silent. So we patch console.log while we are actually
+			// updating. Will not affect outputing LSIF to stdout since we wait until the installer
+			// is finished.
+			const save = console.log;
+			console.log = () => {};
 			npm.commands.install(typings, (error, result) => {
+				console.log = save;
 				if (error) {
 					reject(error);
 				}

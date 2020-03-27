@@ -12,15 +12,17 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Document, Id, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
+	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Version, Range, EventKind, TypeDefinitionResult
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 
 import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
+
+import * as paths from './utils/paths';
 
 interface Disposable {
 	(): void;
@@ -195,7 +197,7 @@ class ProjectData extends LSIFData {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: SymbolDataContext, private project: Project) {
+	public constructor(context: SymbolDataContext, private group: Group | undefined, private project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -203,6 +205,9 @@ class ProjectData extends LSIFData {
 
 	public begin(): void {
 		this.emit(this.project);
+		if (this.group !== undefined) {
+			this.emit(this.edge.belongsTo(this.project, this.group));
+		}
 		this.emit(this.vertex.event(EventKind.begin, this.project));
 	}
 
@@ -239,7 +244,7 @@ class DocumentData extends LSIFData {
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public externalLibrary: boolean) {
+	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public external: boolean) {
 		super(context);
 		this.ranges = [];
 	}
@@ -294,6 +299,7 @@ abstract class SymbolData extends LSIFData {
 	private declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined;
 
 	protected resultSet: ResultSet;
+	protected moniker: Moniker | undefined;
 
 	public constructor(context: SymbolDataContext, private id: SymbolId) {
 		super(context);
@@ -327,7 +333,7 @@ abstract class SymbolData extends LSIFData {
 		if (this.declarationInfo === undefined) {
 			return false;
 		} else if (Array.isArray(this.declarationInfo)) {
-			for (let item of this.declarationInfo) {
+			for (const item of this.declarationInfo) {
 				if (tss.DefinitionInfo.equals(item, info)) {
 					return true;
 				}
@@ -339,15 +345,21 @@ abstract class SymbolData extends LSIFData {
 	}
 
 	public addHover(hover: lsp.Hover) {
-		let hr = this.vertex.hoverResult(hover);
+		const hr = this.vertex.hoverResult(hover);
 		this.emit(hr);
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
 	public addMoniker(identifier: string, kind: MonikerKind): void {
-		let moniker = this.vertex.moniker('tsc', identifier, kind);
+		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.group;
+		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
+		this.moniker = moniker;
+	}
+
+	public getMoniker(): Moniker | undefined {
+		return this.moniker;
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -403,8 +415,11 @@ class StandardSymbolData extends SymbolData {
 		return partition.findDefinition(range);
 	}
 
-	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		if (reference.label === 'range') {
+	public addReference(sourceFile: ts.SourceFile, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public addReference(sourceFile: ts.SourceFile, reference: ReferenceResult): void;
+	public addReference(sourceFile: ts.SourceFile, reference: Moniker): void;
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (reference.label === VertexLabels.range) {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
 		this.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
@@ -544,7 +559,7 @@ class AliasedSymbolData extends StandardSymbolData {
 		}
 	}
 
-	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (reference.label === 'range') {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
@@ -559,46 +574,50 @@ class AliasedSymbolData extends StandardSymbolData {
 class MethodSymbolData extends StandardSymbolData {
 
 	private sourceFile: ts.SourceFile | undefined;
-	private bases: SymbolData[] | undefined;
+	private rootSymbolData: SymbolData[] | undefined;
 
-	constructor(context: SymbolDataContext, id: string, sourceFile: ts.SourceFile, bases: SymbolData[] | undefined, scope: ts.Node | undefined = undefined) {
+	constructor(context: SymbolDataContext, id: string, sourceFile: ts.SourceFile, rootSymbolData: SymbolData[] | undefined, scope: ts.Node | undefined = undefined) {
 		super(context, id, scope);
 		this.sourceFile = sourceFile;
-		if (bases !== undefined && bases.length === 0) {
-			this.bases = undefined;
+		if (rootSymbolData !== undefined && rootSymbolData.length === 0) {
+			this.rootSymbolData = undefined;
 		} else {
-			this.bases = bases;
+			this.rootSymbolData = rootSymbolData;
 		}
 	}
 
 	public begin(): void {
 		super.begin();
-		if (this.bases !== undefined) {
-			for (let base of this.bases) {
+		if (this.rootSymbolData !== undefined) {
+			for (let root of this.rootSymbolData) {
 				// We take the first source file to cluster this. We might want to find a source
 				// file that has already changed to make the diff minimal.
-				super.addReference(this.sourceFile!, base.getOrCreateReferenceResult());
+				super.addReference(this.sourceFile!, root.getOrCreateReferenceResult());
+				const moniker = root.getMoniker();
+				if (moniker !== undefined && moniker.scheme !== 'local') {
+					super.addReference(this.sourceFile!, moniker);
+				}
 			}
 		}
 		this.sourceFile = undefined;
 	}
 
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
-		super.addDefinition(sourceFile, definition, this.bases === undefined);
-		if (this.bases !== undefined) {
-			for (let base of this.bases) {
+		super.addDefinition(sourceFile, definition, this.rootSymbolData === undefined);
+		if (this.rootSymbolData !== undefined) {
+			for (let base of this.rootSymbolData) {
 				base.getOrCreatePartition(sourceFile).addReference(definition, ItemEdgeProperties.definitions);
 			}
 		}
 	}
 
-	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		if (this.bases !== undefined) {
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (this.rootSymbolData !== undefined) {
 			if (reference.label === 'range') {
 				this.emit(this.edge.next(reference, this.resultSet));
 			}
-			for (let base of this.bases) {
-				base.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
+			for (let root of this.rootSymbolData) {
+				root.getOrCreatePartition(sourceFile).addReference(reference as any, property as any);
 			}
 		} else {
 			super.addReference(sourceFile, reference as any, property as any);
@@ -634,7 +653,7 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 		// We don't do anoything for definitions since they a transient anyways.
 	}
 
-	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (reference.label === 'range') {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
@@ -661,8 +680,8 @@ class TransientSymbolData extends StandardSymbolData {
 		// We don't do anoything for definitions since they a transient anyways.
 	}
 
-	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		super.addReference(sourceFile, reference, property);
+	public addReference(sourceFile: ts.SourceFile, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		super.addReference(sourceFile, reference as any, property as any);
 	}
 }
 
@@ -676,6 +695,7 @@ class SymbolDataPartition extends LSIFData {
 
 	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]>;
 	private referenceResults: ReferenceResult[];
+	private referenceCascades: Moniker[];
 
 	public constructor(context: SymbolDataContext, private symbolData: SymbolData, private document: Document) {
 		super(context);
@@ -683,6 +703,7 @@ class SymbolDataPartition extends LSIFData {
 		this.typeDefinitionRanges = SymbolDataPartition.EMPTY_ARRAY;
 		this.referenceRanges = SymbolDataPartition.EMPTY_MAP;
 		this.referenceResults = SymbolDataPartition.EMPTY_ARRAY;
+		this.referenceCascades = SymbolDataPartition.EMPTY_ARRAY;
 	}
 
 	public begin(): void {
@@ -722,8 +743,14 @@ class SymbolDataPartition extends LSIFData {
 
 	public addReference(value: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
 	public addReference(value: ReferenceResult): void;
-	public addReference(value: Range | ReferenceResult, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		if (value.label === 'range' && property !== undefined) {
+	public addReference(value: Moniker): void;
+	public addReference(value: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		if (value.label === VertexLabels.moniker) {
+			if (this.referenceCascades === SymbolDataPartition.EMPTY_ARRAY) {
+				this.referenceCascades = [];
+			}
+			this.referenceCascades.push(value);
+		} else if (value.label === VertexLabels.range && property !== undefined) {
 			if (this.referenceRanges === SymbolDataPartition.EMPTY_MAP) {
 				this.referenceRanges = new Map();
 			}
@@ -733,7 +760,7 @@ class SymbolDataPartition extends LSIFData {
 				this.referenceRanges.set(property, values);
 			}
 			values.push(value);
-		} else if (value.label === 'referenceResult') {
+		} else if (value.label === VertexLabels.referenceResult) {
 			if (this.referenceResults === SymbolDataPartition.EMPTY_ARRAY) {
 				this.referenceResults = [];
 			}
@@ -751,15 +778,19 @@ class SymbolDataPartition extends LSIFData {
 			this.emit(this.edge.item(typeDefinitionResult, this.typeDefinitionRanges, this.document));
 		}
 		if (this.referenceRanges !== SymbolDataPartition.EMPTY_MAP) {
-			let referenceResult = this.symbolData.getOrCreateReferenceResult();
-			for (let property of this.referenceRanges.keys()) {
-				let values = this.referenceRanges.get(property)!;
+			const referenceResult = this.symbolData.getOrCreateReferenceResult();
+			for (const property of this.referenceRanges.keys()) {
+				const values = this.referenceRanges.get(property)!;
 				this.emit(this.edge.item(referenceResult, values, this.document, property));
 			}
 		}
 		if (this.referenceResults !== SymbolDataPartition.EMPTY_ARRAY) {
-			let referenceResult = this.symbolData.getOrCreateReferenceResult();
+			const referenceResult = this.symbolData.getOrCreateReferenceResult();
 			this.emit(this.edge.item(referenceResult, this.referenceResults, this.document));
+		}
+		if (this.referenceCascades !== SymbolDataPartition.EMPTY_ARRAY) {
+			const referenceResult = this.symbolData.getOrCreateReferenceResult();
+			this.emit(this.edge.item(referenceResult, this.referenceCascades, this.document));
 		}
 	}
 }
@@ -874,18 +905,19 @@ class Symbols {
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
 		let result = this.baseSymbolCache.get(key);
-		if (result === undefined) {
-			if (tss.isTypeLiteral(symbol)) {
-				// ToDo@dirk: compute base symbols for type literals.
-				return undefined;
-			} else if (tss.isInterface(symbol)) {
-				result = this.computeBaseSymbolsForInterface(symbol);
-			} else if (tss.isClass(symbol)) {
-				result = this.computeBaseSymbolsForClass(symbol);
-			}
-			if (result !== undefined) {
-				this.baseSymbolCache.set(key, result);
-			}
+		if (result !== undefined) {
+			return result;
+		}
+		if (tss.isTypeLiteral(symbol)) {
+			// ToDo@dirk: compute base symbols for type literals.
+			return undefined;
+		} else if (tss.isInterface(symbol)) {
+			result = this.computeBaseSymbolsForInterface(symbol);
+		} else if (tss.isClass(symbol)) {
+			result = this.computeBaseSymbolsForClass(symbol);
+		}
+		if (result !== undefined) {
+			this.baseSymbolCache.set(key, result);
 		}
 		return result;
 	}
@@ -936,47 +968,42 @@ class Symbols {
 		return result.length === 0 ? undefined : result;
 	}
 
-	public findBaseMembers(symbol: ts.Symbol, memberName: string): ts.Symbol[] | undefined {
-		let key = tss.createSymbolKey(this.typeChecker, symbol);
+	public findRootMembers(symbol: ts.Symbol, memberName: string): ts.Symbol[] | undefined {
+		const key = tss.createSymbolKey(this.typeChecker, symbol);
 		let cache = this.baseMemberCache.get(key);
 		if (cache === undefined) {
 			cache = new LRUCache(64);
 			this.baseMemberCache.set(key, cache);
 		}
 		let result: ts.Symbol[] | undefined = cache.get(memberName);
-		if (result === undefined) {
-			let baseSymbols = this.getBaseSymbols(symbol);
-			if (baseSymbols !== undefined) {
-				for (let base of baseSymbols) {
-					if (!base.members) {
-						continue;
-					}
-					let method = base.members.get(memberName as ts.__String);
-					if (method !== undefined) {
-						if (result === undefined) {
-							result = [method];
-						} else {
-							result.push(method);
-						}
-					} else {
-						let baseResult = this.findBaseMembers(base, memberName);
-						if (baseResult !== undefined) {
-							if (result === undefined) {
-								result = baseResult;
-							} else {
-								result.push(...baseResult);
-							}
-						}
+		if (result !== undefined) {
+			return result;
+		}
+		const baseSymbols = this.getBaseSymbols(symbol);
+		if (baseSymbols !== undefined) {
+			const baseResult: Map<string, ts.Symbol> = new Map();
+			for (const base of baseSymbols) {
+				const symbols = this.findRootMembers(base, memberName);
+				if (symbols !== undefined) {
+					for (const symbol of symbols) {
+						baseResult.set(tss.createSymbolKey(this.typeChecker, symbol), symbol);
 					}
 				}
 			}
-			if (result !== undefined) {
-				cache.set(memberName, result);
-			} else {
-				cache.set(memberName, []);
+			// The method is an override of something already defined in a base type
+			if (baseResult.size > 0) {
+				result = Array.from(baseResult.values());
 			}
-		} else if (result.length === 0) {
-			return undefined;
+		} else if (symbol.members) {
+			const member = symbol.members.get(memberName as ts.__String);
+			if (member !== undefined) {
+				result = [member];
+			}
+		}
+		if (result !== undefined) {
+			cache.set(memberName, result);
+		} else {
+			cache.set(memberName, []);
 		}
 		return result;
 	}
@@ -1170,12 +1197,17 @@ class MethodResolver extends SymbolDataResolver {
 		if (container === undefined) {
 			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
 		}
-		let baseMembers = this.symbols.findBaseMembers(container, symbol.getName());
-		if (baseMembers === undefined || baseMembers.length === 0) {
+		let mostAbstractMembers = this.symbols.findRootMembers(container, symbol.getName());
+		// No abstract membes found
+		if (mostAbstractMembers === undefined || mostAbstractMembers.length === 0) {
 			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
 		}
-		let baseSymbolData = baseMembers.map(member => this.resolverContext.getOrCreateSymbolData(member));
-		return new MethodSymbolData(this.symbolDataContext, id, sourceFile, baseSymbolData, scope);
+		// It is the symbol itself
+		if (mostAbstractMembers.length === 1 && mostAbstractMembers[0] === symbol) {
+			return new MethodSymbolData(this.symbolDataContext, id, sourceFile, undefined, scope);
+		}
+		let mostAbstractSymbolData = mostAbstractMembers.map(member => this.resolverContext.getOrCreateSymbolData(member));
+		return new MethodSymbolData(this.symbolDataContext, id, sourceFile, mostAbstractSymbolData, scope);
 	}
 }
 
@@ -1310,8 +1342,10 @@ class TypeAliasResolver extends StandardResolver {
 }
 
 export interface Options {
+	group: Group;
 	projectRoot: string;
-	noContents: boolean;
+	projectName: string;
+	tsConfigFile: string | undefined;
 	stdout: boolean;
 }
 
@@ -1324,8 +1358,8 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, project: Project, private options: Options) {
-		this.projectData = new ProjectData(this, project);
+	public constructor(private context: EmitContext, group: Group | undefined, project: Project, private options: Options) {
+		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.documentStats = 0;
 		this.symbolStats = 0;
@@ -1377,10 +1411,10 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, externalLibrary: boolean): DocumentData {
+	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
 		let result = this.getDocumentData(fileName);
 		if (result === undefined) {
-			result = new DocumentData(this, document, monikerPath, externalLibrary);
+			result = new DocumentData(this, document, monikerPath, external);
 			this.documentDatas.set(fileName, result);
 			result.begin();
 			this.projectData.addDocument(document);
@@ -1490,7 +1524,6 @@ class Visitor implements ResolverContext {
 	private program: ts.Program;
 	private typeChecker: ts.TypeChecker;
 
-	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
 	private rootDir: string;
@@ -1512,13 +1545,9 @@ class Visitor implements ResolverContext {
 		typeAlias: TypeAliasResolver;
 	};
 
-	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
+	constructor(private emitter: Emitter, private builder: Builder, private languageService: ts.LanguageService, dependsOn: ProjectInfo[], private options: Options) {
 		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
-		this.builder = new Builder({
-			idGenerator,
-			emitSource: !options.noContents
-		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
 		this.dependentOutDirs = [];
@@ -1529,9 +1558,8 @@ class Visitor implements ResolverContext {
 			return b.length - a.length;
 		});
 		this.projectRoot = options.projectRoot;
-		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
-		this.project = this.vertex.project();
-		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
+		this.project = this.vertex.project(options.projectName);
+		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
 			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
@@ -1545,7 +1573,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.rootDir;
 		}
-		this.dataManager = new DataManager(this, this.project, options);
+		this.dataManager = new DataManager(this, this.options.group, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1661,7 +1689,7 @@ class Visitor implements ResolverContext {
 			if (ts.isExportAssignment(node)) {
 				exportAssignments.push(node);
 			} else if (ts.isExportDeclaration(node) && sourceFileSymbol !== undefined) {
-				if (node.exportClause !== undefined) {
+				if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
 					for (let element of node.exportClause.elements) {
 						let exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
 						if (exportSymbol === undefined) {
@@ -1955,19 +1983,30 @@ class Visitor implements ResolverContext {
 	}
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
-		const computeMonikerPath = (sourceFile: ts.SourceFile): string | undefined => {
-			// A real source file inside this project.
-			if (!sourceFile.isDeclarationFile || (sourceFile.fileName.startsWith(this.rootDir) && sourceFile.fileName.charAt(this.rootDir.length) === '/')) {
-				return tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(sourceFile.fileName, this.rootDir, this.outDir));
+		const isFromExternalLibrary = (sourceFile: ts.SourceFile): boolean => {
+			return tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile);
+		};
+
+		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
+			const fileName = sourceFile.fileName;
+			return !sourceFile.isDeclarationFile || paths.isParent(this.rootDir, fileName);
+		};
+
+		const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
+			if (!sourceFile.isDeclarationFile) {
+				return false;
 			}
-			// This can come from a dependent project.
-			let fileName = sourceFile.fileName;
+			const fileName = sourceFile.fileName;
 			for (let outDir of this.dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
-					return tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
+					return true;
 				}
 			}
-			return undefined;
+			return false;
+		};
+
+		const isFromProjectRoot = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(this.projectRoot, sourceFile.fileName);
 		};
 
 		let result = this.dataManager.getDocumentData(sourceFile.fileName);
@@ -1975,18 +2014,26 @@ class Visitor implements ResolverContext {
 			return result;
 		}
 
-		let document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+		const fileName = sourceFile.fileName;
 
 		let monikerPath: string | undefined;
-		let library: boolean = false;
-		if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
-			library = true;
-			monikerPath = tss.computeMonikerPath(this.projectRoot, sourceFile.fileName);
-		} else {
-			monikerPath = computeMonikerPath(sourceFile);
+		let external: boolean = false;
+		if (isFromProjectSources(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.rootDir, this.outDir));
+		} else if (isFromExternalLibrary(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
+		} else if (isFromDependentProject(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
+		} else if (isFromProjectRoot(sourceFile)) {
+			external = sourceFile.isDeclarationFile;
+			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
 		}
 
-		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, library);
+		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, external);
+
 		// In TS source files have symbols and can be referenced in import statements with * imports.
 		// So even if we don't parse the source file we need to create a symbol data so that when
 		// referenced we have the data.
@@ -2018,19 +2065,19 @@ class Visitor implements ResolverContext {
 		}
 		// Make sure we create all document data before we create the symbol.
 		let monikerPath: string | undefined | null;
-		let externalLibrary: boolean = false;
+		let external: boolean = false;
 		for (let sourceFile of sourceFiles.values()) {
 			let documentData = this.getOrCreateDocumentData(sourceFile);
 			if (monikerPath === undefined) {
 				monikerPath = documentData.monikerPath;
-				externalLibrary = documentData.externalLibrary;
+				external = documentData.external;
 			} else if (monikerPath !== documentData.monikerPath) {
 				monikerPath = null;
 			}
 		}
 		if (monikerPath === null) {
 			monikerPath = undefined;
-			externalLibrary = false;
+			external = false;
 		}
 		result = this.dataManager.getOrCreateSymbolData(id, () => {
 			return resolver.requiresSourceFile ? resolver.resolve(resolver.getPartitionScope(sourceFiles), id, symbol, location, scope) : resolver.resolve(undefined, id, symbol, location, scope);
@@ -2048,7 +2095,7 @@ class Visitor implements ResolverContext {
 		if (monikerIdentifer === undefined) {
 			result.addMoniker(id, MonikerKind.local);
 		} else {
-			if (externalLibrary === true) {
+			if (external === true) {
 				result.addMoniker(monikerIdentifer, MonikerKind.import);
 			} else {
 				result.addMoniker(monikerIdentifer, MonikerKind.export);
@@ -2218,8 +2265,8 @@ class Visitor implements ResolverContext {
 }
 
 
-export function lsif(languageService: ts.LanguageService, options: Options, dependsOn: ProjectInfo[], emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined): ProjectInfo | undefined {
-	let visitor = new Visitor(languageService, options, dependsOn, emitter, idGenerator, tsConfigFile);
+export function lsif(emitter: Emitter, builder: Builder, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+	let visitor = new Visitor(emitter, builder, languageService, dependsOn, options);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
 	return result;

@@ -33,7 +33,13 @@ export function getDefaultCompilerOptions(configFileName?: string) {
 
 const isWindows = process.platform === 'win32';
 export function normalizePath(value: string): string {
-	let result = path.posix.normalize(isWindows ? value.replace(/\\/g, '/') : value);
+	if (isWindows) {
+		value = value.replace(/\\/g, '/');
+		if (/^[a-z]:/.test(value)) {
+			value = value.charAt(0).toUpperCase() + value.substring(1);
+		}
+	}
+	let result = path.posix.normalize(value);
 	return result.length > 0 && result.charAt(result.length - 1) === '/' ? result.substr(0, result.length - 1) : result;
 }
 
@@ -87,29 +93,33 @@ export function makeRelative(from: string, to: string): string {
 }
 
 // Copies or interface which are internal
+function isString(text: unknown): text is string {
+	return typeof text === 'string';
+}
 
-export function flattenDiagnosticMessageText(messageText: string | ts.DiagnosticMessageChain | undefined, newLine: string): string {
-	if (Is.string(messageText)) {
-		return messageText;
-	} else {
-		let diagnosticChain = messageText;
-		let result = '';
-
-		let indent = 0;
-		while (diagnosticChain) {
-			if (indent) {
-				result += newLine;
-
-				for (let i = 0; i < indent; i++) {
-					result += '  ';
-				}
-			}
-			result += diagnosticChain.messageText;
-			indent++;
-			diagnosticChain = diagnosticChain.next;
-		}
-		return result;
+export function flattenDiagnosticMessageText(diag: string | ts.DiagnosticMessageChain | undefined, newLine: string, indent = 0): string {
+	if (isString(diag)) {
+		return diag;
 	}
+	else if (diag === undefined) {
+		return '';
+	}
+	let result = '';
+	if (indent) {
+		result += newLine;
+
+		for (let i = 0; i < indent; i++) {
+			result += '  ';
+		}
+	}
+	result += diag.messageText;
+	indent++;
+	if (diag.next) {
+		for (const kid of diag.next) {
+			result += flattenDiagnosticMessageText(kid, newLine, indent);
+		}
+	}
+	return result;
 }
 
 interface InternalSymbol extends ts.Symbol {
@@ -428,5 +438,23 @@ export namespace Program {
 			throw new Error(`Program is missing isSourceFileDefaultLibrary`);
 		}
 		return interal.isSourceFileDefaultLibrary(sourceFile);
+	}
+}
+
+interface InternalCompilerOptions extends ts.CompilerOptions {
+	configFilePath?: string;
+}
+
+export namespace CompileOptions {
+	export function getConfigFilePath(options: ts.CompilerOptions): string | undefined {
+		if (options.project) {
+			const projectPath = path.resolve(options.project);
+			if (ts.sys.directoryExists(projectPath)) {
+				return path.join(projectPath, 'tsconfig.json');
+			} else {
+				return projectPath;
+			}
+		}
+		return (options as InternalCompilerOptions).configFilePath;
 	}
 }

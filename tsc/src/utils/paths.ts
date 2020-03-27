@@ -17,3 +17,21 @@ export function removeExtension(value: string): string {
 export function normalizeSeparator(value: string): string {
 	return value.replace(/\\/g, '/');
 }
+
+export function isParent(parent: string, file: string): boolean {
+	if (parent.length === 0 || file.length === 0) {
+		throw new Error(`isParent require a parent and a file.`);
+	}
+	if (!file.startsWith(parent)) {
+		return false;
+	}
+	if (parent[parent.length - 1] === '/') {
+		return true;
+	}
+
+	if (file.charAt(parent.length) === '/' ) {
+		return true;
+	}
+
+	return false;
+}
