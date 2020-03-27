@@ -820,9 +820,9 @@ export enum ItemEdgeProperties {
 	definitions = 'definitions',
 	references =  'references',
 	referenceResults = 'referenceResults',
-	referenceCascades = 'referenceCascades',
+	referenceLinks = 'referenceLinks',
 	implementationResults = 'implementationResults',
-	implementationCascades = 'implementationCascades'
+	implementationLinks = 'implementationLinks'
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {

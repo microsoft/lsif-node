@@ -494,7 +494,7 @@ export class EdgeBuilder {
 						result.property = ItemEdgeProperties.referenceResults;
 						break;
 					case VertexLabels.moniker:
-						result.property = ItemEdgeProperties.referenceCascades;
+						result.property = ItemEdgeProperties.referenceLinks;
 						break;
 					default:
 						throw new Error('Should never happen.');
@@ -506,7 +506,7 @@ export class EdgeBuilder {
 						result.property = ItemEdgeProperties.implementationResults;
 						break;
 					case VertexLabels.moniker:
-						result.property = ItemEdgeProperties.implementationCascades;
+						result.property = ItemEdgeProperties.implementationLinks;
 						break;
 				}
 				break;

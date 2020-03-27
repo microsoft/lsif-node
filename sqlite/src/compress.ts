@@ -896,9 +896,9 @@ export const itemPropertyShortForms = function() {
 		[ItemEdgeProperties.definitions, shortCounter++],
 		[ItemEdgeProperties.references, shortCounter++],
 		[ItemEdgeProperties.referenceResults, shortCounter++],
-		[ItemEdgeProperties.referenceCascades, shortCounter++],
+		[ItemEdgeProperties.referenceLinks, shortCounter++],
 		[ItemEdgeProperties.implementationResults, shortCounter++],
-		[ItemEdgeProperties.implementationCascades, shortCounter++]
+		[ItemEdgeProperties.implementationLinks, shortCounter++]
 	]);
 }();
 

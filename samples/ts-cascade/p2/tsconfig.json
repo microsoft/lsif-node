@@ -5,11 +5,11 @@
 		"outDir": "lib",
 		"baseUrl": "./",
 		"paths": {
-			"p1": ["../p1/lib/main"],
+			"p1": ["../p1/lib/p1Main"],
 			"p1/*": ["../p1/lib"]
 		}
 	},
 	"include": [
-		"./main.ts"
+		"./p2Main.ts"
 	]
 }
