@@ -54,7 +54,7 @@ export namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
-		{ id: 'format', type: 'string', default: 'graph', description: 'The SQLite format. Either graph (default) or blob.'},
+		{ id: 'format', type: 'string', default: 'graph', description: 'The SQLite format. Currently only graph is supported.'},
 		{ id: 'delete', type: 'boolean', default: false, description: 'Deletes an old version of the DB. Only valid with blob format.'},
 		{ id: 'projectVersion', type: 'string', default: undefined, description: 'The imported project version. Only valid with blob format.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
@@ -111,7 +111,7 @@ export async function main(): Promise<void> {
 	}
 
 	if (!options.stdin && options.in === undefined) {
-		console.error(`Either a input file using --in or --stdin must be specified`);
+		console.error(`Either a input file using --in or --stdin must be specified.`);
 		process.exitCode = -1;
 		return;
 	}
@@ -153,12 +153,15 @@ export async function main(): Promise<void> {
 			filename = filename + '.db';
 		}
 		if (options.format === 'blob') {
-			if (options.projectVersion === undefined) {
-				console.log(`Blob format requires a project version.`);
-				process.exitCode = -1;
-				return;
-			}
-			store = new BlobStore(input, filename, options.projectVersion, options.delete);
+			console.error(`Currently only graph format is supported.`);
+			process.exitCode = 1;
+			return;
+			// if (options.projectVersion === undefined) {
+			// 	console.log(`Blob format requires a project version.`);
+			// 	process.exitCode = -1;
+			// 	return;
+			// }
+			// store = new BlobStore(input, filename, options.projectVersion, options.delete);
 		} else {
 			store = new GraphStore(input, filename, options.mode);
 		}
