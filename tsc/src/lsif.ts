@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
@@ -208,7 +208,7 @@ class ProjectData extends LSIFData {
 		if (this.group !== undefined) {
 			this.emit(this.edge.belongsTo(this.project, this.group));
 		}
-		this.emit(this.vertex.event(EventKind.begin, this.project));
+		this.emit(this.vertex.event(EventScope.project, EventKind.begin, this.project));
 	}
 
 	public addDocument(document: Document): void {
@@ -233,7 +233,7 @@ class ProjectData extends LSIFData {
 			this.emit(dr);
 			this.emit(this.edge.diagnostic(this.project, dr));
 		}
-		this.emit(this.vertex.event(EventKind.end, this.project));
+		this.emit(this.vertex.event(EventScope.project, EventKind.end, this.project));
 	}
 }
 
@@ -251,7 +251,7 @@ class DocumentData extends LSIFData {
 
 	public begin(): void {
 		this.emit(this.document);
-		this.emit(this.vertex.event(EventKind.begin, this.document));
+		this.emit(this.vertex.event(EventScope.document, EventKind.begin, this.document));
 	}
 
 	public addRange(range: Range): void {
@@ -290,7 +290,7 @@ class DocumentData extends LSIFData {
 			this.emit(ds);
 			this.emit(this.edge.documentSymbols(this.document, ds));
 		}
-		this.emit(this.vertex.event(EventKind.end, this.document));
+		this.emit(this.vertex.event(EventScope.document, EventKind.end, this.document));
 	}
 }
 
@@ -1017,11 +1017,17 @@ class Symbols {
 			this.exportedPaths.set(symbol, '');
 			return '';
 		}
-		let parent = this.getParent(symbol);
+		const parent = this.getParent(symbol);
+		let name = symbol.getName();
+		// TS support module declations with string. E.g. declare module "fs" {...}
+		// However the identifier is fs.
+		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
+			name = name.substr(1, name.length - 2);
+		}
 		if (parent === undefined) {
 			if (tss.isValueModule(symbol) || kind === LocationKind.tsLibrary || kind === LocationKind.global) {
-				this.exportedPaths.set(symbol, symbol.getName());
-				return symbol.getName();
+				this.exportedPaths.set(symbol, name);
+				return name;
 			}
 			const typeAlias = this.symbolAliases.get(tss.createSymbolKey(this.typeChecker, symbol));
 			if (typeAlias !== undefined && this.getExportPath(typeAlias.alias, kind) !== undefined) {
@@ -1031,18 +1037,18 @@ class Symbols {
 			this.exportedPaths.set(symbol, null);
 			return undefined;
 		} else {
-			let parentValue = this.getExportPath(parent, kind);
+			const parentValue = this.getExportPath(parent, kind);
 			// The parent is not exported so any member isn't either
 			if (parentValue === undefined) {
 				this.exportedPaths.set(symbol, null);
 				return undefined;
 			} else {
 				if (tss.isInterface(parent) || tss.isClass(parent) || tss.isTypeLiteral(parent)) {
-					result = `${parentValue}.${symbol.getName()}`;
+					result = `${parentValue}.${name}`;
 					this.exportedPaths.set(symbol, result);
 					return result;
 				} else if (this.isExported(parent, symbol)) {
-					result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
+					result = parentValue.length > 0 ? `${parentValue}.${name}` : name;
 					this.exportedPaths.set(symbol, result);
 					return result;
 				} else {

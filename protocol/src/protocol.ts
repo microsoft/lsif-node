@@ -73,7 +73,8 @@ export enum EventKind {
 export enum EventScope {
 	group = 'group',
 	project = 'project',
-	document = 'document'
+	document = 'document',
+	monikerAttach = 'monikerAttach'
 }
 
 export interface Event extends V {
@@ -114,6 +115,16 @@ export interface ProjectEvent extends Event {
 export interface DocumentEvent extends Event {
 
 	scope: EventScope.document;
+
+	/**
+	 * The id of the document vertex.
+	 */
+	data: Id;
+}
+
+export interface MonikerAttachEvent extends Event {
+
+	scope: EventScope.monikerAttach;
 
 	/**
 	 * The id of the document vertex.

@@ -11,7 +11,8 @@ import * as uuid from 'uuid';
 
 import PackageJson from './package';
 import {
-	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel
+	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel,
+	MonikerAttachEvent, EventScope, EventKind
 } from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
@@ -62,15 +63,6 @@ namespace Options {
 	];
 }
 
-let writer: Writer = new StdoutWriter();
-function emit(value: string | Edge | Vertex): void {
-	if (Is.string(value)) {
-		writer.writeln(value);
-	} else {
-		writer.writeln(JSON.stringify(value, undefined, 0));
-	}
-}
-
 function normalizePath(value: string): string {
 	return path.posix.normalize(value.replace(/\\/g, '/'));
 }
@@ -86,38 +78,53 @@ function makeAbsolute(p: string, root?: string): string {
 	}
 }
 
-class Linker {
+class AttachQueue {
 
 	private _idGenerator: (() => Id) | undefined;
+	private _idMode: 'uuid' | 'number' | undefined;
+	private attachedId: Id | undefined;
 
-	constructor() {
+	private store: (MonikerAttachEvent | PackageInformation | Moniker | attach | packageInformation)[];
+
+	public constructor(private emit: (value: string | Edge | Vertex) => void) {
+		this.store = [];
 	}
 
-	protected get idGenerator(): () => Id {
+	public initialize(id: Id): void {
+		if (typeof id === 'number') {
+			let counter = -1;
+			this._idGenerator = () => {
+				return counter--;
+			};
+			this._idMode = 'number';
+		} else {
+			this._idGenerator =  () => {
+				return uuid.v4();
+			};
+			this._idMode = 'uuid';
+		}
+
+		this.attachedId = this.idGenerator();
+		const startEvent: MonikerAttachEvent = {
+			id: this.attachedId,
+			type: ElementTypes.vertex,
+			label: VertexLabels.event,
+			scope: EventScope.monikerAttach,
+			kind: EventKind.begin,
+			data: this.attachedId
+		};
+		this.store.push(startEvent);
+	}
+
+	private get idGenerator(): () => Id {
 		if (this._idGenerator === undefined) {
 			throw new Error(`ID Generator not initialized.`);
 		}
 		return this._idGenerator;
 	}
 
-	protected ensureIdGenerator(id: Id): void {
-		if (this._idGenerator !== undefined) {
-			return;
-		}
-		if (typeof id === 'number') {
-			let counter = Number.MAX_SAFE_INTEGER;
-			this._idGenerator = () => {
-				return counter--;
-			};
-		} else {
-			this._idGenerator = () => {
-				return uuid.v4();
-			};
-		}
-	}
-
-	protected createPackageInformation(packageJson: PackageJson): PackageInformation {
-		let result: PackageInformation = {
+	public createPackageInformation(packageJson: PackageJson): PackageInformation {
+		const result: PackageInformation = {
 			id: this.idGenerator(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.packageInformation,
@@ -128,11 +135,12 @@ class Linker {
 		if (packageJson.hasRepository()) {
 			result.repository = packageJson.repository;
 		}
+		this.store.push(result);
 		return result;
 	}
 
-	protected createMoniker(scheme: string, identifier: string, unique: UniquenessLevel, kind: MonikerKind): Moniker {
-		return {
+	public createMoniker(scheme: string, identifier: string, unique: UniquenessLevel, kind: MonikerKind): Moniker {
+		const result: Moniker = {
 			id: this.idGenerator(),
 			type: ElementTypes.vertex,
 			label: VertexLabels.moniker,
@@ -141,43 +149,90 @@ class Linker {
 			unique,
 			kind: kind
 		};
+		this.store.push(result);
+		return result;
 	}
 
-	protected createAttachEdge(outV: Id, inV: Id): attach {
-		return {
+	public createAttachEdge(outV: Id, inV: Id): attach {
+		const result: attach = {
 			id: this.idGenerator(),
 			type: ElementTypes.edge,
 			label: EdgeLabels.attach,
 			outV: outV,
 			inV: inV
 		};
+		this.store.push(result);
+		return result;
 	}
 
-	protected createPackageInformationEdge(outV: Id, inV: Id): packageInformation {
-		return {
+	public createPackageInformationEdge(outV: Id, inV: Id): packageInformation {
+		const result: packageInformation = {
 			id: this.idGenerator(),
 			type: ElementTypes.edge,
 			label: EdgeLabels.packageInformation,
 			outV: outV,
 			inV: inV
 		};
+		this.store.push(result);
+		return result;
+	}
+
+	public flush(lastId: Id): void {
+		if (this.store.length === 0) {
+			return;
+		}
+
+		if (this.attachedId === undefined || typeof lastId === 'number' && this._idMode !== 'number') {
+			throw new Error(`Id mismatch.`);
+		}
+
+		const startEvent: MonikerAttachEvent = {
+			id: this.idGenerator(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.event,
+			scope: EventScope.monikerAttach,
+			kind: EventKind.begin,
+			data: this.attachedId
+		};
+		this.store.push(startEvent);
+
+		if (this._idMode === 'uuid') {
+			this.store.forEach(element => this.emit(element));
+		} else {
+			const start: number = lastId as number;
+			for (const element of this.store) {
+				element.id = start + Math.abs(element.id as number);
+				switch(element.label) {
+					case VertexLabels.event:
+						if (element.scope === EventScope.monikerAttach) {
+							element.data = start + Math.abs(element.data as number);
+						}
+						break;
+					case EdgeLabels.attach:
+						element.outV = start + Math.abs(element.outV as number);
+						break;
+					case EdgeLabels.packageInformation:
+						element.inV = start + Math.abs(element.inV as number);
+						element.outV = start + Math.abs(element.outV as number);
+						break;
+				}
+				this.emit(element);
+			}
+		}
 	}
 }
 
-class ExportLinker extends Linker {
+class ExportLinker {
 
 	private packageInformation: PackageInformation | undefined;
 
-	constructor(private projectRoot: string, private packageJson: PackageJson) {
-		super();
+	constructor(private projectRoot: string, private packageJson: PackageJson, private queue: AttachQueue) {
 	}
 
 	public handleMoniker(moniker: Moniker): void {
 		if (moniker.kind !== MonikerKind.export || moniker.scheme !== TscMoniker.scheme) {
 			return;
 		}
-		this.ensureIdGenerator(moniker.id);
-		emit(moniker);
 		let tscMoniker: TscMoniker = TscMoniker.parse(moniker.identifier);
 		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(this.projectRoot, tscMoniker.path))) {
 			this.ensurePackageInformation();
@@ -187,10 +242,9 @@ class ExportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, tscMoniker.path, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
-			emit(npmMoniker);
-			emit(this.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id));
-			emit(this.createAttachEdge(moniker.id, npmMoniker.id));
+			let npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
+			this.queue.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id);
+			this.queue.createAttachEdge(npmMoniker.id, moniker.id);
 		}
 	}
 
@@ -203,18 +257,16 @@ class ExportLinker extends Linker {
 
 	private ensurePackageInformation(): void {
 		if (this.packageInformation === undefined) {
-			this.packageInformation = this.createPackageInformation(this.packageJson);
-			emit(this.packageInformation);
+			this.packageInformation = this.queue.createPackageInformation(this.packageJson);
 		}
 	}
 }
 
-class ImportLinker extends Linker {
+class ImportLinker {
 
 	private packageData: Map<string,  { packageInfo: PackageInformation, packageJson: PackageJson } | null>;
 
-	constructor(private projectRoot: string) {
-		super();
+	constructor(private projectRoot: string, private queue: AttachQueue) {
 		this.packageData = new Map();
 	}
 
@@ -222,8 +274,6 @@ class ImportLinker extends Linker {
 		if (moniker.kind !== MonikerKind.import || moniker.scheme !== TscMoniker.scheme) {
 			return;
 		}
-		this.ensureIdGenerator(moniker.id);
-		emit(moniker);
 		const tscMoniker = TscMoniker.parse(moniker.identifier);
 		if (!TscMoniker.hasPath(tscMoniker)) {
 			return;
@@ -251,10 +301,9 @@ class ImportLinker extends Linker {
 				this.packageData.set(packagePath, null);
 			} else {
 				packageData = {
-					packageInfo: this.createPackageInformation(packageJson),
+					packageInfo: this.queue.createPackageInformation(packageJson),
 					packageJson: packageJson
 				};
-				emit(packageData.packageInfo);
 				this.packageData.set(packagePath, packageData);
 			}
 		}
@@ -265,10 +314,9 @@ class ImportLinker extends Linker {
 			} else {
 				npmIdentifier = NpmMoniker.create(packageData.packageJson.name, monikerPath, tscMoniker.name);
 			}
-			let npmMoniker = this.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
-			emit(npmMoniker);
-			emit(this.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id));
-			emit(this.createAttachEdge(moniker.id, npmMoniker.id));
+			let npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
+			this.queue.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id);
+			this.queue.createAttachEdge(npmMoniker.id, moniker.id);
 		}
 	}
 }
@@ -355,11 +403,21 @@ export function main(): void {
 		return;
 	}
 
+	let writer: Writer = new StdoutWriter();
+	function emit(value: string | Edge | Vertex): void {
+		if (Is.string(value)) {
+			writer.writeln(value);
+		} else {
+			writer.writeln(JSON.stringify(value, undefined, 0));
+		}
+	}
+
+	const queue: AttachQueue = new AttachQueue(emit);
 	let exportLinker: ExportLinker | undefined;
 	if (packageJson !== undefined) {
-		exportLinker = new ExportLinker(projectRoot, packageJson);
+		exportLinker = new ExportLinker(projectRoot, packageJson, queue);
 	}
-	const importLinker: ImportLinker = new ImportLinker(projectRoot);
+	const importLinker: ImportLinker = new ImportLinker(projectRoot, queue);
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
@@ -368,26 +426,27 @@ export function main(): void {
 		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	}
 
+	let needsInitialization: boolean = true;
+	let lastId: Id | undefined;
 	const rd = readline.createInterface(input);
 	rd.on('line', (line) => {
+		emit(line);
 		let element: Edge | Vertex = JSON.parse(line);
-		if (element.type === ElementTypes.vertex) {
-			switch(element.label) {
-				case VertexLabels.moniker:
-					if (element.kind === MonikerKind.local) {
-						emit(line);
-					} else {
-						if (exportLinker !== undefined) {
-							exportLinker.handleMoniker(element);
-						}
-						importLinker.handleMoniker(element);
-					}
-					break;
-				default:
-					emit(line);
+		lastId = element.id;
+		if (needsInitialization) {
+			queue.initialize(element.id);
+			needsInitialization = false;
+		}
+		if (element.type === ElementTypes.vertex && element.label === VertexLabels.moniker) {
+			if (exportLinker !== undefined) {
+				exportLinker.handleMoniker(element);
 			}
-		} else {
-			emit(line);
+			importLinker.handleMoniker(element);
+		}
+	});
+	rd.on('close', () => {
+		if (lastId !== undefined) {
+			queue.flush(lastId);
 		}
 	});
 }

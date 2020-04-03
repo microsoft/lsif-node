@@ -12,7 +12,7 @@ import * as minimist from 'minimist';
 
 import * as ts from 'typescript';
 
-import { Id, Version, EventKind, Group } from 'lsif-protocol';
+import { Id, Version, EventKind, Group, EventScope } from 'lsif-protocol';
 
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
@@ -488,7 +488,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	group.description = resolvedGroupConfig.description;
 	group.repository = resolvedGroupConfig.repository;
 	emitter.emit(group);
-	emitter.emit(builder.vertex.event(EventKind.begin, group));
+	emitter.emit(builder.vertex.event(EventScope.group, EventKind.begin, group));
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
 		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
@@ -498,7 +498,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		processed: new Map()
 	};
 	await processProject(config, emitter, builder, new TypingsInstaller(),  processProjectOptions);
-	emitter.emit(builder.vertex.event(EventKind.end, group));
+	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
 }
 
