@@ -90,46 +90,34 @@ export interface Event extends V {
 	 */
 	kind: EventKind;
 
+	/**
+	 * The id of the vertex the event is issued for.
+	 */
+	data: Id;
 }
 
 export interface GroupEvent extends Event {
 
 	scope: EventScope.group;
 
-	/**
-	 * The id of the group vertex.
-	 */
-	data: Id;
 }
 
 export interface ProjectEvent extends Event {
 
 	scope: EventScope.project;
 
-	/**
-	 * The id of the project vertex.
-	 */
-	data: Id;
 }
 
 export interface DocumentEvent extends Event {
 
 	scope: EventScope.document;
 
-	/**
-	 * The id of the document vertex.
-	 */
-	data: Id;
 }
 
 export interface MonikerAttachEvent extends Event {
 
 	scope: EventScope.monikerAttach;
 
-	/**
-	 * The id of the document vertex.
-	 */
-	data: Id;
 }
 
 /**

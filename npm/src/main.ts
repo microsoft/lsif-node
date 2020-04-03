@@ -12,7 +12,7 @@ import * as uuid from 'uuid';
 import PackageJson from './package';
 import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel,
-	MonikerAttachEvent, EventScope, EventKind
+	MonikerAttachEvent, EventScope, EventKind, Event
 } from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
@@ -55,7 +55,7 @@ namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the [tj]sconfig.json file.'},
+		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the package.json file.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the converted dump is saved to.'},
@@ -79,12 +79,11 @@ function makeAbsolute(p: string, root?: string): string {
 }
 
 class AttachQueue {
-
 	private _idGenerator: (() => Id) | undefined;
 	private _idMode: 'uuid' | 'number' | undefined;
 	private attachedId: Id | undefined;
 
-	private store: (MonikerAttachEvent | PackageInformation | Moniker | attach | packageInformation)[];
+	private store: (Event | PackageInformation | Moniker | attach | packageInformation)[];
 
 	public constructor(private emit: (value: string | Edge | Vertex) => void) {
 		this.store = [];
@@ -175,6 +174,12 @@ class AttachQueue {
 		};
 		this.store.push(result);
 		return result;
+	}
+
+	public duplicateEvent(event: Event) {
+		const duplicate: Event = Object.assign({}, event);
+		duplicate.id = this.idGenerator();
+		this.store.push(duplicate);
 	}
 
 	public flush(lastId: Id): void {
@@ -437,11 +442,18 @@ export function main(): void {
 			queue.initialize(element.id);
 			needsInitialization = false;
 		}
-		if (element.type === ElementTypes.vertex && element.label === VertexLabels.moniker) {
-			if (exportLinker !== undefined) {
-				exportLinker.handleMoniker(element);
+		if (element.type === ElementTypes.vertex) {
+			switch (element.label) {
+				case VertexLabels.moniker:
+					if (exportLinker !== undefined) {
+						exportLinker.handleMoniker(element);
+					}
+					importLinker.handleMoniker(element);
+					break;
+				case VertexLabels.event:
+					queue.duplicateEvent(element);
+					break;
 			}
-			importLinker.handleMoniker(element);
 		}
 	});
 	rd.on('close', () => {

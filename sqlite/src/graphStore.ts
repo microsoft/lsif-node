@@ -232,7 +232,7 @@ export class GraphStore extends Store {
 			this.insertVertex(group, -1);
 			this.groupInserter.do(group.uri, id);
 		} else {
-			const existingGroup: Id = this.db.prepare('Select id from groups Where uri = $uri').get({ uri: group.uri }).id;
+			const existingGroup: Id = this.db.prepare('Select id from groups Where uri = $uri').get({ uri: group.uri })?.id;
 			if (existingGroup === undefined) {
 				this.activeGroup = id;
 				this.insertVertex(group, -1);
@@ -265,6 +265,7 @@ export class GraphStore extends Store {
 	private insertMoniker(moniker: Moniker): void {
 		const kind: number = this.shortFormMonikerKind(moniker.kind);
 		const unique: number = this.shortFormMonikerUnique(moniker.unique);
+		console.log(`Moniker ${this.transformId(moniker.id)}`);
 		this.monikerInserter.do(moniker.identifier, moniker.scheme, kind, unique, this.transformId(moniker.id));
 		this.insertVertex(moniker);
 	}
