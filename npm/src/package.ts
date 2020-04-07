@@ -4,9 +4,10 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
-import * as paths from 'lsif-tsc/lib/utils/paths';
+import * as paths from './paths';
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {
@@ -22,6 +23,7 @@ class PackageJson {
 		return undefined;
 	}
 
+	public $fileName: string;
 	public $location: string;
 
 	public name: string;
@@ -33,8 +35,9 @@ class PackageJson {
 		url: string;
 	}
 
-	private constructor(location: string, json: any) {
-		this.$location = location;
+	private constructor(fileName: string, json: any) {
+		this.$fileName = paths.normalizeSeparator(fileName);
+		this.$location = path.posix.dirname(this.$fileName);
 		this.name = json.name;
 		this.version = json.version;
 		this.repository = json.repository;

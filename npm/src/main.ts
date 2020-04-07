@@ -8,11 +8,13 @@ import * as readline from 'readline';
 
 import * as minimist from 'minimist';
 import * as uuid from 'uuid';
+import { URI } from 'vscode-uri';
 
+import * as paths from './paths';
 import PackageJson from './package';
 import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel,
-	MonikerAttachEvent, EventScope, EventKind, Event
+	MonikerAttachEvent, EventScope, EventKind, Event, Group, GroupEvent
 } from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
@@ -55,27 +57,11 @@ namespace Options {
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the location of the package.json file.'},
 		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
 		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
 		{ id: 'out', type: 'string', default: undefined, description: 'The output file the converted dump is saved to.'},
 		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout'},
 	];
-}
-
-function normalizePath(value: string): string {
-	return path.posix.normalize(value.replace(/\\/g, '/'));
-}
-
-function makeAbsolute(p: string, root?: string): string {
-	if (path.isAbsolute(p)) {
-		return normalizePath(p);
-	}
-	if (root === undefined) {
-		return normalizePath(path.join(process.cwd(), p));
-	} else {
-		return normalizePath(path.join(root, p));
-	}
 }
 
 class AttachQueue {
@@ -227,25 +213,69 @@ class AttachQueue {
 	}
 }
 
+
+class Groups {
+
+	private groups: Map<Id, Group>;
+
+	private _activeProjectRoot: string | undefined;
+
+	constructor() {
+		this.groups = new Map();
+	}
+
+	public handleGroup(group: Group): void {
+		this.groups.set(group.id, group);
+	}
+
+	public handleGroupBegin(event: GroupEvent): void {
+		const group = this.groups.get(event.data);
+		if (group === undefined) {
+			this._activeProjectRoot = undefined;
+		} else {
+			this._activeProjectRoot = paths.normalizePath(URI.parse(group.rootUri).fsPath);
+		}
+	}
+
+	public handleGroupEnd(event: GroupEvent): void {
+		this._activeProjectRoot = undefined;
+		this.groups.delete(event.data);
+	}
+
+	public get activeProjectRoot(): string | undefined {
+		return this._activeProjectRoot;
+	}
+}
+
 class ExportLinker {
 
 	private packageInformation: PackageInformation | undefined;
+	private pathPrefix: string;
 
-	constructor(private projectRoot: string, private packageJson: PackageJson, private queue: AttachQueue) {
+	constructor(private groups: Groups, private packageJson: PackageJson, private queue: AttachQueue) {
+		this.pathPrefix = packageJson.$location;
+		if (this.pathPrefix[this.pathPrefix.length - 1] !== '/') {
+			this.pathPrefix = `${this.pathPrefix}/`;
+		}
 	}
 
 	public handleMoniker(moniker: Moniker): void {
 		if (moniker.kind !== MonikerKind.export || moniker.scheme !== TscMoniker.scheme) {
 			return;
 		}
-		let tscMoniker: TscMoniker = TscMoniker.parse(moniker.identifier);
-		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(this.projectRoot, tscMoniker.path))) {
+		const projectRoot: string | undefined = this.groups.activeProjectRoot;
+		if (projectRoot === undefined) {
+			return;
+		}
+		const tscMoniker: TscMoniker = TscMoniker.parse(moniker.identifier);
+		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(projectRoot, tscMoniker.path))) {
 			this.ensurePackageInformation();
+			const monikerPath = this.getMonikerPath(projectRoot, tscMoniker);
 			let npmIdentifier: string;
-			if (this.packageJson.main === tscMoniker.path || this.packageJson.typings === tscMoniker.path) {
+			if (this.packageJson.main === monikerPath || this.packageJson.typings === monikerPath) {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, undefined, tscMoniker.name);
 			} else {
-				npmIdentifier = NpmMoniker.create(this.packageJson.name, tscMoniker.path, tscMoniker.name);
+				npmIdentifier = NpmMoniker.create(this.packageJson.name, monikerPath, tscMoniker.name);
 			}
 			let npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
 			this.queue.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id);
@@ -265,13 +295,21 @@ class ExportLinker {
 			this.packageInformation = this.queue.createPackageInformation(this.packageJson);
 		}
 	}
+
+	private getMonikerPath(projectRoot: string, tscMoniker: TscMoniker & { path: string; }): string {
+		const fullPath = path.posix.join(projectRoot, tscMoniker.path);
+		if (paths.isParent(this.pathPrefix, fullPath)) {
+			return path.posix.relative(this.pathPrefix, fullPath);
+		}
+		return tscMoniker.path;
+	}
 }
 
 class ImportLinker {
 
 	private packageData: Map<string,  { packageInfo: PackageInformation, packageJson: PackageJson } | null>;
 
-	constructor(private projectRoot: string, private queue: AttachQueue) {
+	constructor(private group: Groups, private queue: AttachQueue) {
 		this.packageData = new Map();
 	}
 
@@ -283,15 +321,19 @@ class ImportLinker {
 		if (!TscMoniker.hasPath(tscMoniker)) {
 			return;
 		}
-		let parts = tscMoniker.path.split('/');
+		const projectRoot = this.group.activeProjectRoot;
+		if (projectRoot === undefined) {
+			return;
+		}
+		const parts = tscMoniker.path.split('/');
 		let packagePath: string | undefined;
 		let monikerPath: string | undefined;
 		for (let i = parts.length - 1; i >= 0; i--) {
-			let part = parts[i];
+			const part = parts[i];
 			if (part === 'node_modules') {
 				// End is exclusive and one for the name
 				const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2);
-				packagePath = path.join(this.projectRoot, ...parts.slice(0, packageIndex), `package.json`);
+				packagePath = path.join(projectRoot, ...parts.slice(0, packageIndex), `package.json`);
 				monikerPath = parts.slice(packageIndex).join('/');
 				break;
 			}
@@ -301,7 +343,7 @@ class ImportLinker {
 		}
 		let packageData = this.packageData.get(packagePath);
 		if (packageData === undefined) {
-			let packageJson = PackageJson.read(packagePath);
+			const packageJson = PackageJson.read(packagePath);
 			if (packageJson === undefined) {
 				this.packageData.set(packagePath, null);
 			} else {
@@ -319,7 +361,7 @@ class ImportLinker {
 			} else {
 				npmIdentifier = NpmMoniker.create(packageData.packageJson.name, monikerPath, tscMoniker.name);
 			}
-			let npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
+			const npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
 			this.queue.createPackageInformationEdge(npmMoniker.id, packageData.packageInfo.id);
 			this.queue.createAttachEdge(npmMoniker.id, moniker.id);
 		}
@@ -376,34 +418,35 @@ export function main(): void {
 	if (packageFile === undefined) {
 		packageFile = 'package.json';
 	}
-	packageFile = makeAbsolute(packageFile);
+	packageFile = paths.makeAbsolute(packageFile);
 	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
 	let projectRoot = options.projectRoot;
 	if (projectRoot === undefined && packageFile !== undefined) {
 		projectRoot = path.posix.dirname(packageFile);
 		if (!path.isAbsolute(projectRoot)) {
-			projectRoot = makeAbsolute(projectRoot);
+			projectRoot = paths.makeAbsolute(projectRoot);
 		}
 	}
 	if (projectRoot === undefined) {
+		console.error(`No project root specified.`);
 		process.exitCode = -1;
 		return;
 	}
 
 	if (!options.stdin && options.in === undefined) {
-		console.log(`Either a input file using --in or --stdin must be specified`);
+		console.error(`Either a input file using --in or --stdin must be specified`);
 		process.exitCode = -1;
 		return;
 	}
 
 	if (!options.stdout && options.out === undefined) {
-		console.log(`Either a output file using --out or --stdout must be specified.`);
+		console.error(`Either a output file using --out or --stdout must be specified.`);
 		process.exitCode = -1;
 		return;
 	}
 
-	if (options.in !== undefined && options.out !== undefined && makeAbsolute(options.in) === makeAbsolute(options.out)) {
-		console.log(`Input and output file can't be the same.`);
+	if (options.in !== undefined && options.out !== undefined && paths.makeAbsolute(options.in) === paths.makeAbsolute(options.out)) {
+		console.error(`Input and output file can't be the same.`);
 		process.exitCode = -1;
 		return;
 	}
@@ -418,11 +461,12 @@ export function main(): void {
 	}
 
 	const queue: AttachQueue = new AttachQueue(emit);
+	const groups: Groups = new Groups();
 	let exportLinker: ExportLinker | undefined;
 	if (packageJson !== undefined) {
-		exportLinker = new ExportLinker(projectRoot, packageJson, queue);
+		exportLinker = new ExportLinker(groups, packageJson, queue);
 	}
-	const importLinker: ImportLinker = new ImportLinker(projectRoot, queue);
+	const importLinker: ImportLinker = new ImportLinker(groups, queue);
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
@@ -450,8 +494,18 @@ export function main(): void {
 					}
 					importLinker.handleMoniker(element);
 					break;
+				case VertexLabels.group:
+					groups.handleGroup(element);
+					break;
 				case VertexLabels.event:
 					queue.duplicateEvent(element);
+					if (element.scope === EventScope.group) {
+						if (element.kind === EventKind.begin) {
+							groups.handleGroupBegin(element as GroupEvent);
+						} else {
+							groups.handleGroupEnd(element as GroupEvent);
+						}
+					}
 					break;
 			}
 		}

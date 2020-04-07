@@ -20,7 +20,8 @@
 		"minimist": "^1.2.0",
 		"uuid": "^7.0.2",
 		"lsif-protocol": "0.4.3",
-		"lsif-tsc": "0.4.9"
+		"lsif-tsc": "0.4.9",
+		"vscode-uri": "^2.1.1"
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",

@@ -30,7 +30,7 @@ export namespace TscMoniker {
 		return {
 			name: identifier.substring(index + 1),
 			path: identifier.substr(0, index).replace(/::/g, ':')
-		}
+		};
 	}
 
 	export function create(name: string, path?: string): string {
@@ -41,7 +41,7 @@ export namespace TscMoniker {
 	}
 
 	export function hasPath(moniker: TscMoniker): moniker is (TscMoniker & { path: string }) {
-		return !!moniker.path
+		return !!moniker.path;
 	}
 }
 
