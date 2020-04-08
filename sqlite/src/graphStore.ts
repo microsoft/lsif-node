@@ -265,7 +265,6 @@ export class GraphStore extends Store {
 	private insertMoniker(moniker: Moniker): void {
 		const kind: number = this.shortFormMonikerKind(moniker.kind);
 		const unique: number = this.shortFormMonikerUnique(moniker.unique);
-		console.log(`Moniker ${this.transformId(moniker.id)}`);
 		this.monikerInserter.do(moniker.identifier, moniker.scheme, kind, unique, this.transformId(moniker.id));
 		this.insertVertex(moniker);
 	}
