@@ -65,6 +65,50 @@ export namespace Options {
 	];
 }
 
+export class RunError extends Error {
+	private _exitCode: number;
+
+	constructor(message: string, exitCode: number) {
+		super(message);
+		this._exitCode = exitCode;
+	}
+
+	public get exitCode(): number {
+		return this._exitCode;
+	}
+}
+
+export async function run(options: Options): Promise<void> {
+	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
+	if (options.in !== undefined && fs.existsSync(options.in)) {
+		input = fs.createReadStream(options.in, { encoding: 'utf8'});
+	}
+	let store: CompressStore | GraphStore | BlobStore | undefined;
+	if (options.compressOnly && (options.out !== undefined || options.stdout === true)) {
+		store = new CompressStore(input, options.out);
+	} else if (!options.compressOnly && options.out) {
+		let filename = options.out;
+		if (!filename.endsWith('.db')) {
+			filename = filename + '.db';
+		}
+		if (options.format === 'blob') {
+			throw new RunError(`Currently only graph format is supported.`, 1);
+			// if (options.projectVersion === undefined) {
+			// 	console.log(`Blob format requires a project version.`);
+			// 	process.exitCode = -1;
+			// 	return;
+			// }
+			// store = new BlobStore(input, filename, options.projectVersion, options.delete);
+		} else {
+			store = new GraphStore(input, filename, options.mode);
+		}
+	}
+	if (store === undefined) {
+		throw new RunError(`Failed to create output store.`, 1);
+	}
+	return store.run();
+}
+
 export async function main(): Promise<void> {
 
 	let minOpts: minimist.Opts = {
@@ -140,38 +184,17 @@ export async function main(): Promise<void> {
 		return;
 	}
 
-	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
-	if (options.in !== undefined && fs.existsSync(options.in)) {
-		input = fs.createReadStream(options.in, { encoding: 'utf8'});
-	}
-	let store: CompressStore | GraphStore | BlobStore | undefined;
-	if (options.compressOnly && (options.out !== undefined || options.stdout === true)) {
-		store = new CompressStore(input, options.out);
-	} else if (!options.compressOnly && options.out) {
-		let filename = options.out;
-		if (!filename.endsWith('.db')) {
-			filename = filename + '.db';
-		}
-		if (options.format === 'blob') {
-			console.error(`Currently only graph format is supported.`);
-			process.exitCode = 1;
+	try {
+		await run(options);
+	} catch (error) {
+		if (error instanceof RunError) {
+			console.error(error.message);
+			process.exitCode = error.exitCode;
 			return;
-			// if (options.projectVersion === undefined) {
-			// 	console.log(`Blob format requires a project version.`);
-			// 	process.exitCode = -1;
-			// 	return;
-			// }
-			// store = new BlobStore(input, filename, options.projectVersion, options.delete);
 		} else {
-			store = new GraphStore(input, filename, options.mode);
+			throw error;
 		}
 	}
-	if (store === undefined) {
-		console.error(`Failed to create output store.`);
-		process.exitCode = 1;
-		return;
-	}
-	await store.run();
 }
 
 if (require.main === module) {
