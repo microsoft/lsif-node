@@ -78,7 +78,17 @@ export class RunError extends Error {
 	}
 }
 
-export async function run(options: Options): Promise<void> {
+export interface RunOptions {
+	in?: string;
+	stdin: boolean;
+	compressOnly: boolean;
+	out?: string;
+	stdout: boolean;
+	format: 'graph' | 'blob';
+	mode: Mode
+}
+
+export async function run(options: RunOptions): Promise<void> {
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});

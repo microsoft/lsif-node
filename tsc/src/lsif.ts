@@ -1532,7 +1532,7 @@ class Visitor implements ResolverContext {
 
 	private project: Project;
 	private projectRoot: string;
-	private rootDir: string;
+	private sourceRoot: string;
 	private outDir: string;
 	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
@@ -1568,16 +1568,16 @@ class Visitor implements ResolverContext {
 		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
-			this.rootDir = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
+			this.sourceRoot = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
 		} else if (compilerOptions.baseUrl !== undefined) {
-			this.rootDir = tss.makeAbsolute(compilerOptions.baseUrl, configLocation);
+			this.sourceRoot = tss.makeAbsolute(compilerOptions.baseUrl, configLocation);
 		} else {
-			this.rootDir = tss.normalizePath(tss.Program.getCommonSourceDirectory(this.program));
+			this.sourceRoot = tss.normalizePath(tss.Program.getCommonSourceDirectory(this.program));
 		}
 		if (compilerOptions.outDir !== undefined) {
 			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
 		} else {
-			this.outDir = this.rootDir;
+			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = new DataManager(this, this.options.group, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
@@ -1601,7 +1601,7 @@ class Visitor implements ResolverContext {
 			this.visit(sourceFile);
 		}
 		return {
-			rootDir: this.rootDir,
+			rootDir: this.sourceRoot,
 			outDir: this.outDir
 		};
 	}
@@ -1995,7 +1995,7 @@ class Visitor implements ResolverContext {
 
 		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
 			const fileName = sourceFile.fileName;
-			return !sourceFile.isDeclarationFile || paths.isParent(this.rootDir, fileName);
+			return !sourceFile.isDeclarationFile || paths.isParent(this.sourceRoot, fileName);
 		};
 
 		const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
@@ -2025,11 +2025,11 @@ class Visitor implements ResolverContext {
 
 		let monikerPath: string | undefined;
 		let external: boolean = false;
-		if (isFromProjectSources(sourceFile)) {
-			monikerPath = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.rootDir, this.outDir));
-		} else if (isFromExternalLibrary(sourceFile)) {
+		if (isFromExternalLibrary(sourceFile)) {
 			external = true;
 			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
+		} else if (isFromProjectSources(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.sourceRoot, this.outDir));
 		} else if (isFromDependentProject(sourceFile)) {
 			external = true;
 			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
