@@ -795,10 +795,9 @@ class SymbolDataPartition extends LSIFData {
 	}
 }
 
-enum LocationKind {
-	tsLibrary = 1,
-	module = 2,
-	global = 3
+enum SourceFileKind {
+	module = 1,
+	global = 2
 }
 
 interface SymbolAlias {
@@ -840,6 +839,8 @@ class Symbols {
 				}
 			}
 		}
+		// Reference program
+		this.program;
 	}
 
 	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
@@ -1008,7 +1009,7 @@ class Symbols {
 		return result;
 	}
 
-	public getExportPath(symbol: ts.Symbol, kind: LocationKind | undefined): string | undefined {
+	public getExportPath(symbol: ts.Symbol, kind: SourceFileKind | undefined): string | undefined {
 		let result = this.exportedPaths.get(symbol);
 		if (result !== undefined) {
 			return result === null ? undefined : result;
@@ -1025,7 +1026,7 @@ class Symbols {
 			name = name.substr(1, name.length - 2);
 		}
 		if (parent === undefined) {
-			if (tss.isValueModule(symbol) || kind === LocationKind.tsLibrary || kind === LocationKind.global) {
+			if (tss.isValueModule(symbol) || kind === SourceFileKind.global) {
 				this.exportedPaths.set(symbol, name);
 				return name;
 			}
@@ -1060,41 +1061,32 @@ class Symbols {
 
 	}
 
-	public getLocationKind(sourceFiles: ts.SourceFile[]): LocationKind | undefined {
+	public getSourceFileKind(sourceFiles: ts.SourceFile[]): SourceFileKind | undefined {
 		if (sourceFiles.length === 0) {
 			return undefined;
 		}
-		let tsLibraryCount: number = 0;
 		let moduleCount: number = 0;
-		let externalLibraryCount: number = 0;
-		let declarationFileCount: number = 0;
+		let globalCount: number = 0;
 		for (let sourceFile of sourceFiles) {
+			// files that represent a module do have a resolve symbol.
 			if (this.typeChecker.getSymbolAtLocation(sourceFile) !== undefined) {
 				moduleCount++;
 				continue;
 			}
-			if (tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile)) {
-				tsLibraryCount++;
-				continue;
-			}
-			if (tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile)) {
-				externalLibraryCount++;
-				continue;
-			}
-			if (sourceFile.isDeclarationFile && !this.sourceFilesContainingAmbientDeclarations.has(sourceFile.fileName)) {
-				declarationFileCount++;
-				continue;
-			}
+			// Things that are global in case we need to treat them special later on
+			// tss.Program.isSourceFileDefaultLibrary
+			// this.sourceFilesContainingAmbientDeclarations.has(sourceFile.fileName)
+			globalCount++;
+
+			// tss.Program.isSourceFileFromExternalLibrary doesn't give any clear hint whether it
+			// is global or module.
 		}
 		const numberOfFiles = sourceFiles.length;
 		if (moduleCount === numberOfFiles) {
-			return LocationKind.module;
+			return SourceFileKind.module;
 		}
-		if (tsLibraryCount === numberOfFiles) {
-			return LocationKind.tsLibrary;
-		}
-		if ((externalLibraryCount === numberOfFiles || declarationFileCount === numberOfFiles) && moduleCount === 0) {
-			return LocationKind.global;
+		if (globalCount === numberOfFiles) {
+			return SourceFileKind.global;
 		}
 		return undefined;
 	}
@@ -2063,8 +2055,8 @@ class Visitor implements ResolverContext {
 		resolver.forwardSymbolInformation(symbol);
 		const declarations: ts.Node[] | undefined = resolver.getDeclarationNodes(symbol, location);
 		const sourceFiles: ts.SourceFile[] = resolver.getSourceFiles(symbol, location);
-		const locationKind = this.symbols.getLocationKind(sourceFiles);
-		const exportPath: string | undefined = this.symbols.getExportPath(symbol, locationKind);
+		const sourceFileKind = this.symbols.getSourceFileKind(sourceFiles);
+		const exportPath: string | undefined = this.symbols.getExportPath(symbol, sourceFileKind);
 		const scope =  this.resolveEmittingNode(symbol, exportPath !== undefined);
 		if (resolver.requiresSourceFile && sourceFiles.length === 0) {
 			throw new Error(`Resolver requires source file but no source file can be found.`);
@@ -2096,7 +2088,7 @@ class Visitor implements ResolverContext {
 		if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
 			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined);
 		} else if (exportPath !== undefined) {
-			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, exportPath);
+			monikerIdentifer = tss.createMonikerIdentifier(sourceFileKind === SourceFileKind.module ? monikerPath : undefined, exportPath);
 		}
 		if (monikerIdentifer === undefined) {
 			result.addMoniker(id, MonikerKind.local);

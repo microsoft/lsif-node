@@ -44,6 +44,25 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "TS Sample Global",
+			"cwd": "${workspaceFolder}/samples/typescript-global",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "tsconfig.json",
+				 "--outputFormat", "line",
+				 "--noContents",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "TS Sample Ref",
 			"cwd": "${workspaceFolder}/samples/typescript-ref",
 			"program": "${workspaceFolder}/tsc/lib/main.js",

@@ -79,7 +79,7 @@ export function createMonikerIdentifier(path: string | undefined, symbol: string
 		if (symbol === undefined || symbol.length === 0) {
 			throw new Error(`Either path or symbol must be provided.`);
 		}
-		return symbol;
+		return `:${symbol}`;
 	}
 	if (symbol === undefined || symbol.length === 0) {
 		return `${path.replace(/\:/g, '::')}:`;
