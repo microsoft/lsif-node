@@ -317,11 +317,20 @@ async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, bu
 				return process.cwd();
 			}
 		},
-		getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
-		directoryExists: ts.sys.directoryExists,
+		getDefaultLibFileName: (options) => {
+			const result = ts.getDefaultLibFilePath(options);
+			return result;
+		},
+		directoryExists: (path) => {
+			const result = ts.sys.directoryExists(path);
+			return result;
+		},
 		getDirectories: ts.sys.getDirectories,
 		fileExists: ts.sys.fileExists,
-		readFile: ts.sys.readFile,
+		readFile: (path: string, encoding?: string): string | undefined => {
+			const result = ts.sys.readFile(path, encoding);
+			return result;
+		},
 		readDirectory: ts.sys.readDirectory
 	};
 	const languageService = ts.createLanguageService(host);

@@ -4,7 +4,21 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
-
+		{
+			"request": "launch",
+			"type": "node",
+			"name": "test:lsif",
+			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
+			"stopOnEntry": false,
+			"args": ["--timeout", "999999"],
+			"cwd": "${workspaceRoot}/tsc",
+			"runtimeExecutable": null,
+			"runtimeArgs": [],
+			"env": { },
+			"sourceMaps": true,
+			"outFiles": ["${workspaceRoot}/tsc/lib/**/*.js"],
+			"preLaunchTask": "npm: watch"
+		},
 		{
 			"type": "node",
 			"request": "launch",
@@ -31,7 +45,6 @@
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line",
-				 "--typeAcquisition",
 				 "--stdout"
 			],
 			"preLaunchTask": "npm: watch",
@@ -228,7 +241,8 @@
 			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "tsconfig.json",
+				 "-p", "./src/common/tsconfig.json",
+				 "--noContents",
 				 "--outputFormat", "line",
 				 "--stdout"
 			],

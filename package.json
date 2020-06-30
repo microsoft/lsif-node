@@ -20,7 +20,9 @@
 		"eslint": "^6.8.0",
 		"@typescript-eslint/parser": "^2.22.0",
 		"shelljs": "^0.8.3",
-		"rimraf": "^3.0.2"
+		"rimraf": "^3.0.2",
+		"@types/mocha": "^7.0.2",
+		"mocha": "^8.0.1"
 	},
 	"scripts": {
 		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",

@@ -1,3 +1,2 @@
-import * as Is from 'is';
-
-Is.boolean(10);
+export const x: number | string = 10;
+x.toString();
