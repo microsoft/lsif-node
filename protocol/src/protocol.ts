@@ -824,7 +824,7 @@ export enum ItemEdgeProperties {
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {
-	document: DocumentId;
+	shard: Id;
 	property?: ItemEdgeProperties;
 }
 

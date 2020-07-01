@@ -437,15 +437,15 @@ export class EdgeBuilder {
 		};
 	}
 
-	public item(from: DeclarationResult, to: Range[], document: Document): item;
-	public item(from: DefinitionResult, to: Range[], document: Document): item;
-	public item(from: TypeDefinitionResult, to: Range[], document: Document): item;
-	public item(from: ReferenceResult, to: ReferenceResult[], document: Document): item;
-	public item(from: ReferenceResult, to: Range[], document: Document, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
-	public item(from: ReferenceResult, to: Moniker[], document: Document): item;
-	public item(from: ImplementationResult, to: Range[], document: Document): item;
-	public item(from: ImplementationResult, to: ImplementationResult[], document: Document): item;
-	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], document: Document, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
+	public item(from: DeclarationResult, to: Range[], shard: Document | Project): item;
+	public item(from: DefinitionResult, to: Range[], shard: Document | Project): item;
+	public item(from: TypeDefinitionResult, to: Range[], shard: Document | Project): item;
+	public item(from: ReferenceResult, to: ReferenceResult[], shard: Document | Project): item;
+	public item(from: ReferenceResult, to: Range[], shard: Document | Project, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item;
+	public item(from: ReferenceResult, to: Moniker[], shard: Document | Project): item;
+	public item(from: ImplementationResult, to: Range[], shard: Document | Project): item;
+	public item(from: ImplementationResult, to: ImplementationResult[], shard: Document | Project): item;
+	public item(from: DeclarationResult | DefinitionResult | TypeDefinitionResult | ReferenceResult | ImplementationResult, to: Vertex[], shard: Document | Project, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): item {
 		if (to.length === 0) {
 			const result: item = {
 				id: this.nextId(),
@@ -453,7 +453,7 @@ export class EdgeBuilder {
 				label: EdgeLabels.item,
 				outV: from.id,
 				inVs: [],
-				document: document.id
+				shard: shard.id
 			};
 			// We have an empty to array. So treat the empty set as references or use the property provided.
 			if (from.label === 'referenceResult') {
@@ -468,7 +468,7 @@ export class EdgeBuilder {
 			label: EdgeLabels.item,
 			outV: from.id,
 			inVs: to.map(v => v.id),
-			document: document.id
+			shard: shard.id
 		};
 		switch (from.label) {
 			case 'declarationResult':

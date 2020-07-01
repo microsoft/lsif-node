@@ -4,6 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as os from 'os';
+import * as path from 'path';
 
 import * as ts from 'typescript';
 
@@ -16,10 +17,15 @@ import { URI } from 'vscode-uri';
 
 export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 
-	private scriptSnapshots: Map<string, ts.IScriptSnapshot>;
+	private directories: Set<string>;
+	private scriptSnapshots: Map<string, ts.IScriptSnapshot | null>;
 
 	constructor(private cwd: string, private scripts: Map<string, string>, private options: ts.CompilerOptions) {
+		this.directories = new Set();
 		this.scriptSnapshots = new Map();
+		for (const item of scripts.keys()) {
+			this.directories.add(path.dirname(item));
+		}
 	}
 
 	public getScriptFileNames(): string[] {
@@ -39,15 +45,25 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 	}
 
 	public getScriptSnapshot(fileName: string): ts.IScriptSnapshot | undefined {
-		let result: ts.IScriptSnapshot | undefined = this.scriptSnapshots.get(fileName);
-		if (result === undefined) {
-			const content = this.scripts.get(fileName);
-			if (content === undefined) {
-				return undefined;
-			}
-			result = ts.ScriptSnapshot.fromString(content);
-			this.scriptSnapshots.set(fileName, result);
+		let result: ts.IScriptSnapshot | undefined | null = this.scriptSnapshots.get(fileName);
+		if (result !== undefined && result !== null) {
+			return result;
 		}
+		if (result === null) {
+			return undefined;
+		}
+		let content: string | undefined;
+		if (fileName.startsWith(`/@test/`)) {
+			content = this.scripts.get(fileName);
+		} else {
+			content = ts.sys.readFile(fileName);
+		}
+		if (content === undefined) {
+			this.scriptSnapshots.set(fileName, null);
+			return undefined;
+		}
+		result = ts.ScriptSnapshot.fromString(content);
+		this.scriptSnapshots.set(fileName, result);
 		return result;
 	}
 
@@ -61,8 +77,11 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 	}
 
 	public directoryExists(path: string): boolean  {
-		const result = ts.sys.directoryExists(path);
-		return result;
+		if (path.startsWith('/@test')) {
+			return this.directories.has(path);
+		} else {
+			return ts.sys.directoryExists(path);
+		}
 	}
 
 	public getDirectories(path: string): string[] {
@@ -80,8 +99,8 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 		return result;
 	}
 
-	public readDirectory(path: string): string[] {
-		const result = ts.sys.readDirectory(path);
+	public readDirectory(path: string, extensions?: readonly string[], exclude?: readonly string[], include?: readonly string[], depth?: number): string[] {
+		const result = ts.sys.readDirectory(path, extensions, exclude, include, depth);
 		return result;
 	}
 }

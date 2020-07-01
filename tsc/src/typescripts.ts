@@ -250,51 +250,61 @@ export function isTypeAlias(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 }
 
-export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): boolean {
+export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol): boolean {
 	const containingType = (symbol as InternalSymbol).containingType;
 	if (containingType !== undefined && containingType.isUnionOrIntersection()) {
 		return true;
 	}
 
-	if (location !== undefined) {
-		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		if (type.isUnionOrIntersection()) {
-			return true;
-		}
+	const type = typeChecker.getDeclaredTypeOfSymbol(symbol);
+	if (type.isUnionOrIntersection()) {
+		return true;
 	}
 
 	return false;
 }
 
-export function getCompositeSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): ts.Symbol[] | undefined {
-	// We have something like x: { prop: number} | { prop: string };
-	const containingType = (symbol as InternalSymbol).containingType;
-	if (containingType !== undefined) {
-		let result: ts.Symbol[] = [];
-		for (let typeElem of containingType.types) {
-			const symbolElem = typeElem.getProperty(symbol.getName());
-			if (symbolElem !== undefined) {
-				result.push(symbolElem);
+export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol[] | undefined {
+
+	function _getCompositeLeafSymbols(result: Map<string, ts.Symbol>, typeChecker: ts.TypeChecker, symbol: ts.Symbol): void {
+		const containingType = (symbol as InternalSymbol).containingType;
+		if (containingType !== undefined) {
+			for (let typeElem of containingType.types) {
+				const symbolElem = typeElem.getProperty(symbol.getName());
+				if (symbolElem !== undefined) {
+					const key = createSymbolKey(typeChecker, symbolElem);
+					if (!result.has(key)) {
+						_getCompositeLeafSymbols(result, typeChecker, symbolElem);
+					}
+					return;
+				}
 			}
 		}
-		return result.length > 0 ? result : undefined;
-	}
-	if (location !== undefined) {
-		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		// We have something like x: { prop: number} | { prop: string };
+		const type = typeChecker.getDeclaredTypeOfSymbol(symbol);
 		// we have something like x: A | B;
 		if (type.isUnionOrIntersection()) {
-			let result: ts.Symbol[] = [];
 			for (let typeElem of type.types) {
 				const symbolElem = typeElem.symbol;
 				// This happens for base types like undefined, number, ....
 				if (symbolElem !== undefined) {
-					result.push(symbolElem);
+					const key = createSymbolKey(typeChecker, symbol);
+					if (!result.has(key)) {
+						_getCompositeLeafSymbols(result, typeChecker, symbolElem);
+					}
+					return;
 				}
 			}
-			return result;
 		}
+		result.set(createSymbolKey(typeChecker, symbol), symbol);
 	}
-	return undefined;
+
+	const result: Map<string, ts.Symbol> = new Map();
+	_getCompositeLeafSymbols(result, typeChecker, symbol);
+	if (result.size === 0) {
+		return undefined;
+	}
+	return Array.from(result.values());
 }
 
 export function isPrivate(symbol: ts.Symbol): boolean {
