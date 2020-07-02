@@ -17,7 +17,8 @@
 			"env": { },
 			"sourceMaps": true,
 			"outFiles": ["${workspaceRoot}/tsc/lib/**/*.js"],
-			"preLaunchTask": "npm: watch"
+			"preLaunchTask": "npm: watch",
+			"smartStep": false
 		},
 		{
 			"type": "node",

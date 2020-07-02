@@ -21,3 +21,9 @@ type E = A | (A & B);
 let e: E;
 
 e.name;
+
+type F = A & B;
+
+let f: F;
+
+f.name;

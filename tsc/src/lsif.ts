@@ -23,7 +23,6 @@ import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
-import { StringifyOptions } from 'querystring';
 
 interface Disposable {
 	(): void;
@@ -169,7 +168,7 @@ interface EmitContext {
 interface SymbolDataContext extends EmitContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
 	getProjectData(): ProjectData;
-	getOrCreateSymbolData(symbolId: SymbolId, create: () => SymbolData): SymbolData;
+	getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult;
 	manageLifeCycle(node: ts.Node, symbolData: SymbolData): void;
 }
 
@@ -246,7 +245,7 @@ class DocumentData extends LSIFData {
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: SymbolDataContext, public document: Document, public monikerPath: string | undefined, public external: boolean) {
+	public constructor(context: SymbolDataContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
 		super(context);
 		this.ranges = [];
 	}
@@ -1088,15 +1087,19 @@ class Symbols {
 	}
 }
 
-interface ResolverContext {
-	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
-	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
-}
 
 interface MonikerData {
 	exportPath: string;
 	moduleSystem?: ModuleSystemKind;
 }
+
+type ResolverResult = [SymbolData, MonikerData | undefined];
+
+interface ResolverContext {
+	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+}
+
 
 abstract class SymbolDataResolver {
 
@@ -1121,7 +1124,7 @@ abstract class SymbolDataResolver {
 		return Array.from(sourceFiles.values());
 	}
 
-	public getIdentifierInformation(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+	public getIdentifierInformation(symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
 		if (tss.isNamedDeclaration(declaration)) {
 			let name = declaration.name;
 			return [name, name.getText()];
@@ -1204,7 +1207,7 @@ abstract class SymbolDataResolver {
 		return result;
 	}
 
-	public abstract resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): [SymbolData, MonikerData | undefined];
+	public abstract resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult;
 }
 
 class StandardResolver extends SymbolDataResolver {
@@ -1213,7 +1216,7 @@ class StandardResolver extends SymbolDataResolver {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): [SymbolData, MonikerData | undefined] {
+	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult {
 		const monikerData = this.getMonikerData(sourceFiles, symbol);
 		return [new StandardSymbolData(this.symbolDataContext, id, this.resolveEmittingNode(symbol, monikerData !== undefined)), monikerData];
 	}
@@ -1225,7 +1228,7 @@ class AliasResolver extends SymbolDataResolver {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): [SymbolData, MonikerData | undefined] {
+	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult {
 		const monikerData = this.getMonikerData(sourceFiles, symbol);
 		const aliased = this.typeChecker.getAliasedSymbol(symbol);
 		if (aliased !== undefined) {
@@ -1244,7 +1247,7 @@ class MethodResolver extends SymbolDataResolver {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol, ): [SymbolData, MonikerData | undefined] {
+	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol, ): ResolverResult {
 		if (sourceFiles === undefined) {
 			throw new Error(`Need to understand how a method symbol can exist without a source file`);
 		}
@@ -1289,7 +1292,7 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 		return super.getSourceFiles(symbol);
 	}
 
-	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): [SymbolData, MonikerData | undefined] {
+	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult {
 		const composites = tss.getCompositeLeafSymbols(this.typeChecker, symbol);
 		if (composites !== undefined) {
 			const datas: SymbolData[] = [];
@@ -1325,7 +1328,7 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 		}
 	}
 
-	public getIdentifierInformation(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+	public getIdentifierInformation(symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
 		if (tss.isTransient(symbol)) {
 			return [undefined, undefined];
 		}
@@ -1347,7 +1350,7 @@ class TransientResolver extends SymbolDataResolver {
 		return undefined;
 	}
 
-	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): [SymbolData, MonikerData | undefined] {
+	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult {
 		return [new TransientSymbolData(this.symbolDataContext, id), undefined];
 	}
 }
@@ -1505,14 +1508,16 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateSymbolData(symbolId: SymbolId, create: () => SymbolData): SymbolData {
-		let result = this.getSymbolData(symbolId);
-		if (result === undefined) {
-			result = create();
-			this.symbolDatas.set(result.getId(), result);
-			result.begin();
-			this.symbolStats++;
+	public getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
+		let symbolData = this.getSymbolData(symbolId);
+		if (symbolData !== undefined) {
+			return [symbolData, undefined];
 		}
+		const result = create();
+		symbolData = result[0];
+		this.symbolDatas.set(symbolData.getId(), symbolData);
+		symbolData.begin();
+		this.symbolStats++;
 		return result;
 	}
 
@@ -1999,7 +2004,6 @@ class Visitor implements ResolverContext {
 			return;
 		}
 		let sourceFile = this.currentSourceFile!;
-		@@@ Need to do something about transient ...
 		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
 			return;
 		}
@@ -2127,43 +2131,45 @@ class Visitor implements ResolverContext {
 			? sourceFiles.map((sourceFile) => this.getOrCreateDocumentData(sourceFile))
 			: undefined;
 
-		const moniker = resolver.getMoniker(symbol, documentDatas);
+		let monikerData: MonikerData | undefined;
+		[result, monikerData] = this.dataManager.getOrCreateSymbolData(id, () => {
+			return resolver.resolve(sourceFiles, id, symbol);
+		});
 
-		const sourceFileKind = this.symbols.getModuleSystemKind(sourceFiles);
-		const exportPath: string | undefined = this.symbols.getExportPath(symbol, sourceFileKind);
-		const scope =  this.resolveEmittingNode(symbol, exportPath !== undefined);
-		if (resolver.requiresSourceFile && sourceFiles.length === 0) {
-			throw new Error(`Resolver requires source file but no source file can be found.`);
-		}
-		// Make sure we create all document data before we create the symbol.
-		let monikerPath: string | undefined | null;
-		let external: boolean = false;
-		for (let sourceFile of sourceFiles.values()) {
-			let documentData = this.getOrCreateDocumentData(sourceFile);
-			if (monikerPath === undefined) {
-				monikerPath = documentData.monikerPath;
-				external = documentData.external;
-			} else if (monikerPath !== documentData.monikerPath) {
-				monikerPath = null;
+
+		let monikerIdentifer: string | undefined;
+		const monikerFilePaths: Set<string> = new Set();
+		let external: boolean | undefined;
+		if (documentDatas !== undefined) {
+			for (const data of documentDatas) {
+				if (data.monikerFilePath !== undefined) {
+					monikerFilePaths.add(data.monikerFilePath);
+				}
+				if (external === undefined) {
+					external = data.external;
+				} else {
+					external = external && data.external;
+				}
 			}
 		}
-		if (monikerPath === null) {
-			monikerPath = undefined;
-			external = false;
+		const monikerFilePath: string | undefined = monikerFilePaths.size === 0
+			? undefined
+			: monikerFilePaths.size === 1
+				? monikerFilePaths.values().next().value
+				: `[${Array.from(monikerFilePaths.values()).join(',')}]`;
+
+		if (tss.isSourceFile(symbol) && monikerFilePath !== undefined) {
+			monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, undefined);
 		}
-		result = this.dataManager.getOrCreateSymbolData(id, () => {
-			return resolver.requiresSourceFile ? resolver.resolve(resolver.getPartitionScope(sourceFiles), id, symbol, scope) : resolver.resolve(undefined, id, symbol, scope);
-		});
-		if (declarations === undefined || declarations.length === 0) {
-			return result;
+		if (monikerIdentifer === undefined && monikerData !== undefined) {
+			if (monikerData.moduleSystem === undefined || monikerData.moduleSystem === ModuleSystemKind.global) {
+				monikerIdentifer = tss.createMonikerIdentifier(undefined, monikerData.exportPath);
+			}
+			if (monikerIdentifer === undefined && monikerFilePath !== undefined) {
+				monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, monikerData.exportPath);
+			}
 		}
-		// The symbol represents a source file
-		let monikerIdentifer: string | undefined;
-		if (tss.isSourceFile(symbol) && monikerPath !== undefined) {
-			monikerIdentifer = tss.createMonikerIdentifier(monikerPath, undefined);
-		} else if (exportPath !== undefined) {
-			monikerIdentifer = tss.createMonikerIdentifier(sourceFileKind === ModuleSystemKind.module ? monikerPath : undefined, exportPath);
-		}
+
 		if (monikerIdentifer === undefined) {
 			result.addMoniker(id, MonikerKind.local);
 		} else {
@@ -2174,10 +2180,14 @@ class Visitor implements ResolverContext {
 			}
 		}
 
+		if (declarations === undefined || declarations.length === 0) {
+			return result;
+		}
+
 		let hover: lsp.Hover | undefined;
 		for (let declaration of declarations) {
 			const sourceFile = declaration.getSourceFile();
-			const [identifierNode, identifierText] = resolver.getIdentifierInformation(sourceFile, symbol, declaration);
+			const [identifierNode, identifierText] = resolver.getIdentifierInformation(symbol, declaration);
 			if (identifierNode !== undefined && identifierText !== undefined) {
 				const documentData = this.getOrCreateDocumentData(sourceFile);
 				const range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);

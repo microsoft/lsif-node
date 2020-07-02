@@ -266,41 +266,40 @@ export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol): boo
 
 export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol[] | undefined {
 
-	function _getCompositeLeafSymbols(result: Map<string, ts.Symbol>, typeChecker: ts.TypeChecker, symbol: ts.Symbol): void {
+	function _getCompositeLeafSymbols(result: Map<string, ts.Symbol>, processed: Set<String>, typeChecker: ts.TypeChecker, symbol: ts.Symbol): void {
+		const symbolKey = createSymbolKey(typeChecker, symbol);
+		if (processed.has(symbolKey)) {
+			return;
+		}
+		processed.add(symbolKey);
 		const containingType = (symbol as InternalSymbol).containingType;
 		if (containingType !== undefined) {
 			for (let typeElem of containingType.types) {
 				const symbolElem = typeElem.getProperty(symbol.getName());
 				if (symbolElem !== undefined) {
-					const key = createSymbolKey(typeChecker, symbolElem);
-					if (!result.has(key)) {
-						_getCompositeLeafSymbols(result, typeChecker, symbolElem);
-					}
-					return;
+					_getCompositeLeafSymbols(result, processed, typeChecker, symbolElem);
 				}
 			}
-		}
-		// We have something like x: { prop: number} | { prop: string };
-		const type = typeChecker.getDeclaredTypeOfSymbol(symbol);
-		// we have something like x: A | B;
-		if (type.isUnionOrIntersection()) {
-			for (let typeElem of type.types) {
-				const symbolElem = typeElem.symbol;
-				// This happens for base types like undefined, number, ....
-				if (symbolElem !== undefined) {
-					const key = createSymbolKey(typeChecker, symbol);
-					if (!result.has(key)) {
-						_getCompositeLeafSymbols(result, typeChecker, symbolElem);
+		} else {
+			// We have something like x: { prop: number} | { prop: string };
+			const type = typeChecker.getDeclaredTypeOfSymbol(symbol);
+			// we have something like x: A | B;
+			if (type.isUnionOrIntersection()) {
+				for (let typeElem of type.types) {
+					const symbolElem = typeElem.symbol;
+					// This happens for base types like undefined, number, ....
+					if (symbolElem !== undefined) {
+						_getCompositeLeafSymbols(result, processed, typeChecker, symbolElem);
 					}
-					return;
 				}
+			} else {
+				result.set(symbolKey, symbol);
 			}
 		}
-		result.set(createSymbolKey(typeChecker, symbol), symbol);
 	}
 
 	const result: Map<string, ts.Symbol> = new Map();
-	_getCompositeLeafSymbols(result, typeChecker, symbol);
+	_getCompositeLeafSymbols(result, new Set(), typeChecker, symbol);
 	if (result.size === 0) {
 		return undefined;
 	}
