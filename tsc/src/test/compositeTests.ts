@@ -26,10 +26,13 @@ suite('Union Types', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		const xm = JSON.parse('{"id":13,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}');
-		const toString = JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}');
-		assert.deepEqual(emitter.elements.get(13), xm);
-		assert.deepEqual(emitter.elements.get(24), toString);
+		const validate: Element[] = [
+			JSON.parse('{"id":13,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
 	});
 	test('Union type (2)', () => {
 		const emitter = lsif('/@test', new Map([
