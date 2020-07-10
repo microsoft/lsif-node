@@ -85,11 +85,14 @@ suite('Union Types', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
+			JSON.parse('{"id":20,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:A.name","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":34,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:B.name","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":151,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":152,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":151,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":176,"type":"edge","label":"textDocument/references","outV":151,"inV":175}'),
-			JSON.parse('{"id":177,"type":"edge","label":"item","outV":175,"inVs":[83,96],"shard":2,"property":"referenceResults"}')
+			JSON.parse('{"id":177,"type":"edge","label":"item","outV":175,"inVs":[83,96],"shard":2,"property":"referenceResults"}'),
+			JSON.parse('{"id":178,"type":"edge","label":"item","outV":175,"inVs":[20,34],"shard":2,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

@@ -643,15 +643,22 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 		super.begin();
 		const sourceFile = this.sourceFiles !== undefined ? this.sourceFiles[0] : undefined;
 		for (let element of this.elements) {
+			const moniker = element.getMoniker();
 			// We take the first source file to cluster this. We might want to find a source
 			// file that has already changed to make the diff minimal.
 			if (sourceFile) {
 				super.addReference(sourceFile, element.getOrCreateReferenceResult());
+				if (moniker !== undefined && moniker.scheme !== 'local') {
+					super.addReference(sourceFile, moniker);
+				}
 			} else {
 				if (this.transientPartition === undefined) {
 					this.transientPartition = new SymbolDataPartition(this.context, this, this.context.getProjectData().project);
 				}
 				this.transientPartition.addReference(element.getOrCreateReferenceResult());
+				if (moniker !== undefined && moniker.scheme !== 'local') {
+					this.transientPartition.addReference(moniker);
+				}
 			}
 		}
 		this.sourceFiles = undefined;
@@ -1347,7 +1354,7 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 				}
 				if (monikerIds.length > 0) {
 					const monikerData: MonikerData = {
-						exportPath: `[${monikerIds.join(',')}]`,
+						exportPath: `[${monikerIds.sort().join(',')}]`,
 						moduleSystem: ModuleSystemKind.global
 					};
 					return [new UnionOrIntersectionSymbolData(this.symbolDataContext, id, sourceFiles, datas), monikerData];
