@@ -837,6 +837,10 @@ interface SymbolAlias {
 
 class Symbols {
 
+	private static topLevelPaths: Map<number, number[]> = new Map([
+		[ts.SyntaxKind.VariableDeclaration, [ts.SyntaxKind.VariableDeclarationList, ts.SyntaxKind.VariableStatement, ts.SyntaxKind.SourceFile]]
+	]);
+
 	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private exportedPaths: LRUCache<ts.Symbol, string | null>;
@@ -1051,7 +1055,10 @@ class Symbols {
 			name = name.substr(1, name.length - 2);
 		}
 		if (parent === undefined) {
-			if (tss.isValueModule(symbol) || kind === ModuleSystemKind.global) {
+			// In a global module system symbol inside other namespace don't have a parent
+			// if the symbol is not exported. So we need to check if the symbol is a top
+			// level symbol
+			if (tss.isValueModule(symbol) || (kind === ModuleSystemKind.global && this.isTopLevelSymbol(symbol))) {
 				this.exportedPaths.set(symbol, name);
 				return name;
 			}
@@ -1083,7 +1090,34 @@ class Symbols {
 				}
 			}
 		}
+	}
 
+	public isTopLevelSymbol(symbol: ts.Symbol): boolean {
+		const declarations: ts.Declaration[] | undefined = symbol.declarations;
+		if (declarations === undefined || declarations.length === 0) {
+			return false;
+		}
+
+		let result: boolean = false;
+		for (const declaration of declarations) {
+			const path: number[] | undefined = Symbols.topLevelPaths.get(declaration.kind);
+			if (path === undefined) {
+				result = result || ts.isSourceFile(declaration);
+			} else {
+				result = result || this.matchPath(declaration.parent, path);
+			}
+		}
+		return result;
+	}
+
+	public matchPath(node: ts.Node, path: number[]): boolean {
+		for (const kind of path) {
+			if (node === undefined || node.kind !== kind) {
+				return false;
+			}
+			node = node.parent;
+		}
+		return true;
 	}
 }
 
