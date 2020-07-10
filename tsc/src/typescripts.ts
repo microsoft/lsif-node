@@ -166,12 +166,13 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 			return None;
 		}
 	}
-	let fragments: { f: string; s: number; e: number}[] = [];
+	let fragments: { f: string; s: number; e: number; k: number }[] = [];
 	for (let declaration of declarations) {
 		fragments.push({
 			f: declaration.getSourceFile().fileName,
 			s: declaration.getStart(),
-			e: declaration.getEnd()
+			e: declaration.getEnd(),
+			k: declaration.kind
 		});
 	}
 	let hash = crypto.createHash('md5');
