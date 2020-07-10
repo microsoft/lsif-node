@@ -1,2 +1,8 @@
-interface A { name: string; }
-namespace A { export const a: number = 10; }
+export interface A { name: string };
+export interface B { name: string };
+export interface C { name: string };
+
+export type D = A | (A & B);
+
+let d: D;
+d.name;

@@ -1043,7 +1043,7 @@ class Symbols {
 		if (result !== undefined) {
 			return result === null ? undefined : result;
 		}
-		if (tss.isSourceFile(symbol)) {
+		if (tss.isSourceFile(symbol) && kind === ModuleSystemKind.module) {
 			this.exportedPaths.set(symbol, '');
 			return '';
 		}
@@ -1058,7 +1058,7 @@ class Symbols {
 			// In a global module system symbol inside other namespace don't have a parent
 			// if the symbol is not exported. So we need to check if the symbol is a top
 			// level symbol
-			if (tss.isValueModule(symbol) || (kind === ModuleSystemKind.global && this.isTopLevelSymbol(symbol))) {
+			if (kind === ModuleSystemKind.global && this.isTopLevelSymbol(symbol)) {
 				this.exportedPaths.set(symbol, name);
 				return name;
 			}
@@ -1102,7 +1102,7 @@ class Symbols {
 		for (const declaration of declarations) {
 			const path: number[] | undefined = Symbols.topLevelPaths.get(declaration.kind);
 			if (path === undefined) {
-				result = result || ts.isSourceFile(declaration);
+				result = result || ts.isSourceFile(declaration.parent);
 			} else {
 				result = result || this.matchPath(declaration.parent, path);
 			}

@@ -39,7 +39,7 @@ suite('Global Module Tests', () => {
 		]), { });
 		const validate: Element[] = [
 			JSON.parse('{"id":8,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":N","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"AVHw8M/kvg3EYGNlaRKerg==","unique":"document","kind":"local"}')
+			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"X7TAD/7fCTUXK66nQL3Zcw==","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
