@@ -17,10 +17,10 @@
 		"lsif-npm": "./bin/lsif-npm"
 	},
 	"dependencies": {
-		"minimist": "^1.2.0",
-		"uuid": "^7.0.2",
 		"lsif-protocol": "0.5.0-next.3",
 		"lsif-tsc": "0.5.0-next.1",
+		"minimist": "^1.2.5",
+		"uuid": "^7.0.2",
 		"vscode-uri": "^2.1.1"
 	},
 	"devDependencies": {
