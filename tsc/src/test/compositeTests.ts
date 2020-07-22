@@ -53,6 +53,7 @@ suite('Union Types', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
+		console.log(emitter.toString());
 		const validate: Element[] = [
 			JSON.parse('{"id":123,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":124,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),

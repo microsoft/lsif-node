@@ -27,7 +27,8 @@
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
 		"@types/uuid": "^8.0.0",
-		"@types/npm": "^2.0.31"
+		"@types/npm": "^2.0.31",
+		"@types/mocha": "^8.0.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",

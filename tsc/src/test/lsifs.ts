@@ -10,7 +10,7 @@ import * as ts from 'typescript';
 
 import { Vertex, Edge, Id, Element } from 'lsif-protocol';
 
-import { lsif as _lsif } from '../lsif';
+import { lsif as _lsif, EmitterContext, DataManager } from '../lsif';
 import { Emitter } from '../emitters/emitter';
 import { Builder } from '../graph';
 import { URI } from 'vscode-uri';
@@ -144,8 +144,25 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 		return counter++;
 	};
 	const builder = new Builder({ idGenerator: generator, emitSource: false });
-
+	const emitterContext: EmitterContext = {
+		get edge() {
+			return builder.edge;
+		},
+		get vertex() {
+			return builder.vertex;
+		},
+		emit(element: Vertex | Edge): void {
+			emitter.emit(element);
+		}
+	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
-	_lsif(emitter, builder, languageService, [], { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined });
+	emitterContext.emit(group);
+	const dataManager: DataManager = new DataManager(emitterContext, group, false);
+	try {
+		dataManager.begin();
+		_lsif(emitterContext, languageService, dataManager, [], { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined });
+	} finally {
+		dataManager.end();
+	}
 	return emitter;
 }

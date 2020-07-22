@@ -17,9 +17,8 @@ import {
 	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope
 } from 'lsif-protocol';
 
-import { VertexBuilder, EdgeBuilder, Builder } from './graph';
+import { VertexBuilder, EdgeBuilder } from './graph';
 
-import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
@@ -159,13 +158,13 @@ namespace Converter {
 
 type SymbolId = string;
 
-interface EmitContext {
+export interface EmitterContext {
 	vertex: VertexBuilder;
 	edge: EdgeBuilder;
 	emit(element: Vertex | Edge): void;
 }
 
-interface SymbolDataContext extends EmitContext {
+interface SymbolDataContext extends EmitterContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
 	getProjectData(): ProjectData;
 	getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult;
@@ -1466,7 +1465,7 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, group: Group | undefined, private options: Options) {
+	public constructor(private context: EmitterContext, group: Group | undefined, private reportStats: boolean) {
 		this.group = group;
 		this.projectDatas = [];
 		this.documentDatas = new Map();
@@ -1503,7 +1502,7 @@ export class DataManager implements SymbolDataContext {
 		if (this.projectDatas.length === 0) {
 			throw new Error(`No project data available`);
 		}
-		return this.projectDatas[this.projectDatas.length];
+		return this.projectDatas[this.projectDatas.length - 1];
 	}
 
 	public endProject(project: Project): void {
@@ -1515,7 +1514,7 @@ export class DataManager implements SymbolDataContext {
 			throw new Error(`Unbalanced end call. Expected ${JSON.stringify(project, undefined, 0)} but got ${JSON.stringify(data.projectData.project, undefined, 0)}`);
 		}
 		data.projectData.end();
-		if (!this.options.stdout) {
+		if (this.reportStats) {
 			console.log('');
 			console.log(`Processed ${data.symbolStats} symbols in ${data.documentStats} files`);
 		}
@@ -1680,7 +1679,7 @@ class Visitor implements ResolverContext {
 		typeAlias: TypeAliasResolver;
 	};
 
-	constructor(private emitter: Emitter, private builder: Builder, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
+	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
 		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
 		this.symbolContainer = [];
@@ -2356,11 +2355,11 @@ class Visitor implements ResolverContext {
 	}
 
 	public get vertex(): VertexBuilder {
-		return this.builder.vertex;
+		return this.emitter.vertex;
 	}
 
 	public get edge(): EdgeBuilder {
-		return this.builder.edge;
+		return this.emitter.edge;
 	}
 
 	public emit(element: Vertex | Edge): void {
@@ -2379,12 +2378,8 @@ class Visitor implements ResolverContext {
 	}
 }
 
-let dataManager: DataManager | undefined;
-export function lsif(emitter: Emitter, builder: Builder, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
-	if (dataManager === undefined) {
-		dataManager + new DataManager(emitter, options.group, options);
-	}
-	let visitor = new Visitor(emitter, builder, languageService, dependsOn, options);
+export function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+	let visitor = new Visitor(emitter, languageService, dataManager, dependsOn, options);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
 	return result;

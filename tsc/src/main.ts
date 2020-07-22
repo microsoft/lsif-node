@@ -12,11 +12,11 @@ import * as minimist from 'minimist';
 
 import * as ts from 'typescript';
 
-import { Id, Version, EventKind, Group, EventScope } from 'lsif-protocol';
+import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-protocol';
 
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as LSIFOptions } from './lsif';
+import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
 import { Builder } from './graph';
 import * as tss from './typescripts';
@@ -252,7 +252,7 @@ interface ProcessProjectOptions {
 	processed: Map<String, ProjectInfo>;
 }
 
-async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, builder: Builder, typingsInstaller: TypingsInstaller, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
+async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
 	const configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
 	const key = configFilePath ?? makeKey(config);
 	if (options.processed.has(key)) {
@@ -345,7 +345,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, bu
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const result = await processProject(reference.commandLine, emitter, builder, typingsInstaller, options);
+				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, options);
 				if (typeof result === 'number') {
 					return result;
 				}
@@ -386,7 +386,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: Emitter, bu
 		stdout: options.stdout
 	};
 
-	const result = lsif(emitter, builder, languageService, dependsOn, lsifOptions);
+	const result = lsif(emitter, languageService, dataManager, dependsOn, lsifOptions);
 	if (typeof result !== 'number') {
 		options.processed.set(key, result);
 	}
@@ -491,6 +491,17 @@ async function run(this: void, args: string[]): Promise<void> {
 		idGenerator,
 		emitSource: !options.noContents
 	});
+	const emitterContext: EmitterContext = {
+		get edge() {
+			return builder.edge;
+		},
+		get vertex() {
+			return builder.vertex;
+		},
+		emit(element: Vertex | Edge): void {
+			emitter.emit(element);
+		}
+	};
 	emitter.emit(builder.vertex.metaData(Version));
 	const group = builder.vertex.group(resolvedGroupConfig.uri, resolvedGroupConfig.name, resolvedGroupConfig.rootUri);
 	group.conflictResolution = resolvedGroupConfig.conflictResolution;
@@ -506,7 +517,8 @@ async function run(this: void, args: string[]): Promise<void> {
 		stdout: options.stdout,
 		processed: new Map()
 	};
-	await processProject(config, emitter, builder, new TypingsInstaller(),  processProjectOptions);
+	const dataManager: DataManager = new DataManager(emitterContext, group, !options.stdout);
+	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
 }
