@@ -1460,18 +1460,15 @@ export interface Options {
 
 export class DataManager implements SymbolDataContext {
 
-	private projectData: ProjectData;
-	private documentStats: number;
+	private group: Group | undefined;
+	private projectDatas: { projectData: ProjectData, documentStats: number, symbolStats: number }[];
 	private documentDatas: Map<string, DocumentData | null>;
-	private symbolStats: number;
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, group: Group | undefined, project: Project, private options: Options) {
-		this.projectData = new ProjectData(this, group, project);
-		this.projectData.begin();
-		this.documentStats = 0;
-		this.symbolStats = 0;
+	public constructor(private context: EmitContext, group: Group | undefined, private options: Options) {
+		this.group = group;
+		this.projectDatas = [];
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.clearOnNode = new Map();
@@ -1489,11 +1486,42 @@ export class DataManager implements SymbolDataContext {
 		this.context.emit(element);
 	}
 
-	public getProjectData(): ProjectData {
-		return this.projectData;
+	public begin(): void {
 	}
 
-	public projectProcessed(): void {
+	public beginProject(project: Project): void {
+		const projectData = new ProjectData(this, this.group, project);
+		this.projectDatas.push({ projectData, documentStats: 0, symbolStats: 0 });
+		projectData.begin();
+	}
+
+	public getProjectData(): ProjectData {
+		return this._getProjectData().projectData;
+	}
+
+	private _getProjectData() {
+		if (this.projectDatas.length === 0) {
+			throw new Error(`No project data available`);
+		}
+		return this.projectDatas[this.projectDatas.length];
+	}
+
+	public endProject(project: Project): void {
+		const data = this.projectDatas.pop();
+		if (data === undefined) {
+			throw new Error(`No project data available`);
+		}
+		if (data.projectData.project !== project) {
+			throw new Error(`Unbalanced end call. Expected ${JSON.stringify(project, undefined, 0)} but got ${JSON.stringify(data.projectData.project, undefined, 0)}`);
+		}
+		data.projectData.end();
+		if (!this.options.stdout) {
+			console.log('');
+			console.log(`Processed ${data.symbolStats} symbols in ${data.documentStats} files`);
+		}
+	}
+
+	public end(): void {
 		for (let entry of this.symbolDatas.entries()) {
 			if (entry[1]) {
 				entry[1].end();
@@ -1504,11 +1532,6 @@ export class DataManager implements SymbolDataContext {
 			if (entry[1]) {
 				entry[1].end();
 			}
-		}
-		this.projectData.end();
-		if (!this.options.stdout) {
-			console.log('');
-			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
 		}
 	}
 
@@ -1526,8 +1549,9 @@ export class DataManager implements SymbolDataContext {
 			result = new DocumentData(this, document, monikerPath, external);
 			this.documentDatas.set(fileName, result);
 			result.begin();
-			this.projectData.addDocument(document);
-			this.documentStats++;
+			const data = this._getProjectData();
+			data.projectData.addDocument(document);
+			data.documentStats++;
 		}
 		return result;
 	}
@@ -1558,7 +1582,7 @@ export class DataManager implements SymbolDataContext {
 		symbolData = result[0];
 		this.symbolDatas.set(symbolData.getId(), symbolData);
 		symbolData.begin();
-		this.symbolStats++;
+		this._getProjectData().symbolStats++;
 		return result;
 	}
 
@@ -1656,7 +1680,7 @@ class Visitor implements ResolverContext {
 		typeAlias: TypeAliasResolver;
 	};
 
-	constructor(private emitter: Emitter, private builder: Builder, private languageService: ts.LanguageService, dependsOn: ProjectInfo[], private options: Options) {
+	constructor(private emitter: Emitter, private builder: Builder, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
 		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
 		this.symbolContainer = [];
@@ -1684,7 +1708,8 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.sourceRoot;
 		}
-		this.dataManager = new DataManager(this, this.options.group, this.project, options);
+		this.dataManager = dataManager;
+		this.dataManager.beginProject(this.project);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1712,7 +1737,7 @@ class Visitor implements ResolverContext {
 	}
 
 	public endVisitProgram(): void {
-		this.dataManager.projectProcessed();
+		this.dataManager.endProject(this.project);
 	}
 
 	protected visit(node: ts.Node): void {
@@ -2354,8 +2379,11 @@ class Visitor implements ResolverContext {
 	}
 }
 
-
+let dataManager: DataManager | undefined;
 export function lsif(emitter: Emitter, builder: Builder, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+	if (dataManager === undefined) {
+		dataManager + new DataManager(emitter, options.group, options);
+	}
 	let visitor = new Visitor(emitter, builder, languageService, dependsOn, options);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
