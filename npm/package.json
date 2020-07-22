@@ -1,7 +1,7 @@
 {
 	"name": "lsif-npm",
 	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.5.0-next.1",
+	"version": "0.5.0-next.2",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -17,15 +17,15 @@
 		"lsif-npm": "./bin/lsif-npm"
 	},
 	"dependencies": {
-		"minimist": "^1.2.0",
-		"uuid": "^7.0.2",
-		"lsif-protocol": "0.5.0-next.3",
-		"lsif-tsc": "0.5.0-next.1",
-		"vscode-uri": "^2.1.1"
+		"minimist": "1.2.5",
+		"uuid": "^8.2.0",
+		"lsif-protocol": "0.5.0-next.4",
+		"lsif-tsc": "0.5.0-next.3",
+		"vscode-uri": "^2.1.2"
 	},
 	"devDependencies": {
 		"@types/minimist": "^1.2.0",
-		"@types/uuid": "7.0.0"
+		"@types/uuid": "^8.0.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
