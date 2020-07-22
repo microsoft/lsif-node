@@ -1,2 +1,6 @@
-export const x: number | string = 10;
-x.toString();
+export interface A { name: string };
+export interface B { name: string };
+export interface C { name: string };
+
+let d: A | (A & B);
+d.name;

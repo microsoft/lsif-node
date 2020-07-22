@@ -844,19 +844,19 @@ export class BlobStore extends Store implements DataProvider {
 		let property: ItemEdgeProperties | undefined = edge.property;
 		if (property === undefined) {
 			const map: Map<Id, DefinitionResultData> | Map<Id, DeclarationResultData> = assertDefined(this.declarationDatas.get(edge.outV) || this.definitionDatas.get(edge.outV));
-			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.document);
+			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.shard);
 			if (data === undefined) {
 				data = { values: edge.inVs.slice() };
-				map.set(edge.document, data);
+				map.set(edge.shard, data);
 			} else {
 				data.values.push(...edge.inVs);
 			}
 		} else {
 			const map: Map<Id, ReferenceResultData> = assertDefined(this.referenceDatas.get(edge.outV));
-			let data: ReferenceResultData | undefined = map.get(edge.document);
+			let data: ReferenceResultData | undefined = map.get(edge.shard);
 			if (data === undefined) {
 				data = {};
-				map.set(edge.document, data);
+				map.set(edge.shard, data);
 			}
 			switch (property) {
 				case ItemEdgeProperties.declarations:

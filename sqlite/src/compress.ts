@@ -903,7 +903,7 @@ export const itemPropertyShortForms = function() {
 }();
 
 export const itemEdgeCompressor = new GenericCompressor<ItemEdge<V, V>>(edge1nCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.id('document', next()),
+	GenericCompressorProperty.id('shard', next()),
 	GenericCompressorProperty.scalar('property', next(), itemPropertyShortForms)
 ]);
 Compressor.registerEdgeCompressor(EdgeLabels.item, itemEdgeCompressor);

@@ -343,13 +343,13 @@ export class GraphStore extends Store {
 	private insertItem(item: item): void {
 		const id = this.transformId(item.id);
 		const outV = this.transformId(item.outV);
-		const document = this.transformId(item.document);
+		const shard = this.transformId(item.shard);
 		for (let element of item.inVs) {
 			const inV = this.transformId(element);
 			if (item.property !== undefined) {
-				this.itemInserter.do(id, outV, inV, document, itemPropertyShortForms.get(item.property));
+				this.itemInserter.do(id, outV, inV, shard, itemPropertyShortForms.get(item.property));
 			} else {
-				this.itemInserter.do(id, outV, inV, document, null);
+				this.itemInserter.do(id, outV, inV, shard, null);
 			}
 		}
 	}

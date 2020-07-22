@@ -10,14 +10,20 @@
 			"name": "test:lsif",
 			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
 			"stopOnEntry": false,
-			"args": ["--timeout", "999999"],
+			"args": [
+				"--timeout", "999999",
+				"-g", "Union type \\(3\\)"
+
+			],
 			"cwd": "${workspaceRoot}/tsc",
 			"runtimeExecutable": null,
-			"runtimeArgs": [],
+			"runtimeArgs": [
+			],
 			"env": { },
 			"sourceMaps": true,
 			"outFiles": ["${workspaceRoot}/tsc/lib/**/*.js"],
-			"preLaunchTask": "npm: watch"
+			"preLaunchTask": "npm: watch",
+			"smartStep": false
 		},
 		{
 			"type": "node",
