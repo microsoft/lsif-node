@@ -737,7 +737,7 @@ class SymbolDataPartition extends LSIFData {
 	private referenceResults: ReferenceResult[];
 	private referenceCascades: Moniker[];
 
-	public constructor(context: SymbolDataContext, private symbolData: SymbolData, private shard: Document | Project) {
+	public constructor(context: EmitterContext, private symbolData: SymbolData, private shard: Document | Project) {
 		super(context);
 		this.definitionRanges = SymbolDataPartition.EMPTY_ARRAY;
 		this.typeDefinitionRanges = SymbolDataPartition.EMPTY_ARRAY;
@@ -1692,6 +1692,9 @@ class Visitor implements ResolverContext {
 			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
 		} else {
 			this.outDir = this.sourceRoot;
+		}
+		if (configLocation !== undefined) {
+			this.project.resource = URI.file(configLocation).toString(true);
 		}
 		this.dataManager = new DataManager(this, this.options.group, this.project, dependsOn.map(info => info.dataManager), options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
