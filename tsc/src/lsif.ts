@@ -159,13 +159,13 @@ namespace Converter {
 
 type SymbolId = string;
 
-interface EmitContext {
+interface EmitterContext {
 	vertex: VertexBuilder;
 	edge: EdgeBuilder;
 	emit(element: Vertex | Edge): void;
 }
 
-interface SymbolDataContext extends EmitContext {
+interface SymbolDataContext extends EmitterContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
 	getProjectData(): ProjectData;
 	getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult;
@@ -173,7 +173,7 @@ interface SymbolDataContext extends EmitContext {
 }
 
 abstract class LSIFData {
-	protected constructor(protected context: SymbolDataContext) {
+	protected constructor(protected _context: EmitterContext) {
 	}
 
 	public abstract begin(): void;
@@ -181,15 +181,19 @@ abstract class LSIFData {
 	public abstract end(): void;
 
 	protected emit(value: Vertex | Edge): void {
-		this.context.emit(value);
+		this._context.emit(value);
 	}
 
 	protected get vertex(): VertexBuilder {
-		return this.context.vertex;
+		return this._context.vertex;
 	}
 
 	protected get edge(): EdgeBuilder {
-		return this.context.edge;
+		return this._context.edge;
+	}
+
+	protected get context(): EmitterContext {
+		return this._context;
 	}
 }
 
@@ -198,7 +202,7 @@ class ProjectData extends LSIFData {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: SymbolDataContext, private group: Group | undefined, public project: Project) {
+	public constructor(context: EmitterContext, private group: Group | undefined, public project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -245,7 +249,7 @@ class DocumentData extends LSIFData {
 	private foldingRanges: lsp.FoldingRange[] | undefined;
 	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
 
-	public constructor(context: SymbolDataContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
+	public constructor(context: EmitterContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
 		super(context);
 		this.ranges = [];
 	}
@@ -305,6 +309,10 @@ abstract class SymbolData extends LSIFData {
 	public constructor(context: SymbolDataContext, private id: SymbolId) {
 		super(context);
 		this.resultSet = this.vertex.resultSet();
+	}
+
+	protected get context(): SymbolDataContext {
+		return this._context as SymbolDataContext;
 	}
 
 	public getId(): string {
@@ -1467,7 +1475,7 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitContext, group: Group | undefined, project: Project, private options: Options) {
+	public constructor(private context: EmitterContext, group: Group | undefined, project: Project, private references: DataManager[], private options: Options) {
 		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.documentStats = 0;
@@ -1587,6 +1595,7 @@ export class DataManager implements SymbolDataContext {
 export interface ProjectInfo {
 	rootDir: string;
 	outDir: string;
+	dataManager: DataManager;
 }
 
 export class SimpleSymbolChainCache implements ts.SymbolChainCache {
@@ -1684,7 +1693,7 @@ class Visitor implements ResolverContext {
 		} else {
 			this.outDir = this.sourceRoot;
 		}
-		this.dataManager = new DataManager(this, this.options.group, this.project, options);
+		this.dataManager = new DataManager(this, this.options.group, this.project, dependsOn.map(info => info.dataManager), options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1698,16 +1707,20 @@ class Visitor implements ResolverContext {
 	}
 
 	public visitProgram(): ProjectInfo {
-		let sourceFiles = this.program.getSourceFiles();
-		if (sourceFiles.length > 256) {
+		const rootFiles = this.program.getRootFileNames();
+		if (rootFiles.length > 256) {
 			this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
-		for (let sourceFile of sourceFiles) {
-			this.visit(sourceFile);
+		for (const rootFile of rootFiles) {
+			const sourceFile = this.program.getSourceFile(rootFile);
+			if (sourceFile !== undefined) {
+				this.visit(sourceFile);
+			}
 		}
 		return {
 			rootDir: this.sourceRoot,
-			outDir: this.outDir
+			outDir: this.outDir,
+			dataManager: this.dataManager
 		};
 	}
 
