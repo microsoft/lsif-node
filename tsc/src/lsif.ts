@@ -23,6 +23,7 @@ import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
+import { root } from 'npm';
 
 interface Disposable {
 	(): void;
@@ -202,7 +203,7 @@ class ProjectData extends LSIFData {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: EmitterContext, private group: Group | undefined, public project: Project) {
+	public constructor(context: EmitterContext, private group: Group, public project: Project) {
 		super(context);
 		this.documents = [];
 		this.diagnostics = [];
@@ -210,9 +211,7 @@ class ProjectData extends LSIFData {
 
 	public begin(): void {
 		this.emit(this.project);
-		if (this.group !== undefined) {
-			this.emit(this.edge.belongsTo(this.project, this.group));
-		}
+		this.emit(this.edge.belongsTo(this.project, this.group));
 		this.emit(this.vertex.event(EventScope.project, EventKind.begin, this.project));
 	}
 
@@ -1464,6 +1463,102 @@ export interface Options {
 	projectName: string;
 	tsConfigFile: string | undefined;
 	stdout: boolean;
+}
+
+enum ProjectDataManagerKind {
+	tsc = 'tsc',
+	global = 'global',
+	projectRoot = ' projectRoot',
+	project = 'project'
+}
+
+export class ProjectDataManager implements SymbolDataContext {
+
+	private readonly context: EmitterContext;
+	private readonly kind: ProjectDataManagerKind;
+	private readonly rootFiles: Set<string>;
+	private readonly references: ReadonlyArray<ProjectDataManager>;
+	private readonly projectData: ProjectData;
+	private readonly emitStats: boolean;
+
+	private documentStats: number;
+	private readonly documentDatas: Map<string, DocumentData | null>;
+
+
+	public constructor(context: EmitterContext, group: Group, project: Project, kind: ProjectDataManagerKind, rootFiles: string[] | undefined, references: ProjectDataManager[], emitStats: boolean = false) {
+		this.context = context;
+		this.kind = kind;
+		this.rootFiles = new Set(rootFiles);
+		this.references = references;
+		this.projectData = new ProjectData(this, group, project);
+		this.projectData.begin();
+		this.emitStats = emitStats;
+		this.documentStats = 0;
+		this.documentDatas = new Map();
+	}
+
+	public get vertex(): VertexBuilder {
+		return this.context.vertex;
+	}
+
+	public get edge(): EdgeBuilder {
+		return this.context.edge;
+	}
+
+	public emit(element: Vertex | Edge): void {
+		this.context.emit(element);
+	}
+
+	public getProjectData(): ProjectData {
+		return this.projectData;
+	}
+
+	public getDocumentData(fileName: string): DocumentData | undefined {
+		if (this.rootFiles.has(fileName) || this.references.length === 0) {
+			return this._getDocumentData(fileName);
+		}
+		for (const reference of this.references) {
+			const result = reference.getDocumentData(fileName);
+			if (result !== undefined) {
+				return result;
+			}
+		}
+		return undefined;
+	}
+
+	private _getDocumentData(fileName: string): DocumentData | undefined {
+		let result = this.documentDatas.get(fileName);
+		if (result === null) {
+			throw new Error(`There was already a managed document data for file: ${fileName}`);
+		}
+		return result;
+	}
+
+	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		let result = this._getDocumentData(fileName);
+		if (result !== undefined) {
+			return result;
+		}
+		if (this.rootFiles.has(fileName) || this.references.length === 0) {
+			return this._createDocumentData(fileName, document, monikerPath, external);
+		}
+		for (const reference of this.references) {
+			const result = reference.getOrCreateDocumentData(fileName, document, monikerPath, external);
+			if (result !== undefined) {
+				return result;
+			}
+		}
+		throw new Error(`Can never happen since there will always be a manager with no children`);
+	}
+
+	private _createDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		const result = new DocumentData(this, document, monikerPath, external);
+		this.documentDatas.set(fileName, result);
+		result.begin();
+		this.projectData.addDocument(document);
+		this.documentStats++;
+		return result;
+	}
 }
 
 export class DataManager implements SymbolDataContext {
