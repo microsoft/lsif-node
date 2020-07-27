@@ -383,7 +383,7 @@ export interface Group extends V {
 	description?: string;
 
 	/**
-	 * Optional information about the repository containing the source of the package.
+	 * Optional information about the repository containing the group's sources.
 	 */
 	repository?: {
 		/**

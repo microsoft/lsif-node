@@ -23,7 +23,6 @@ import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
-import { root } from 'npm';
 
 interface Disposable {
 	(): void;
@@ -243,6 +242,7 @@ class ProjectData extends LSIFData {
 
 class DocumentData extends LSIFData {
 
+	private _isClosed: boolean;
 	private ranges: Range[];
 	private diagnostics: lsp.Diagnostic[] | undefined;
 	private foldingRanges: lsp.FoldingRange[] | undefined;
@@ -250,7 +250,16 @@ class DocumentData extends LSIFData {
 
 	public constructor(context: EmitterContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
 		super(context);
+		this._isClosed = false;
 		this.ranges = [];
+	}
+
+	public get isClosed(): boolean {
+		return this._isClosed;
+	}
+
+	public close(): void {
+		this._isClosed = true;
 	}
 
 	public begin(): void {
@@ -1468,33 +1477,42 @@ export interface Options {
 enum ProjectDataManagerKind {
 	tsc = 'tsc',
 	global = 'global',
-	projectRoot = ' projectRoot',
+	group = 'group',
 	project = 'project'
+}
+
+interface ProjectDataManagerContext extends EmitterContext {
+	isSourceFileDefaultLibrary(sourceFile: ts.SourceFile): boolean;
+	addDocumentData(fileName: string, data: DocumentData): void;
 }
 
 export class ProjectDataManager implements SymbolDataContext {
 
-	private readonly context: EmitterContext;
+	private readonly context: ProjectDataManagerContext;
 	private readonly kind: ProjectDataManagerKind;
+	private readonly projectRoot: string;
 	private readonly rootFiles: Set<string>;
 	private readonly references: ReadonlyArray<ProjectDataManager>;
 	private readonly projectData: ProjectData;
 	private readonly emitStats: boolean;
 
 	private documentStats: number;
-	private readonly documentDatas: Map<string, DocumentData | null>;
+	private readonly documentDatas: DocumentData[];
+	private readonly clearOnNode: Map<ts.Node, SymbolData[]>;
 
 
-	public constructor(context: EmitterContext, group: Group, project: Project, kind: ProjectDataManagerKind, rootFiles: string[] | undefined, references: ProjectDataManager[], emitStats: boolean = false) {
+	public constructor(context: ProjectDataManagerContext, group: Group, project: Project, kind: ProjectDataManagerKind, projectRoot: string, rootFiles: string[] | undefined, references: ProjectDataManager[], emitStats: boolean = false) {
 		this.context = context;
 		this.kind = kind;
+		this.projectRoot = projectRoot;
 		this.rootFiles = new Set(rootFiles);
 		this.references = references;
 		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.emitStats = emitStats;
 		this.documentStats = 0;
-		this.documentDatas = new Map();
+		this.documentDatas = [];
+		this.clearOnNode = new Map();
 	}
 
 	public get vertex(): VertexBuilder {
@@ -1509,16 +1527,12 @@ export class ProjectDataManager implements SymbolDataContext {
 		this.context.emit(element);
 	}
 
-	public getProjectData(): ProjectData {
-		return this.projectData;
-	}
-
-	public getDocumentData(fileName: string): DocumentData | undefined {
-		if (this.rootFiles.has(fileName) || this.references.length === 0) {
-			return this._getDocumentData(fileName);
+	public findProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager | undefined {
+		if (this.handles(sourceFile)) {
+			return this;
 		}
 		for (const reference of this.references) {
-			const result = reference.getDocumentData(fileName);
+			const result = reference.findProjectDataManager(sourceFile);
 			if (result !== undefined) {
 				return result;
 			}
@@ -1526,38 +1540,58 @@ export class ProjectDataManager implements SymbolDataContext {
 		return undefined;
 	}
 
-	private _getDocumentData(fileName: string): DocumentData | undefined {
-		let result = this.documentDatas.get(fileName);
-		if (result === null) {
-			throw new Error(`There was already a managed document data for file: ${fileName}`);
+	public handles(sourceFile: ts.SourceFile): boolean {
+		const fileName = sourceFile.fileName;
+		if (this.kind === ProjectDataManagerKind.global || this.rootFiles.has(fileName) || paths.isParent(this.projectRoot, fileName)) {
+			return true;
 		}
-		return result;
+		if (this.kind === ProjectDataManagerKind.tsc && this.context.isSourceFileDefaultLibrary(sourceFile)) {
+			return true;
+		}
+		return false;
 	}
 
-	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
-		let result = this._getDocumentData(fileName);
-		if (result !== undefined) {
-			return result;
-		}
-		if (this.rootFiles.has(fileName) || this.references.length === 0) {
-			return this._createDocumentData(fileName, document, monikerPath, external);
-		}
-		for (const reference of this.references) {
-			const result = reference.getOrCreateDocumentData(fileName, document, monikerPath, external);
-			if (result !== undefined) {
-				return result;
-			}
-		}
-		throw new Error(`Can never happen since there will always be a manager with no children`);
-	}
-
-	private _createDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+	public manage(sourceFile: ts.SourceFile, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		const fileName = sourceFile.fileName;
 		const result = new DocumentData(this, document, monikerPath, external);
-		this.documentDatas.set(fileName, result);
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
+		this.context.addDocumentData(fileName, result);
+		this.documentDatas.push(result);
 		return result;
+	}
+
+	public getProjectData(): ProjectData {
+		return this.projectData;
+	}
+
+	public projectEnd(): void {
+		for (const data of this.documentDatas) {
+			data.close();
+		}
+	}
+
+	public manageLifeCycle(node: ts.Node, symbolData: SymbolData): void {
+		const moniker = symbolData.getMoniker();
+		let datas = this.clearOnNode.get(node);
+		if (datas === undefined) {
+			datas = [];
+			this.clearOnNode.set(node, datas);
+		}
+		datas.push(symbolData);
+	}
+
+	public nodeProcessed(node: ts.Node): void {
+		let datas = this.clearOnNode.get(node);
+		if (datas !== undefined) {
+			for (let symbolData of datas) {
+				if (symbolData.nodeProcessed(node)) {
+					this.symbolDatas.delete(symbolData.getId());
+				}
+			}
+			this.clearOnNode.delete(node);
+		}
 	}
 }
 
@@ -1570,7 +1604,7 @@ export class DataManager implements SymbolDataContext {
 	private symbolDatas: Map<string, SymbolData | null>;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
-	public constructor(private context: EmitterContext, group: Group | undefined, project: Project, private references: DataManager[], private options: Options) {
+	public constructor(private context: EmitterContext, group: Group, project: Project, private references: DataManager[], private options: Options) {
 		this.projectData = new ProjectData(this, group, project);
 		this.projectData.begin();
 		this.documentStats = 0;
