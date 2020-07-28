@@ -22,6 +22,9 @@ import { VertexBuilder, EdgeBuilder } from './graph';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
+import { Emitter } from 'emitters/emitter';
+import { report } from 'process';
+import { runInThisContext } from 'vm';
 
 interface Disposable {
 	(): void;
@@ -167,12 +170,11 @@ export interface EmitterContext {
 interface SymbolDataContext extends EmitterContext {
 	getDocumentData(fileName: string): DocumentData | undefined;
 	getProjectData(): ProjectData;
-	getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult;
 	manageLifeCycle(node: ts.Node, symbolData: SymbolData): void;
 }
 
-abstract class LSIFData {
-	protected constructor(protected context: SymbolDataContext) {
+abstract class LSIFData<T extends EmitterContext> {
+	protected constructor(private readonly _context: T) {
 	}
 
 	public abstract begin(): void;
@@ -180,25 +182,29 @@ abstract class LSIFData {
 	public abstract end(): void;
 
 	protected emit(value: Vertex | Edge): void {
-		this.context.emit(value);
+		this._context.emit(value);
 	}
 
 	protected get vertex(): VertexBuilder {
-		return this.context.vertex;
+		return this._context.vertex;
 	}
 
 	protected get edge(): EdgeBuilder {
-		return this.context.edge;
+		return this._context.edge;
+	}
+
+	protected get context(): T {
+		return this._context;
 	}
 }
 
-class ProjectData extends LSIFData {
+class ProjectData extends LSIFData<EmitterContext> {
 
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(context: SymbolDataContext, private group: Group | undefined, public project: Project) {
-		super(context);
+	public constructor(emitter: EmitterContext, private group: Group | undefined, public project: Project) {
+		super(emitter);
 		this.documents = [];
 		this.diagnostics = [];
 	}
@@ -237,55 +243,86 @@ class ProjectData extends LSIFData {
 	}
 }
 
-class DocumentData extends LSIFData {
+class DocumentData extends LSIFData<EmitterContext> {
 
+	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
+
+	private _isClosed: boolean;
 	private ranges: Range[];
-	private diagnostics: lsp.Diagnostic[] | undefined;
-	private foldingRanges: lsp.FoldingRange[] | undefined;
-	private documentSymbols: RangeBasedDocumentSymbol[] | undefined;
+	private diagnostics: lsp.Diagnostic[];
+	private foldingRanges: lsp.FoldingRange[];
+	private documentSymbols: RangeBasedDocumentSymbol[];
 
-	public constructor(context: SymbolDataContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
-		super(context);
+	public constructor(emitter: EmitterContext, public document: Document, public monikerFilePath: string | undefined, public external: boolean) {
+		super(emitter);
+		this._isClosed = false;
 		this.ranges = [];
+		this.diagnostics = DocumentData.EMPTY_ARRAY;
+		this.foldingRanges = DocumentData.EMPTY_ARRAY;
+		this.documentSymbols = DocumentData.EMPTY_ARRAY;
+	}
+
+	public get isClosed(): boolean {
+		return this._isClosed;
+	}
+
+	public close(): void {
+		this._isClosed = true;
+		this.ranges = DocumentData.EMPTY_ARRAY;
+		this.diagnostics = DocumentData.EMPTY_ARRAY;
+		this.foldingRanges = DocumentData.EMPTY_ARRAY;
+		this.documentSymbols = DocumentData.EMPTY_ARRAY;
+	}
+
+	private checkClosed(): void {
+		if (this.isClosed) {
+			throw new Error(`Document data for document ${this.document.uri} is already closed`);
+		}
 	}
 
 	public begin(): void {
+		this.checkClosed();
 		this.emit(this.document);
 		this.emit(this.vertex.event(EventScope.document, EventKind.begin, this.document));
 	}
 
 	public addRange(range: Range): void {
+		this.checkClosed();
 		this.emit(range);
 		this.ranges.push(range);
 	}
 
 	public addDiagnostics(diagnostics: lsp.Diagnostic[]): void {
+		this.checkClosed();
 		this.diagnostics = diagnostics;
 	}
 
 	public addFoldingRanges(foldingRanges: lsp.FoldingRange[]): void {
+		this.checkClosed();
 		this.foldingRanges = foldingRanges;
 	}
 
 	public addDocumentSymbols(documentSymbols: RangeBasedDocumentSymbol[]): void {
+		this.checkClosed();
 		this.documentSymbols = documentSymbols;
 	}
 
 	public end(): void {
+		this.checkClosed();
 		if (this.ranges.length >= 0) {
 			this.emit(this.edge.contains(this.document, this.ranges));
 		}
-		if (this.diagnostics !== undefined) {
+		if (this.diagnostics !== DocumentData.EMPTY_ARRAY) {
 			let dr = this.vertex.diagnosticResult(this.diagnostics);
 			this.emit(dr);
 			this.emit(this.edge.diagnostic(this.document, dr));
 		}
-		if (this.foldingRanges !== undefined) {
+		if (this.foldingRanges !== DocumentData.EMPTY_ARRAY) {
 			const fr = this.vertex.foldingRangeResult(this.foldingRanges);
 			this.emit(fr);
 			this.emit(this.edge.foldingRange(this.document, fr));
 		}
-		if (this.documentSymbols !== undefined) {
+		if (this.documentSymbols !== DocumentData.EMPTY_ARRAY) {
 			const ds = this.vertex.documentSymbolResult(this.documentSymbols);
 			this.emit(ds);
 			this.emit(this.edge.documentSymbols(this.document, ds));
@@ -294,7 +331,7 @@ class DocumentData extends LSIFData {
 	}
 }
 
-abstract class SymbolData extends LSIFData {
+abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	private declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined;
 
@@ -716,7 +753,7 @@ class TransientSymbolData extends StandardSymbolData {
 	}
 }
 
-class SymbolDataPartition extends LSIFData {
+class SymbolDataPartition extends LSIFData<EmitterContext> {
 
 	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
 	private static EMPTY_MAP= Object.freeze(new Map()) as unknown as Map<any, any>;
@@ -728,7 +765,7 @@ class SymbolDataPartition extends LSIFData {
 	private referenceResults: ReferenceResult[];
 	private referenceCascades: Moniker[];
 
-	public constructor(context: SymbolDataContext, private symbolData: SymbolData, private shard: Document | Project) {
+	public constructor(context: EmitterContext, private symbolData: SymbolData, private shard: Document | Project) {
 		super(context);
 		this.definitionRanges = SymbolDataPartition.EMPTY_ARRAY;
 		this.typeDefinitionRanges = SymbolDataPartition.EMPTY_ARRAY;
@@ -1136,6 +1173,7 @@ interface MonikerData {
 type ResolverResult = [SymbolData, MonikerData | undefined];
 
 interface ResolverContext {
+	// Todo@dirkb need to think about using root files instead.
 	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
@@ -1457,20 +1495,166 @@ export interface Options {
 	stdout: boolean;
 }
 
+abstract class ProjectDataManager {
+
+	protected readonly emitter: EmitterContext;
+	private readonly projectData: ProjectData;
+	private readonly emitStats: boolean;
+
+	private documentStats: number;
+	private readonly documentDatas: DocumentData[];
+	private symbolStats: number;
+	private readonly symbolDatas: SymbolData[];
+	private readonly clearOnNode: Map<ts.Node, SymbolData[]>;
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
+		this.emitter = emitter;
+		this.projectData = new ProjectData(emitter, group, project);
+		this.emitStats = emitStats;
+		this.documentStats = 0;
+		this.documentDatas = [];
+		this.symbolStats = 0;
+		this.symbolDatas = [];
+		this.clearOnNode = new Map();
+	}
+
+	public begin(): void {
+		this.projectData.begin();
+	}
+
+	public end(): void {
+		for (const data of this.documentDatas) {
+			data.close();
+		}
+		this.projectData.end();
+		if (this.emitStats) {
+			console.log('');
+			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+		}
+	}
+
+	public getProjectData(): ProjectData {
+		return this.projectData;
+	}
+
+	public createDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		const result = new DocumentData(this.emitter, document, monikerPath, external);
+		result.begin();
+		this.projectData.addDocument(document);
+		this.documentStats++;
+		this.documentDatas.push(result);
+		return result;
+	}
+
+	public createSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
+		const result = create();
+		this.symbolDatas.push(result[0]);
+		this.symbolStats++;
+		return result;
+	}
+
+	public manageLifeCycle(node: ts.Node, symbolData: SymbolData): void {
+		const moniker = symbolData.getMoniker();
+		let datas = this.clearOnNode.get(node);
+		if (datas === undefined) {
+			datas = [];
+			this.clearOnNode.set(node, datas);
+		}
+		datas.push(symbolData);
+	}
+
+	public nodeProcessed(node: ts.Node): void {
+		let datas = this.clearOnNode.get(node);
+		if (datas !== undefined) {
+			for (let symbolData of datas) {
+				if (symbolData.nodeProcessed(node)) {
+					this.symbolDatas.delete(symbolData.getId());
+				}
+			}
+			this.clearOnNode.delete(node);
+		}
+	}
+}
+
+class GlobalProjectDataManager extends ProjectDataManager {
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
+		super(emitter, group, project, emitStats);
+	}
+}
+
+
+class DefaultLibsProjectDataManager extends ProjectDataManager {
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
+		super(emitter, group, project, emitStats);
+	}
+}
+
+class GroupProjectDataManager extends ProjectDataManager {
+
+	private readonly groupRoot: string;
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, groupRoot: string, emitStats: boolean = false) {
+		super(emitter, group, project, emitStats);
+		this.groupRoot = groupRoot;
+	}
+
+	public handles(sourceFile: ts.SourceFile): boolean {
+		const fileName = sourceFile.fileName;
+		return paths.isParent(this.groupRoot, fileName);
+	}
+}
+
+
+class TSConfigProjectDataManager extends ProjectDataManager {
+
+	private readonly projectRoot: string;
+	private readonly rootFiles: Set<string>;
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, projectRoot: string, rootFiles: ReadonlyArray<string> | undefined, emitStats: boolean = false) {
+		super(emitter, group, project, emitStats);
+		this.projectRoot = projectRoot;
+		this.rootFiles = new Set(rootFiles);
+	}
+
+	public handles(sourceFile: ts.SourceFile): boolean {
+		const fileName = sourceFile.fileName;
+		return this.rootFiles.has(fileName) || paths.isParent(this.projectRoot, fileName);
+	}
+}
+
+
 export class DataManager implements SymbolDataContext {
 
-	private group: Group | undefined;
-	private projectDatas: { projectData: ProjectData, documentStats: number, symbolStats: number }[];
-	private documentDatas: Map<string, DocumentData | null>;
-	private symbolDatas: Map<string, SymbolData | null>;
-	private clearOnNode: Map<ts.Node, SymbolData[]>;
+	private static readonly GlobalId: string = 'bc450df0-741c-4ee7-9e0e-eddd95f8f314';
+	private static readonly DefaultLibsId: string = '5779b280-596f-4b5d-90d8-b87441d7afa0';
 
-	public constructor(private context: EmitterContext, group: Group | undefined, private reportStats: boolean) {
+	private readonly context: EmitterContext;
+	private readonly group: Group;
+	private readonly reportStats: boolean;
+
+	private readonly globalPDM: GlobalProjectDataManager;
+	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
+	private readonly groupPDM: GroupProjectDataManager;
+	private currentPDM: TSConfigProjectDataManager | undefined;
+	private currentProgram: ts.Program | undefined;
+
+	private readonly documentDatas: Map<string, DocumentData>;
+	private readonly symbolDatas: Map<string, SymbolData | null>;
+	private readonly clearOnNode: Map<ts.Node, SymbolData[]>;
+
+	public constructor(context: EmitterContext, group: Group, groupRoot: string, reportStats: boolean) {
+		this.context = context;
 		this.group = group;
-		this.projectDatas = [];
+		this.reportStats = reportStats;
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.clearOnNode = new Map();
+
+		this.globalPDM = new GlobalProjectDataManager(this, this.group, this.context.vertex.project(DataManager.GlobalId), reportStats);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reportStats);
+		this.groupPDM = new GroupProjectDataManager(this, this.group, this.context.vertex.project(group.name), groupRoot, reportStats);
 	}
 
 	public get vertex(): VertexBuilder {
@@ -1486,73 +1670,69 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	public begin(): void {
+		this.globalPDM.begin();
+		this.defaultLibsPDM.begin();
+		this.groupPDM.begin();
 	}
 
-	public beginProject(project: Project): void {
-		const projectData = new ProjectData(this, this.group, project);
-		this.projectDatas.push({ projectData, documentStats: 0, symbolStats: 0 });
-		projectData.begin();
+	public beginProject(program: ts.Program, project: Project, projectRoot: string): void {
+		if (this.currentPDM !== undefined) {
+			throw new Error(`There is already a current program data manager set`);
+		}
+		this.currentProgram = program;
+		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, program.getRootFileNames(), this.reportStats);
+		this.currentPDM.begin();
 	}
 
 	public getProjectData(): ProjectData {
-		return this._getProjectData().projectData;
+		if (this.currentPDM === undefined) {
+			throw new Error(`No current project`);
+		}
+		return this.currentPDM.getProjectData();
 	}
 
-	private _getProjectData() {
-		if (this.projectDatas.length === 0) {
-			throw new Error(`No project data available`);
+	public endProject(program: ts.Program): void {
+		if (this.currentProgram !== program || this.currentPDM === undefined) {
+			throw new Error(`Current project is not the one to end`);
 		}
-		return this.projectDatas[this.projectDatas.length - 1];
-	}
-
-	public endProject(project: Project): void {
-		const data = this.projectDatas.pop();
-		if (data === undefined) {
-			throw new Error(`No project data available`);
-		}
-		if (data.projectData.project !== project) {
-			throw new Error(`Unbalanced end call. Expected ${JSON.stringify(project, undefined, 0)} but got ${JSON.stringify(data.projectData.project, undefined, 0)}`);
-		}
-		data.projectData.end();
-		if (this.reportStats) {
-			console.log('');
-			console.log(`Processed ${data.symbolStats} symbols in ${data.documentStats} files`);
-		}
+		this.currentPDM.end();
+		this.currentPDM = undefined;
+		this.currentProgram = undefined;
 	}
 
 	public end(): void {
-		for (let entry of this.symbolDatas.entries()) {
-			if (entry[1]) {
-				entry[1].end();
-				this.symbolDatas.set(entry[0], null);
-			}
-		}
-		for (let entry of this.documentDatas.entries()) {
-			if (entry[1]) {
-				entry[1].end();
-			}
-		}
+		this.globalPDM.end();
+		this.defaultLibsPDM.end();
+		this.groupPDM.end();
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
-		let result = this.documentDatas.get(fileName);
-		if (result === null) {
-			throw new Error(`There was already a managed document data for file: ${fileName}`);
+		return this.documentDatas.get(fileName);
+	}
+
+	public getOrCreateDocumentData(sourceFile: ts.SourceFile, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		const fileName = sourceFile.fileName;
+		let result = this.getDocumentData(fileName);
+		if (result !== undefined) {
+			return result;
 		}
+
+		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
+		result = manager.createDocumentData(fileName, document, monikerPath, external);
+		this.documentDatas.set(fileName, result);
 		return result;
 	}
 
-	public getOrCreateDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
-		let result = this.getDocumentData(fileName);
-		if (result === undefined) {
-			result = new DocumentData(this, document, monikerPath, external);
-			this.documentDatas.set(fileName, result);
-			result.begin();
-			const data = this._getProjectData();
-			data.projectData.addDocument(document);
-			data.documentStats++;
+	private getProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager {
+		if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
+			return this.currentPDM;
+		} else if (this.currentProgram !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentProgram, sourceFile)) {
+			return this.defaultLibsPDM;
+		} else if (this.groupPDM.handles(sourceFile)) {
+			return this.groupPDM;
+		} else {
+			return this.globalPDM;
 		}
-		return result;
 	}
 
 	public documemntProcessed(fileName: string): void {
@@ -1561,7 +1741,7 @@ export class DataManager implements SymbolDataContext {
 			throw new Error(`No document data for file ${fileName}`);
 		}
 		data.end();
-		this.documentDatas.set(fileName, null);
+		data.close();
 	}
 
 	public getSymbolData(symbolId: SymbolId): SymbolData | undefined {
@@ -1572,16 +1752,28 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getOrCreateSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
+	public getOrCreateSymbolData(symbolId: SymbolId, sourceFiles: ts.SourceFile[] | undefined, create: () => ResolverResult): ResolverResult {
 		let symbolData = this.getSymbolData(symbolId);
 		if (symbolData !== undefined) {
 			return [symbolData, undefined];
 		}
-		const result = create();
+		let manager: ProjectDataManager;
+		if (sourceFiles === undefined || sourceFiles.length === 0) {
+			manager = this.globalPDM;
+		} else {
+			manager = this.getProjectDataManager(sourceFiles[0]);
+			for (let i = 1; i < sourceFiles.length; i++) {
+				if (manager !== this.getProjectDataManager(sourceFiles[i])) {
+					manager = this.globalPDM;
+					break;
+				}
+			}
+		}
+
+		const result = manager.createSymbolData(symbolId, create);
 		symbolData = result[0];
 		this.symbolDatas.set(symbolData.getId(), symbolData);
 		symbolData.begin();
-		this._getProjectData().symbolStats++;
 		return result;
 	}
 
@@ -1708,7 +1900,7 @@ class Visitor implements ResolverContext {
 			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = dataManager;
-		this.dataManager.beginProject(this.project);
+		this.dataManager.beginProject(this.project, this.program);
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -2167,7 +2359,7 @@ class Visitor implements ResolverContext {
 			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
 		}
 
-		result = this.dataManager.getOrCreateDocumentData(sourceFile.fileName, document, monikerPath, external);
+		result = this.dataManager.getOrCreateDocumentData(sourceFile, document, monikerPath, external);
 
 		// In TS source files have symbols and can be referenced in import statements with * imports.
 		// So even if we don't parse the source file we need to create a symbol data so that when
@@ -2197,7 +2389,7 @@ class Visitor implements ResolverContext {
 			: undefined;
 
 		let monikerData: MonikerData | undefined;
-		[result, monikerData] = this.dataManager.getOrCreateSymbolData(id, () => {
+		[result, monikerData] = this.dataManager.getOrCreateSymbolData(id, sourceFiles, () => {
 			return resolver.resolve(sourceFiles, id, symbol);
 		});
 
