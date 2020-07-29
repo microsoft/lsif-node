@@ -27,8 +27,8 @@ suite('Union Types', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":13,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}')
+			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":33,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -55,10 +55,10 @@ suite('Union Types', () => {
 		]), compilerOptions);
 		console.log(emitter.toString());
 		const validate: Element[] = [
-			JSON.parse('{"id":123,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":124,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":147,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":148,"type":"edge","label":"textDocument/references","outV":123,"inV":147}'),
+			JSON.parse('{"id":132,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":133,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":148,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":149,"type":"edge","label":"textDocument/references","outV":132,"inV":148}'),
 			JSON.parse('{"id":149,"type":"edge","label":"item","outV":147,"inVs":[67,80],"shard":2,"property":"referenceResults"}')
 		];
 		for (const elem of validate) {
@@ -95,6 +95,7 @@ suite('Union Types', () => {
 			JSON.parse('{"id":177,"type":"edge","label":"item","outV":175,"inVs":[83,96],"shard":2,"property":"referenceResults"}'),
 			JSON.parse('{"id":178,"type":"edge","label":"item","outV":175,"inVs":[20,34],"shard":2,"property":"referenceLinks"}')
 		];
+		console.log(emitter.toString());
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}

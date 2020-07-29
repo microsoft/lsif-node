@@ -22,9 +22,6 @@ import { VertexBuilder, EdgeBuilder } from './graph';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
-import { Emitter } from 'emitters/emitter';
-import { report } from 'process';
-import { runInThisContext } from 'vm';
 
 interface Disposable {
 	(): void;
@@ -428,6 +425,9 @@ class StandardSymbolData extends SymbolData {
 
 	public constructor(context: SymbolDataContext, id: SymbolId, private scope: ts.Node | undefined = undefined) {
 		super(context, id);
+		if (scope !== undefined) {
+			context.manageLifeCycle(scope, this);
+		}
 	}
 
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange, recordAsReference: boolean = true): void {
@@ -511,7 +511,11 @@ class StandardSymbolData extends SymbolData {
 				throw new Error(`No document data for ${fileName}`);
 			}
 			result = new SymbolDataPartition(this.context, this, documentData.document);
-			this.context.manageLifeCycle(sourceFile, this);
+			// If we have a scope the symbol data will be removed when node processed
+			// is called. So we don't need to manage partitions.
+			if (this.scope === undefined) {
+				this.context.manageLifeCycle(sourceFile, this);
+			}
 			result.begin();
 			this.partitions.set(fileName, result);
 		}
@@ -1504,8 +1508,6 @@ abstract class ProjectDataManager {
 	private documentStats: number;
 	private readonly documentDatas: DocumentData[];
 	private symbolStats: number;
-	private readonly symbolDatas: SymbolData[];
-	private readonly clearOnNode: Map<ts.Node, SymbolData[]>;
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		this.emitter = emitter;
@@ -1514,8 +1516,6 @@ abstract class ProjectDataManager {
 		this.documentStats = 0;
 		this.documentDatas = [];
 		this.symbolStats = 0;
-		this.symbolDatas = [];
-		this.clearOnNode = new Map();
 	}
 
 	public begin(): void {
@@ -1548,31 +1548,8 @@ abstract class ProjectDataManager {
 
 	public createSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
 		const result = create();
-		this.symbolDatas.push(result[0]);
 		this.symbolStats++;
 		return result;
-	}
-
-	public manageLifeCycle(node: ts.Node, symbolData: SymbolData): void {
-		const moniker = symbolData.getMoniker();
-		let datas = this.clearOnNode.get(node);
-		if (datas === undefined) {
-			datas = [];
-			this.clearOnNode.set(node, datas);
-		}
-		datas.push(symbolData);
-	}
-
-	public nodeProcessed(node: ts.Node): void {
-		let datas = this.clearOnNode.get(node);
-		if (datas !== undefined) {
-			for (let symbolData of datas) {
-				if (symbolData.nodeProcessed(node)) {
-					this.symbolDatas.delete(symbolData.getId());
-				}
-			}
-			this.clearOnNode.delete(node);
-		}
 	}
 }
 
@@ -1900,7 +1877,7 @@ class Visitor implements ResolverContext {
 			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = dataManager;
-		this.dataManager.beginProject(this.project, this.program);
+		this.dataManager.beginProject(this.program, this.project, configLocation || process.cwd());
 		this.symbols = new Symbols(this.program, this.typeChecker);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
@@ -1928,7 +1905,7 @@ class Visitor implements ResolverContext {
 	}
 
 	public endVisitProgram(): void {
-		this.dataManager.endProject(this.project);
+		this.dataManager.endProject(this.program);
 	}
 
 	protected visit(node: ts.Node): void {

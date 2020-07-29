@@ -157,7 +157,7 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
 	emitterContext.emit(group);
-	const dataManager: DataManager = new DataManager(emitterContext, group, false);
+	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, false);
 	try {
 		dataManager.begin();
 		_lsif(emitterContext, languageService, dataManager, [], { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined });

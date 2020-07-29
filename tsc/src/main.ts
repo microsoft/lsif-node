@@ -517,7 +517,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		stdout: options.stdout,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, !options.stdout);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout);
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
