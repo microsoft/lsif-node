@@ -53,7 +53,6 @@ suite('Union Types', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
 		const validate: Element[] = [
 			JSON.parse('{"id":132,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":133,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
@@ -95,7 +94,6 @@ suite('Union Types', () => {
 			JSON.parse('{"id":177,"type":"edge","label":"item","outV":175,"inVs":[83,96],"shard":2,"property":"referenceResults"}'),
 			JSON.parse('{"id":178,"type":"edge","label":"item","outV":175,"inVs":[20,34],"shard":2,"property":"referenceLinks"}')
 		];
-		console.log(emitter.toString());
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}

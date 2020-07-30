@@ -344,6 +344,12 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		return this.id;
 	}
 
+	public isPublic(): boolean {
+		return this.getScope() === undefined;
+	}
+
+	protected abstract getScope(): ts.Node | undefined;
+
 	public getResultSet(): ResultSet {
 		return this.resultSet;
 	}
@@ -413,6 +419,8 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	public abstract getOrCreatePartition(sourceFile: ts.SourceFile | undefined): SymbolDataPartition;
 
 	public abstract nodeProcessed(node: ts.Node): boolean;
+
+	public abstract endPartitions(fileNames: Set<string>): void;
 }
 
 class StandardSymbolData extends SymbolData {
@@ -428,6 +436,10 @@ class StandardSymbolData extends SymbolData {
 		if (scope !== undefined) {
 			context.manageLifeCycle(scope, this);
 		}
+	}
+
+	protected getScope(): ts.Node | undefined {
+		return this.scope;
 	}
 
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange, recordAsReference: boolean = true): void {
@@ -533,15 +545,15 @@ class StandardSymbolData extends SymbolData {
 			if (this.partitions.size !== 1) {
 				throw new Error(`Local Symbol data has more than one partition.`);
 			}
-			let parition = this.partitions.values().next().value;
+			const parition = this.partitions.values().next().value;
 			if (parition !== null) {
 				parition.end();
 			}
 			this.partitions = null;
 			return true;
 		} else if (ts.isSourceFile(node)) {
-			let fileName = node.fileName;
-			let partition = this.partitions.get(fileName);
+			const fileName = node.fileName;
+			const partition = this.partitions.get(fileName);
 			if (partition === null) {
 				throw new Error (`Partition for file ${fileName} has already been cleared.`);
 			}
@@ -553,6 +565,22 @@ class StandardSymbolData extends SymbolData {
 			return false;
 		} else {
 			throw new Error(`Node is neither a source file nor does it match the scope`);
+		}
+	}
+
+	public endPartitions(fileNames: Set<string>): void {
+		if (this.partitions === null || this.partitions === undefined) {
+			return;
+		}
+		const toClear: string[] = [];
+		for (const entry of this.partitions) {
+			if (fileNames.has(entry[0]) && entry[1] !== null) {
+				entry[1].end();
+				toClear.push(entry[0]);
+			}
+		}
+		for (const fileName of toClear) {
+			this.partitions.set(fileName, null);
 		}
 	}
 
@@ -1506,31 +1534,26 @@ abstract class ProjectDataManager {
 	private readonly emitStats: boolean;
 
 	private documentStats: number;
+	private readonly fileNames: Set<string>;
 	private readonly documentDatas: DocumentData[];
 	private symbolStats: number;
+	// We only need to keep public symbol datas. Private symbol datas are cleared when the
+	// corresponding node is processed.
+	private readonly publicSymbolDatas: SymbolData[];
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		this.emitter = emitter;
 		this.projectData = new ProjectData(emitter, group, project);
 		this.emitStats = emitStats;
 		this.documentStats = 0;
+		this.fileNames = new Set();
 		this.documentDatas = [];
 		this.symbolStats = 0;
+		this.publicSymbolDatas = [];
 	}
 
 	public begin(): void {
 		this.projectData.begin();
-	}
-
-	public end(): void {
-		for (const data of this.documentDatas) {
-			data.close();
-		}
-		this.projectData.end();
-		if (this.emitStats) {
-			console.log('');
-			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
-		}
 	}
 
 	public getProjectData(): ProjectData {
@@ -1542,18 +1565,99 @@ abstract class ProjectDataManager {
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
+		this.fileNames.add(fileName);
 		this.documentDatas.push(result);
 		return result;
 	}
 
 	public createSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
 		const result = create();
+		if (result[0].isPublic()) {
+			this.publicSymbolDatas.push(result[0]);
+		}
 		this.symbolStats++;
 		return result;
 	}
+
+	public end(): void {
+		for (const symbolData of this.publicSymbolDatas) {
+			symbolData.endPartitions(this.fileNames);
+		}
+		for (const data of this.documentDatas) {
+			data.close();
+		}
+		this.projectData.end();
+		if (this.emitStats) {
+			console.log('');
+			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+		}
+	}
 }
 
-class GlobalProjectDataManager extends ProjectDataManager {
+enum LazyProectDataManagerState {
+	start = 1,
+	beginCalled = 2,
+	beginExecuted = 3,
+	endCalled = 4
+}
+
+class LazyProjectDataManager extends ProjectDataManager {
+
+	private state: LazyProectDataManagerState;
+
+	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
+		super(emitter, group, project, emitStats);
+		this.state = LazyProectDataManagerState.start;
+	}
+
+	public begin(): void {
+		this.state = LazyProectDataManagerState.beginCalled;
+	}
+
+	private executeBegin(): void {
+		super.begin();
+		this.state = LazyProectDataManagerState.beginExecuted;
+	}
+
+	private checkState(): void {
+		if (this.state !== LazyProectDataManagerState.beginExecuted) {
+			throw new Error(`Project data manager has wrong state ${this.state}`);
+		}
+	}
+
+	public end(): void {
+		if (this.state === LazyProectDataManagerState.beginExecuted) {
+			super.end();
+		}
+		this.state = LazyProectDataManagerState.endCalled;
+	}
+
+	public getProjectData(): ProjectData {
+		if (this.state === LazyProectDataManagerState.beginCalled) {
+			this.executeBegin();
+		}
+		this.checkState();
+		return super.getProjectData();
+	}
+
+	public createDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		if (this.state === LazyProectDataManagerState.beginCalled) {
+			this.executeBegin();
+		}
+		this.checkState();
+		return super.createDocumentData(fileName, document, monikerPath, external);
+	}
+
+	public createSymbolData(symbolId: SymbolId, create: () => ResolverResult): ResolverResult {
+		if (this.state === LazyProectDataManagerState.beginCalled) {
+			this.executeBegin();
+		}
+		this.checkState();
+		return super.createSymbolData(symbolId, create);
+	}
+}
+
+class GlobalProjectDataManager extends LazyProjectDataManager {
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
@@ -1561,14 +1665,14 @@ class GlobalProjectDataManager extends ProjectDataManager {
 }
 
 
-class DefaultLibsProjectDataManager extends ProjectDataManager {
+class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
 	}
 }
 
-class GroupProjectDataManager extends ProjectDataManager {
+class GroupProjectDataManager extends LazyProjectDataManager {
 
 	private readonly groupRoot: string;
 
@@ -1701,10 +1805,10 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	private getProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager {
-		if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
-			return this.currentPDM;
-		} else if (this.currentProgram !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentProgram, sourceFile)) {
+		if (this.currentProgram !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentProgram, sourceFile)) {
 			return this.defaultLibsPDM;
+		} else if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
+			return this.currentPDM;
 		} else if (this.groupPDM.handles(sourceFile)) {
 			return this.groupPDM;
 		} else {
