@@ -574,7 +574,7 @@ class StandardSymbolData extends SymbolData {
 		}
 		const toClear: string[] = [];
 		for (const entry of this.partitions) {
-			if (fileNames.has(entry[0]) && entry[1] !== null) {
+			if (entry[1] !== null && fileNames.has(entry[0])) {
 				entry[1].end();
 				toClear.push(entry[0]);
 			}
@@ -1534,7 +1534,6 @@ abstract class ProjectDataManager {
 	private readonly emitStats: boolean;
 
 	private documentStats: number;
-	private readonly fileNames: Set<string>;
 	private readonly documentDatas: DocumentData[];
 	private symbolStats: number;
 	// We only need to keep public symbol datas. Private symbol datas are cleared when the
@@ -1546,7 +1545,6 @@ abstract class ProjectDataManager {
 		this.projectData = new ProjectData(emitter, group, project);
 		this.emitStats = emitStats;
 		this.documentStats = 0;
-		this.fileNames = new Set();
 		this.documentDatas = [];
 		this.symbolStats = 0;
 		this.publicSymbolDatas = [];
@@ -1565,7 +1563,6 @@ abstract class ProjectDataManager {
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
-		this.fileNames.add(fileName);
 		this.documentDatas.push(result);
 		return result;
 	}
@@ -1579,9 +1576,15 @@ abstract class ProjectDataManager {
 		return result;
 	}
 
-	public end(): void {
+	public abstract end(): void;
+
+	protected doEnd(fileNames: Set<string> | undefined): void {
 		for (const symbolData of this.publicSymbolDatas) {
-			symbolData.endPartitions(this.fileNames);
+			if (fileNames === undefined) {
+				symbolData.end();
+			} else {
+				symbolData.endPartitions(fileNames);
+			}
 		}
 		for (const data of this.documentDatas) {
 			data.close();
@@ -1627,7 +1630,7 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	public end(): void {
 		if (this.state === LazyProectDataManagerState.beginExecuted) {
-			super.end();
+			super.doEnd(undefined);
 		}
 		this.state = LazyProectDataManagerState.endCalled;
 	}
@@ -1687,21 +1690,31 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 	}
 }
 
-
 class TSConfigProjectDataManager extends ProjectDataManager {
 
 	private readonly projectRoot: string;
 	private readonly rootFiles: Set<string>;
+	private readonly managedFiles: Set<string>;
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, projectRoot: string, rootFiles: ReadonlyArray<string> | undefined, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
 		this.projectRoot = projectRoot;
 		this.rootFiles = new Set(rootFiles);
+		this.managedFiles = new Set();
 	}
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
 		return this.rootFiles.has(fileName) || paths.isParent(this.projectRoot, fileName);
+	}
+
+	public createDocumentData(fileName: string, document: Document, monikerPath: string | undefined, external: boolean): DocumentData {
+		this.managedFiles.add(fileName);
+		return super.createDocumentData(fileName, document, monikerPath, external);
+	}
+
+	public end(): void {
+		this.doEnd(this.managedFiles);
 	}
 }
 

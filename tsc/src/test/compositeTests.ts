@@ -27,8 +27,8 @@ suite('Union Types', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":33,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}')
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -54,11 +54,12 @@ suite('Union Types', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":132,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":133,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":148,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":149,"type":"edge","label":"textDocument/references","outV":132,"inV":148}'),
-			JSON.parse('{"id":149,"type":"edge","label":"item","outV":147,"inVs":[67,80],"shard":2,"property":"referenceResults"}')
+			JSON.parse('{"id":128,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":129,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":154,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":155,"type":"edge","label":"textDocument/references","outV":128,"inV":154}'),
+			JSON.parse('{"id":156,"type":"edge","label":"item","outV":154,"inVs":[70,83],"shard":5,"property":"referenceResults"}'),
+			JSON.parse('{"id":157,"type":"edge","label":"item","outV":154,"inVs":[23,37],"shard":5,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -85,14 +86,14 @@ suite('Union Types', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":20,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:A.name","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":34,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:B.name","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":151,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":152,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":151,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":176,"type":"edge","label":"textDocument/references","outV":151,"inV":175}'),
-			JSON.parse('{"id":177,"type":"edge","label":"item","outV":175,"inVs":[83,96],"shard":2,"property":"referenceResults"}'),
-			JSON.parse('{"id":178,"type":"edge","label":"item","outV":175,"inVs":[20,34],"shard":2,"property":"referenceLinks"}')
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:A.name","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":37,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:B.name","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":156,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":157,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":182,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":183,"type":"edge","label":"textDocument/references","outV":156,"inV":182}'),
+			JSON.parse('{"id":184,"type":"edge","label":"item","outV":182,"inVs":[86,99],"shard":5,"property":"referenceResults"}'),
+			JSON.parse('{"id":185,"type":"edge","label":"item","outV":182,"inVs":[23,37],"shard":5,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

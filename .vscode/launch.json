@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "base types"
+				"-g", "Union type \\(2\\)"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
