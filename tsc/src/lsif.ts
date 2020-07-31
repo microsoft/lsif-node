@@ -919,18 +919,22 @@ class Symbols {
 	private baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private exportedPaths: LRUCache<ts.Symbol, string | null>;
+	private seenSourceFiles: Set<string>;
 	private symbolAliases: Map<string, SymbolAlias>;
 	private parents: Map<string, ts.Symbol>;
 	private exports: Map<string, Set<string>>;
+	private symbolsExportedViaAlias: Set<string>;
 	private sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportedPaths = new LRUCache(2048);
+		this.seenSourceFiles = new Set();
 		this.symbolAliases = new Map();
 		this.parents = new Map();
 		this.exports = new Map();
+		this.symbolsExportedViaAlias = new Set();
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
@@ -945,6 +949,64 @@ class Symbols {
 		}
 		// Reference program
 		this.program;
+	}
+
+	public recordAdditionalParentChain(sourceFile: ts.SourceFile): void {
+		if (this.seenSourceFiles.has(sourceFile.fileName)) {
+			return;
+		}
+		this.seenSourceFiles.add(sourceFile.fileName);
+		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
+		if (sourceFileSymbol === undefined) {
+			return;
+		}
+		let index: number = 1;
+		const processSymbol = (parent: ts.Symbol, child: ts.Symbol): void => {
+			if (tss.getSymbolParent(child) === undefined) {
+				this.addParent(child, parent);
+			}
+			if (parent.exports === undefined || !parent.exports.has(child.getName() as ts.__String)) {
+				this.addExport(parent, child);
+			}
+		};
+		for (const node of sourceFile.statements) {
+			// `export =` or an `export default` declaration ==> ExportAssignment
+			if (ts.isExportAssignment(node)) {
+				const exportSymbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+				const localSymbol = node.expression !== undefined
+					? this.typeChecker.getSymbolAtLocation(node.expression)  || tss.getSymbolFromNode(node.expression)
+					: undefined;
+				if (exportSymbol !== undefined && localSymbol !== undefined) {
+					const name = ts.isIdentifier(node.expression) ? node.expression.getText() : `${index++}_export`;
+					this.storeSymbolAlias(localSymbol, { alias: exportSymbol, name: name });
+				}
+			} else if (ts.isExportDeclaration(node)) {
+				if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
+					for (const element of node.exportClause.elements) {
+						const exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
+						if (exportSymbol === undefined) {
+							continue;
+						}
+						processSymbol(sourceFileSymbol, exportSymbol);
+						if (tss.isAliasSymbol(exportSymbol)) {
+							const localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol);
+							if (localSymbol !== undefined) {
+								this.symbolsExportedViaAlias.add(tss.createSymbolKey(this.typeChecker, localSymbol));
+							}
+						}
+						// if (element.propertyName !== undefined) {
+						// 	localSymbol = this.typeChecker.getSymbolAtLocation(element.propertyName);
+						// }
+					}
+				}
+			}
+		}
+
+		// things we need to capture to have correct exports
+		// `export =` or an `export default` declaration ==> ExportAssignment
+		// `exports.bar = function foo() { ... }` ==> ExpressionStatement
+		// `export { root }` ==> ExportDeclaration
+		// `export { _root as root }` ==> ExportDeclaration
 	}
 
 	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
@@ -962,12 +1024,9 @@ class Symbols {
 		this.symbolAliases.delete(key);
 	}
 
-	public addParent(symbol: ts.Symbol, parent: ts.Symbol): Disposable {
+	private addParent(symbol: ts.Symbol, parent: ts.Symbol): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
 		this.parents.set(key, parent);
-		return () => {
-			this.parents.delete(key);
-		};
 	}
 
 	private getParent(symbol: ts.Symbol): ts.Symbol | undefined {
@@ -978,7 +1037,7 @@ class Symbols {
 		return this.parents.get(tss.createSymbolKey(this.typeChecker, symbol));
 	}
 
-	public addExport(parent: ts.Symbol, symbol: ts.Symbol): Disposable {
+	private addExport(parent: ts.Symbol, symbol: ts.Symbol): void {
 		const parentKey = tss.createSymbolKey(this.typeChecker, parent);
 		const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
 		let values = this.exports.get(parentKey);
@@ -987,16 +1046,6 @@ class Symbols {
 			this.exports.set(parentKey, values);
 		}
 		values.add(symbolKey);
-		return () => {
-			let values = this.exports.get(parentKey);
-			if (values === undefined) {
-				return;
-			}
-			values.delete(symbolKey);
-			if (values.size === 0) {
-				this.exports.delete(parentKey);
-			}
-		};
 	}
 
 	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
@@ -1005,6 +1054,10 @@ class Symbols {
 		}
 		let exports = this.exports.get(tss.createSymbolKey(this.typeChecker, parent));
 		return exports !== undefined && exports.has(tss.createSymbolKey(this.typeChecker, symbol));
+	}
+
+	public isExportedViaAlias(symbol: ts.Symbol): boolean {
+		return this.symbolsExportedViaAlias.has(tss.createSymbolKey(this.typeChecker, symbol));
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -1185,7 +1238,7 @@ class Symbols {
 		return result;
 	}
 
-	public matchPath(node: ts.Node, path: number[]): boolean {
+	private matchPath(node: ts.Node, path: number[]): boolean {
 		for (const kind of path) {
 			if (node === undefined || node.kind !== kind) {
 				return false;
@@ -1208,6 +1261,7 @@ interface ResolverContext {
 	// Todo@dirkb need to think about using root files instead.
 	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+	isExportedViaAlias(symbol: ts.Symbol): boolean;
 }
 
 
@@ -1284,7 +1338,7 @@ abstract class SymbolDataResolver {
 		return undefined;
 	}
 
-	protected resolveEmittingNode(symbol: ts.Symbol, isExported: boolean): ts.Node | undefined {
+	protected resolveLifeCycleNode(symbol: ts.Symbol, isExported: boolean): ts.Node | undefined {
 		// The symbol has a export path so we can't bind this to a node
 		// Note that we even treat private class members like this. Reason being
 		// is that they can be referenced but it would only be a compile error
@@ -1292,16 +1346,20 @@ abstract class SymbolDataResolver {
 		if (isExported) {
 			return undefined;
 		}
-		let declarations = symbol.getDeclarations();
+		if (this.resolverContext.isExportedViaAlias(symbol)) {
+			return undefined;
+		}
+
+		const declarations = symbol.getDeclarations();
 		if (declarations === undefined || declarations.length !== 1) {
 			return undefined;
 		}
-		let declaration = declarations[0];
+		const declaration = declarations[0];
 		if (tss.isValueModule(symbol) && declaration.kind === ts.SyntaxKind.SourceFile) {
 			return undefined;
 		}
 		if (tss.isAliasSymbol(symbol)) {
-			let sourceFile = declaration.getSourceFile();
+			const sourceFile = declaration.getSourceFile();
 			return this.resolverContext.isFullContentIgnored(sourceFile) ? undefined : sourceFile;
 		}
 		if (ts.isSourceFile(declaration)) {
@@ -1328,7 +1386,7 @@ class StandardResolver extends SymbolDataResolver {
 
 	public resolve(sourceFiles: ts.SourceFile[] | undefined, id: SymbolId, symbol: ts.Symbol): ResolverResult {
 		const monikerData = this.getMonikerData(sourceFiles, symbol);
-		return [new StandardSymbolData(this.symbolDataContext, id, this.resolveEmittingNode(symbol, monikerData !== undefined)), monikerData];
+		return [new StandardSymbolData(this.symbolDataContext, id, this.resolveLifeCycleNode(symbol, monikerData !== undefined)), monikerData];
 	}
 }
 
@@ -1344,7 +1402,7 @@ class AliasResolver extends SymbolDataResolver {
 		if (aliased !== undefined) {
 			const aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
 			if (aliasedSymbolData !== undefined) {
-				return [new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData, this.resolveEmittingNode(symbol, monikerData !== undefined) , symbol.getName() !== aliased.getName()), monikerData];
+				return [new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData, this.resolveLifeCycleNode(symbol, monikerData !== undefined) , symbol.getName() !== aliased.getName()), monikerData];
 			}
 		}
 		return [new StandardSymbolData(this.symbolDataContext, id), monikerData];
@@ -1363,7 +1421,7 @@ class MethodResolver extends SymbolDataResolver {
 		}
 		// console.log(`MethodResolver#resolve for symbol ${id} | ${symbol.getName()}`);
 		const monikerData = this.getMonikerData(sourceFiles, symbol);
-		const scope = this.resolveEmittingNode(symbol, monikerData !== undefined);
+		const scope = this.resolveLifeCycleNode(symbol, monikerData !== undefined);
 		const container = tss.getSymbolParent(symbol);
 		if (container === undefined) {
 			return [new MethodSymbolData(this.symbolDataContext, id, sourceFiles, undefined, scope), monikerData];
@@ -1592,8 +1650,12 @@ abstract class ProjectDataManager {
 		this.projectData.end();
 		if (this.emitStats) {
 			console.log('');
-			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files for project ${this.getName()}`);
 		}
+	}
+
+	protected getName(): string {
+		return this.projectData.project.name;
 	}
 }
 
@@ -1665,6 +1727,10 @@ class GlobalProjectDataManager extends LazyProjectDataManager {
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
 	}
+
+	protected getName(): string {
+		return 'Global libraries';
+	}
 }
 
 
@@ -1673,20 +1739,30 @@ class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
 	}
+
+	protected getName(): string {
+		return 'TypeScript default libraries';
+	}
 }
 
 class GroupProjectDataManager extends LazyProjectDataManager {
 
+	private readonly groupName: string;
 	private readonly groupRoot: string;
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, groupRoot: string, emitStats: boolean = false) {
 		super(emitter, group, project, emitStats);
+		this.groupName = group.name;
 		this.groupRoot = groupRoot;
 	}
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
 		return paths.isParent(this.groupRoot, fileName);
+	}
+
+	protected getName(): string {
+		return `Workspace libraries for ${this.groupName}`;
 	}
 }
 
@@ -1733,6 +1809,7 @@ export class DataManager implements SymbolDataContext {
 	private readonly groupPDM: GroupProjectDataManager;
 	private currentPDM: TSConfigProjectDataManager | undefined;
 	private currentProgram: ts.Program | undefined;
+	private currentSymbols: Symbols | undefined;
 
 	private readonly documentDatas: Map<string, DocumentData>;
 	private readonly symbolDatas: Map<string, SymbolData | null>;
@@ -1769,11 +1846,12 @@ export class DataManager implements SymbolDataContext {
 		this.groupPDM.begin();
 	}
 
-	public beginProject(program: ts.Program, project: Project, projectRoot: string): void {
+	public beginProject(program: ts.Program, project: Project, projectRoot: string, symbols: Symbols): void {
 		if (this.currentPDM !== undefined) {
 			throw new Error(`There is already a current program data manager set`);
 		}
 		this.currentProgram = program;
+		this.currentSymbols = symbols;
 		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, program.getRootFileNames(), this.reportStats);
 		this.currentPDM.begin();
 	}
@@ -1792,6 +1870,7 @@ export class DataManager implements SymbolDataContext {
 		this.currentPDM.end();
 		this.currentPDM = undefined;
 		this.currentProgram = undefined;
+		this.currentSymbols = undefined;
 	}
 
 	public end(): void {
@@ -1811,6 +1890,9 @@ export class DataManager implements SymbolDataContext {
 			return result;
 		}
 
+		if (this.currentSymbols !== undefined) {
+			this.currentSymbols.recordAdditionalParentChain(sourceFile);
+		}
 		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
 		result = manager.createDocumentData(fileName, document, monikerPath, external);
 		this.documentDatas.set(fileName, result);
@@ -1994,8 +2076,8 @@ class Visitor implements ResolverContext {
 			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = dataManager;
-		this.dataManager.beginProject(this.program, this.project, configLocation || process.cwd());
 		this.symbols = new Symbols(this.program, this.typeChecker);
+		this.dataManager.beginProject(this.program, this.project, configLocation || process.cwd(), this.symbols);
 		this.disposables = new Map();
 		this.symbolDataResolvers = {
 			standard: new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager),
@@ -2005,6 +2087,10 @@ class Visitor implements ResolverContext {
 			transient: new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			typeAlias: new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager)
 		};
+	}
+
+	public isExportedViaAlias(symbol: ts.Symbol): boolean {
+		return this.symbols.isExportedViaAlias(symbol);
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -2089,49 +2175,6 @@ class Visitor implements ResolverContext {
 		}
 		if (!this.options.stdout) {
 			process.stdout.write('.');
-		}
-
-		// things we need to capture to have correct exports
-		// `export =` or an `export default` declaration ==> ExportAssignment
-		// `exports.bar = function foo() { ... }` ==> ExpressionStatement
-		// `export { root }` ==> ExportDeclaration
-		// `export { _root as root }` ==> ExportDeclaration
-		const processSymbol = (disposables: Disposable[], parent: ts.Symbol, symbol: ts.Symbol): void => {
-			if (tss.getSymbolParent(symbol) === undefined) {
-				disposables.push(this.symbols.addParent(symbol, parent));
-			}
-			if (parent.exports === undefined || !parent.exports.has(symbol.getName() as ts.__String)) {
-				disposables.push(this.symbols.addExport(parent, symbol));
-			}
-		};
-		const exportAssignments: ts.ExportAssignment[] = [];
-		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
-		for (let node of sourceFile.statements) {
-			if (ts.isExportAssignment(node)) {
-				exportAssignments.push(node);
-			} else if (ts.isExportDeclaration(node) && sourceFileSymbol !== undefined) {
-				if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
-					for (let element of node.exportClause.elements) {
-						let exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
-						if (exportSymbol === undefined) {
-							continue;
-						}
-						processSymbol(disposables, sourceFileSymbol, exportSymbol);
-						let localSymbol: ts.Symbol | undefined;
-						if (element.propertyName !== undefined) {
-							localSymbol = this.typeChecker.getSymbolAtLocation(element.propertyName);
-						} else if (tss.isAliasSymbol(exportSymbol)) {
-							localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol);
-						}
-						if (localSymbol !== undefined) {
-							processSymbol(disposables, sourceFileSymbol, localSymbol);
-						}
-					}
-				}
-			}
-		}
-		if (exportAssignments.length > 0) {
-			this.handleExportAssignments(exportAssignments);
 		}
 
 		this.currentSourceFile = sourceFile;
@@ -2319,19 +2362,6 @@ class Visitor implements ResolverContext {
 		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
 		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node), node);
 		return true;
-	}
-
-	private handleExportAssignments(nodes: ts.ExportAssignment[]): void {
-		let index = 0;
-		for (let node of nodes) {
-			const exportSymbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
-			const localSymbol = node.expression !== undefined
-				? this.typeChecker.getSymbolAtLocation(node.expression)  || tss.getSymbolFromNode(node.expression)
-				: undefined;
-			if (exportSymbol !== undefined && localSymbol !== undefined) {
-				this.symbols.storeSymbolAlias(localSymbol, { alias: exportSymbol, name: `${index}_export`});
-			}
-		}
 	}
 
 	private endVisitExportAssignment(node: ts.ExportAssignment): void {

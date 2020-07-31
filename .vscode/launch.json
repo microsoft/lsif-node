@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Union type \\(2\\)"
+				"-g", "Export \\{ foo \\} with import"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
@@ -247,10 +247,10 @@
 			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "./src/common/tsconfig.json",
+				 "-p", "./tsconfig.json",
 				 "--noContents",
 				 "--outputFormat", "line",
-				 "--stdout"
+				 "--out", "jsonrpc.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
