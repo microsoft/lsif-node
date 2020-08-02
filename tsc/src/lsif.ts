@@ -602,17 +602,30 @@ class StandardSymbolData extends SymbolData {
 
 class AliasedSymbolData extends StandardSymbolData {
 
-	constructor(context: SymbolDataContext, id: string, private aliased: SymbolData, scope: ts.Node | undefined = undefined, private rename: boolean = false) {
+	constructor(context: SymbolDataContext, id: string, private aliased: SymbolData, scope: ts.Node | undefined = undefined, private renames: boolean, private aliasedChildren: { data: SymbolData; exportPath: string; }[] | undefined) {
 		super(context, id, scope);
 	}
 
 	public begin(): void {
 		super.begin();
 		this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
+		if (this.aliasedChildren !== undefined) {
+			for (const child of this.aliasedChildren) {
+				const resultSet = this.vertex.resultSet();
+				this.emit(resultSet);
+				const moniker = this.vertex.moniker('tsc');
+			}
+		}
+		this.aliasedChildren = undefined;
 	}
 
+	public addMoniker(identifier: string, kind: MonikerKind): void {
+		super.addMoniker(identifier, kind);
+	}
+
+
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
-		if (this.rename) {
+		if (this.renames) {
 			super.addDefinition(sourceFile, definition, false);
 		} else {
 			this.emit(this.edge.next(definition, this.resultSet));
@@ -621,7 +634,7 @@ class AliasedSymbolData extends StandardSymbolData {
 	}
 
 	public findDefinition(sourceFile: ts.SourceFile, range: lsp.Range): DefinitionRange | undefined {
-		if (this.rename) {
+		if (this.renames) {
 			return super.findDefinition(sourceFile, range);
 		} else {
 			return this.aliased.findDefinition(sourceFile, range);
@@ -910,6 +923,12 @@ interface SymbolAlias {
 	name: string;
 }
 
+interface AliasExportInformation {
+	renames: boolean;
+	exportPath: string;
+	children: { symbolId: string; exportPath: string; }[];
+}
+
 class Symbols {
 
 	private static topLevelPaths: Map<number, number[]> = new Map([
@@ -921,8 +940,7 @@ class Symbols {
 	private exportPathCache: LRUCache<ts.Symbol, string | null>;
 
 	private seenSourceFiles: Set<string>;
-	private aliasedExportPath: Map<string, string>;
-	private aliasRenames: Set<string>;
+	private aliasedExportInfo: Map<string, AliasExportInformation>;
 	private exportedViaAlias: Set<string>;
 
 	private symbolAliases: Map<string, SymbolAlias>;
@@ -934,8 +952,7 @@ class Symbols {
 		this.exportPathCache = new LRUCache(2048);
 
 		this.seenSourceFiles = new Set();
-		this.aliasedExportPath = new Map();
-		this.aliasRenames = new Set();
+		this.aliasedExportInfo = new Map();
 		this.exportedViaAlias = new Set();
 
 		this.symbolAliases = new Map();
@@ -965,7 +982,7 @@ class Symbols {
 			return;
 		}
 		let index: number = 1;
-		const processExports = (symbol: ts.Symbol, parentPath: string): void => {
+		const processExports = (result: { symbolId: string; exportPath: string; }[], symbol: ts.Symbol, parentPath: string): void => {
 			if (symbol.exports === undefined) {
 				return;
 			}
@@ -973,16 +990,18 @@ class Symbols {
 				const key = tss.createSymbolKey(this.typeChecker, child);
 				this.exportedViaAlias.add(key);
 				const path = `${parentPath}.${child.getName()}`;
-				this.aliasedExportPath.set(key, path);
-				processExports(child, path);
+				result.push({ symbolId: key, exportPath: path });
+				processExports(result, child, path);
 			});
 		};
-		const processSymbol = (alias: ts.Symbol, symbol: ts.Symbol, exportName: string): void => {
+		const processSymbol = (alias: ts.Symbol, symbol: ts.Symbol, exportName: string, renames: boolean): void => {
 			const aliasKey = tss.createSymbolKey(this.typeChecker, alias);
 			const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
+
 			this.exportedViaAlias.add(symbolKey);
-			this.aliasedExportPath.set(aliasKey, exportName);
-			processExports(symbol, exportName);
+			const info: AliasExportInformation = { exportPath: exportName, renames, children: [] };
+			this.aliasedExportInfo.set(aliasKey, info);
+			processExports(info.children, symbol, exportName);
 		};
 
 		for (const node of sourceFile.statements) {
@@ -994,7 +1013,7 @@ class Symbols {
 					: undefined;
 				if (exportSymbol !== undefined && localSymbol !== undefined) {
 					const name = ts.isIdentifier(node.expression) ? node.expression.getText() : `${index++}_export`;
-					processSymbol(exportSymbol, localSymbol, name);
+					processSymbol(exportSymbol, localSymbol, name, false);
 				}
 			} else if (ts.isExportDeclaration(node)) {
 				// `export { foo }` ==> ExportDeclaration
@@ -1006,16 +1025,14 @@ class Symbols {
 							continue;
 						}
 						const name = element.name.getText();
-						if (element.propertyName !== undefined && element.propertyName.getText() !== name) {
-							this.aliasRenames.add(tss.createSymbolKey(this.typeChecker, exportSymbol));
-						}
+						const renames = element.propertyName !== undefined && element.propertyName.getText() !== name;
 						const localSymbol = tss.isAliasSymbol(exportSymbol)
 							? this.typeChecker.getAliasedSymbol(exportSymbol)
 							: element.propertyName !== undefined
 								? this.typeChecker.getSymbolAtLocation(element.propertyName)
 								: undefined;
 						if (localSymbol !== undefined) {
-							processSymbol(exportSymbol, localSymbol, name);
+							processSymbol(exportSymbol, localSymbol, name, renames);
 						}
 					}
 				}
@@ -1029,15 +1046,14 @@ class Symbols {
 		// `export { _root as root }` ==> ExportDeclaration
 	}
 
-	public isRename(symbol: ts.Symbol): boolean {
-		return this.aliasRenames.has(tss.createSymbolKey(this.typeChecker, symbol));
+	public getAliasedExportInfo(symbol: ts.Symbol): AliasExportInformation | undefined {
+		return this.aliasedExportInfo.get(tss.createSymbolKey(this.typeChecker, symbol));
 	}
 
 	public symbolProcessed(symbol: ts.Symbol): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
-		this.aliasedExportPath.delete(key);
+		this.aliasedExportInfo.delete(key);
 		this.exportedViaAlias.delete(key);
-		this.aliasRenames.delete(key);
 	}
 
 	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
@@ -1175,10 +1191,10 @@ class Symbols {
 			return result === null ? undefined : result;
 		}
 		const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
-		result = this.aliasedExportPath.get(symbolKey);
-		if (result !== undefined) {
-			this.exportPathCache.set(symbol, result);
-			return result;
+		const exportInfo = this.aliasedExportInfo.get(symbolKey);
+		if (exportInfo !== undefined) {
+			this.exportPathCache.set(symbol, exportInfo.exportPath);
+			return exportInfo.exportPath;
 		}
 		if (tss.isSourceFile(symbol) && kind === ModuleSystemKind.module) {
 			this.exportPathCache.set(symbol, '');
@@ -1269,6 +1285,7 @@ type ResolverResult = [SymbolData, MonikerData | undefined];
 interface ResolverContext {
 	// Todo@dirkb need to think about using root files instead.
 	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
+	getSymbolData(id: SymbolId): SymbolData | undefined;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 	isExportedViaAlias(symbol: ts.Symbol): boolean;
 }
@@ -1411,7 +1428,22 @@ class AliasResolver extends SymbolDataResolver {
 		if (aliased !== undefined) {
 			const aliasedSymbolData = this.resolverContext.getOrCreateSymbolData(aliased);
 			if (aliasedSymbolData !== undefined) {
-				return [new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData, this.resolveLifeCycleNode(symbol, monikerData !== undefined), this.symbols.isRename(symbol)), monikerData];
+				const aliasedInfo = this.symbols.getAliasedExportInfo(symbol);
+				const aliasedChildren: { data: SymbolData; exportPath: string; }[] = [];
+				let renames: boolean = false;
+				if (aliasedInfo) {
+					renames = aliasedInfo.renames;
+					for (const child of aliasedInfo?.children) {
+						const childSymbolData = this.resolverContext.getSymbolData(child.symbolId);
+						if (childSymbolData !== undefined) {
+							aliasedChildren.push({ data: childSymbolData, exportPath: child.exportPath });
+						}
+					}
+				}
+				return [
+					new AliasedSymbolData(this.symbolDataContext, id, aliasedSymbolData, this.resolveLifeCycleNode(symbol, monikerData !== undefined), renames, aliasedChildren),
+					monikerData
+				];
 			}
 		}
 		return [new StandardSymbolData(this.symbolDataContext, id), monikerData];
@@ -2506,6 +2538,10 @@ class Visitor implements ResolverContext {
 
 	// private hoverCalls: number = 0;
 	// private hoverTotal: number = 0;
+
+	public getSymbolData(symbolId: SymbolId): SymbolData | undefined {
+		return this.dataManager.getSymbolData(symbolId);
+	}
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
