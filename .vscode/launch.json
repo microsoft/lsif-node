@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export \\{ foo \\} with import"
+				"-g", "Export \\{ _foo as foo \\}"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",

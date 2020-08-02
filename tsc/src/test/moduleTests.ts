@@ -61,13 +61,19 @@ suite('Module System Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}')
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"z9tFVl5qLcmtAWiHkDMgtg==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":17,"type":"edge","label":"moniker","outV":15,"inV":16}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"edge","label":"next","outV":22,"inV":15}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":25,"type":"edge","label":"moniker","outV":22,"inV":24}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export = ', () => {
+	test('Export = foo', () => {
 		const emitter = lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -78,7 +84,13 @@ suite('Module System Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}')
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"z9tFVl5qLcmtAWiHkDMgtg==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":17,"type":"edge","label":"moniker","outV":15,"inV":16}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"edge","label":"next","outV":22,"inV":15}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":25,"type":"edge","label":"moniker","outV":22,"inV":24}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -95,14 +107,19 @@ suite('Module System Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"z9tFVl5qLcmtAWiHkDMgtg==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}')
+			JSON.parse('{"id":17,"type":"edge","label":"moniker","outV":15,"inV":16}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"edge","label":"next","outV":22,"inV":15}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":25,"type":"edge","label":"moniker","outV":22,"inV":24}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { _foo as foo } ', () => {
+	test('Export { _foo as foo }', () => {
 		const emitter = lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -113,8 +130,31 @@ suite('Module System Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"170NjUeOL6mfW3aDVml2Ig==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}')
+			JSON.parse('{"id":17,"type":"edge","label":"moniker","outV":15,"inV":16}'),
+			JSON.parse('{"id":25,"type":"edge","label":"next","outV":24,"inV":15}'),
+			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":27,"type":"edge","label":"moniker","outV":24,"inV":26}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export { foo } with children', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'namespace foo { export const x = 10; }',
+					'export { foo };'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		const validate: Element[] = [
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"VLZrX43VmC8pcNLmu3MJDA==","unique":"document","kind":"local"}'),
+			
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

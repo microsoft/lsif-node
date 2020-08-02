@@ -1,6 +1,4 @@
-export interface A { name: string };
-export interface B { name: string };
-export interface C { name: string };
+import { foo, foo2 } from './provide';
 
-let d: A | (A & B);
-d.name;
+foo();
+foo2();

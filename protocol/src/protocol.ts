@@ -837,12 +837,12 @@ export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels
 export type contains = E1N<Project, Document, EdgeLabels.contains> | E1N<Document, Range, EdgeLabels.contains>;
 
 /**
- * An edge associating a range with a result set. The relationship exists between:
+ * An edge associating a range with a result set or a result set with another result set. The relationship exists between:
  *
  * - `Range` -> `ResultSet`
  * - `ResultSet` -> `ResultSet`
  */
-export type next = E11<Range, ResultSet, EdgeLabels.next>;
+export type next = E11<Range, ResultSet, EdgeLabels.next> | E11<ResultSet, ResultSet, EdgeLabels.next>;
 
 /**
  * An edge representing a item in a result set. The relationship exists between:

@@ -1,4 +1,4 @@
-export function foo(): void {
+function _foo(): void {
 }
 
-foo();
+export { _foo as foo, _foo as foo2 };
