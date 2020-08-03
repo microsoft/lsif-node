@@ -151,10 +151,19 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
 		const validate: Element[] = [
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"VLZrX43VmC8pcNLmu3MJDA==","unique":"document","kind":"local"}'),
-			
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"W+GcqeTBebr7ph8ZDmst6w==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":30,"type":"edge","label":"next","outV":29,"inV":15}'),
+			JSON.parse('{"id":31,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":32,"type":"edge","label":"moniker","outV":29,"inV":31}'),
+			JSON.parse('{"id":33,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":34,"type":"edge","label":"next","outV":33,"inV":22}'),
+			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":36,"type":"edge","label":"moniker","outV":33,"inV":35}'),
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

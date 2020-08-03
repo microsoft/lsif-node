@@ -22,6 +22,7 @@ import { VertexBuilder, EdgeBuilder } from './graph';
 import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
+import { TscMoniker } from './utils/moniker';
 
 interface Disposable {
 	(): void;
@@ -609,20 +610,24 @@ class AliasedSymbolData extends StandardSymbolData {
 	public begin(): void {
 		super.begin();
 		this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
-		if (this.aliasedChildren !== undefined) {
-			for (const child of this.aliasedChildren) {
-				const resultSet = this.vertex.resultSet();
-				this.emit(resultSet);
-				const moniker = this.vertex.moniker('tsc');
-			}
-		}
-		this.aliasedChildren = undefined;
 	}
 
 	public addMoniker(identifier: string, kind: MonikerKind): void {
 		super.addMoniker(identifier, kind);
+		if (this.aliasedChildren !== undefined) {
+			const parts = TscMoniker.parse(identifier);
+			for (const child of this.aliasedChildren) {
+				const resultSet = this.vertex.resultSet();
+				this.emit(resultSet);
+				this.emit(this.edge.next(resultSet, child.data.getResultSet()));
+				const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.group;
+				const moniker = this.vertex.moniker('tsc', tss.createMonikerIdentifier(parts.path, child.exportPath), unique, kind);
+				this.emit(moniker);
+				this.emit(this.edge.moniker(resultSet, moniker));
+			}
+			this.aliasedChildren = undefined;
+		}
 	}
-
 
 	public addDefinition(sourceFile: ts.SourceFile, definition: DefinitionRange): void {
 		if (this.renames) {
