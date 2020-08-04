@@ -169,6 +169,47 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export { RAL } with multiple declarations', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface RAL { readonly y: number; }',
+					'namespace RAL { export const x = 10; }',
+					'function RAL() { }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":48,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":49,"type":"edge","label":"next","outV":48,"inV":26}'),
+			JSON.parse('{"id":50,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.y","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":51,"type":"edge","label":"moniker","outV":48,"inV":50}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export { RAL } with nested declarations', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface RAL { readonly console: { warn(message?: any, ...optionalParams: any[]): void; } }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":80,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console.warn","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 	test('Export { foo } with import', () => {
 		const emitter = lsif('/@test', new Map([
 			[

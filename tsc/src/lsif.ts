@@ -988,16 +988,28 @@ class Symbols {
 		}
 		let index: number = 1;
 		const processExports = (result: { symbolId: string; exportPath: string; }[], symbol: ts.Symbol, parentPath: string): void => {
-			if (symbol.exports === undefined) {
-				return;
-			}
-			symbol.exports.forEach((child) => {
+			const processChild = (child: ts.Symbol) => {
 				const key = tss.createSymbolKey(this.typeChecker, child);
+				// We have seen the symbol
+				if (this.exportedViaAlias.has(key)) {
+					return;
+				}
 				this.exportedViaAlias.add(key);
 				const path = `${parentPath}.${child.getName()}`;
 				result.push({ symbolId: key, exportPath: path });
 				processExports(result, child, path);
-			});
+			};
+
+			const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : sourceFile);
+			const typeSymbol = type.getSymbol();
+			if (typeSymbol !== undefined) {
+				typeSymbol.exports?.forEach(processChild);
+				typeSymbol.members?.forEach(processChild);
+			}
+			if (symbol !== typeSymbol) {
+				symbol.exports?.forEach(processChild);
+				symbol.members?.forEach(processChild);
+			}
 		};
 		const processSymbol = (alias: ts.Symbol, symbol: ts.Symbol, exportName: string, renames: boolean): void => {
 			const aliasKey = tss.createSymbolKey(this.typeChecker, alias);
@@ -1014,7 +1026,7 @@ class Symbols {
 				// `export = foo` or an `export default foo` declaration ==> ExportAssignment
 				const exportSymbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
 				const localSymbol = node.expression !== undefined
-					? this.typeChecker.getSymbolAtLocation(node.expression)  || tss.getSymbolFromNode(node.expression)
+					? this.typeChecker.getSymbolAtLocation(node.expression) || tss.getSymbolFromNode(node.expression)
 					: undefined;
 				if (exportSymbol !== undefined && localSymbol !== undefined) {
 					const name = ts.isIdentifier(node.expression) ? node.expression.getText() : `${index++}_export`;
