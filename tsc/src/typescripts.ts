@@ -175,6 +175,23 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 			k: declaration.kind
 		});
 	}
+	if (fragments.length > 1) {
+		fragments.sort((a, b) => {
+			let result = a.f < b.f ? -1 : (a.f > b.f ? 1 : 0);
+			if (result !== 0) {
+				return result;
+			}
+			result = a.s - b.s;
+			if (result !== 0) {
+				return result;
+			}
+			result = a.e - b.e;
+			if (result !== 0) {
+				return result;
+			}
+			return a.k - b.k;
+		});
+	}
 	let hash = crypto.createHash('md5');
 	hash.update(JSON.stringify(fragments, undefined, 0));
 	result = hash.digest('base64');

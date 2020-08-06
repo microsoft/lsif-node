@@ -210,6 +210,44 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export { RAL } with nested public declarations', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface MyConsole { warn(message?: any, ...optionalParams: any[]): void; }',
+					'interface RAL { readonly console: MyConsole }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":80,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console.warn","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export { RAL } aliased interface type', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface _Buffer { end(); }',
+					'namespace RAL { export type Buffer = _Buffer; }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 	test('Export { foo } with import', () => {
 		const emitter = lsif('/@test', new Map([
 			[

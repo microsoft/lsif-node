@@ -1,16 +1,23 @@
-import { foo, foo2 } from './provide';
+import { RAL } from './provide';
 
-foo();
-foo2();
+const ral: RAL;
+
+ral.foo();
 
 
-interface RAL {
-	readonly console: {
-		error(message?: any, ...optionalParams: any[]): void;
-	}
+interface A {
+	name: string;
+	value: number;
 }
 
-export { RAL };
+interface B {
+	name: string;
+}
 
+const x: A | B;
+x.name;
+x.value;
 
-export const x: number = 10;
+const y: A & B;
+y.name;
+y.value;
