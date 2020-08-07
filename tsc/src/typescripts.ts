@@ -224,6 +224,14 @@ export function isSourceFile(symbol: ts.Symbol): boolean  {
 	return declarations !== undefined && declarations.length === 1 && ts.isSourceFile(declarations[0]);
 }
 
+export function isFunctionScopedVariable(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
+}
+
+export function isBlockScopedVariable(symbol: ts.Symbol): boolean {
+	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
+}
+
 export function isFunction(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Function) !== 0;
 }
@@ -254,10 +262,6 @@ export function isValueModule(symbol: ts.Symbol): boolean {
 
 export function isTypeParameter(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
-}
-
-export function isBlockScopedVariable(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 }
 
 export function isTransient(symbol: ts.Symbol): boolean {
