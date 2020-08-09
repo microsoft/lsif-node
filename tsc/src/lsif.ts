@@ -1698,7 +1698,7 @@ abstract class ProjectDataManager {
 	}
 
 	protected getName(): string {
-		return this.projectData.project.name;
+		return this.projectData.project.resource || this.projectData.project.name;
 	}
 }
 
