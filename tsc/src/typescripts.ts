@@ -430,7 +430,7 @@ export const EmitBoundaries: Set<number> = new Set<number>([
 	ts.SyntaxKind.FunctionExpression,
 	ts.SyntaxKind.ArrowFunction,
 	ts.SyntaxKind.ClassExpression,
-	ts.SyntaxKind.VariableDeclaration,
+	ts.SyntaxKind.VariableStatement,
 	ts.SyntaxKind.FunctionDeclaration,
 	ts.SyntaxKind.ClassDeclaration,
 	ts.SyntaxKind.InterfaceDeclaration,

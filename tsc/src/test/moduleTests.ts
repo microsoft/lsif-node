@@ -316,4 +316,20 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export infered retun type', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo() { return { touch: true }; }'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

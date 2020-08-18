@@ -64,4 +64,55 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export via type literal', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'const x = { touch: false };'
+				].join(os.EOL)
+			]
+		]), { });
+		const validate: Element[] = [
+			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":31,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export in declaration file', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'declare const x: { touch: false };'
+				].join(os.EOL)
+			]
+		]), { });
+		const validate: Element[] = [
+			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":31,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export function signature in declaration file', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'declare const x: { (a: number): void; };'
+				].join(os.EOL)
+			]
+		]), { });
+		const validate: Element[] = [
+			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.*","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

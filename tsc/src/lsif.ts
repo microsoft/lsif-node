@@ -356,11 +356,11 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	}
 
 	public changeVisibility(value: SymbolDataVisibility.aliasExported | SymbolDataVisibility.internal): void {
-		if (value === SymbolDataVisibility.aliasExported && this.visibility !== SymbolDataVisibility.unknown && this.visibility !== SymbolDataVisibility.aliasExported) {
-			throw new Error(`Can't upgrade symbol data visibilitt from ${this.visibility} to ${value}`);
+		if (value === SymbolDataVisibility.aliasExported && this.visibility === SymbolDataVisibility.exported) {
+			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
 		}
 		if (value === SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.unknown) {
-			throw new Error(`Can't upgrade symbol data visibilitt from ${this.visibility} to ${value}`);
+			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
 		}
 		this.visibility = value;
 	}
@@ -903,8 +903,28 @@ interface SymbolAlias {
 
 class Symbols {
 
-	private static topLevelPaths: Map<number, number[]> = new Map([
+	private static TopLevelPaths: Map<number, number[]> = new Map([
 		[ts.SyntaxKind.VariableDeclaration, [ts.SyntaxKind.VariableDeclarationList, ts.SyntaxKind.VariableStatement, ts.SyntaxKind.SourceFile]]
+	]);
+
+	private static InternalSymbolNames: Set<string> = new Set([
+		ts.InternalSymbolName.Call,
+		ts.InternalSymbolName.Constructor,
+		ts.InternalSymbolName.New,
+		ts.InternalSymbolName.Index,
+		ts.InternalSymbolName.ExportStar,
+		ts.InternalSymbolName.Global,
+		ts.InternalSymbolName.Missing,
+		ts.InternalSymbolName.Type,
+		ts.InternalSymbolName.Object,
+		ts.InternalSymbolName.JSXAttributes,
+		ts.InternalSymbolName.Class,
+		ts.InternalSymbolName.Function,
+		ts.InternalSymbolName.Computed,
+		ts.InternalSymbolName.Resolving,
+		ts.InternalSymbolName.ExportEquals,
+		ts.InternalSymbolName.Default,
+		ts.InternalSymbolName.This
 	]);
 
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
@@ -1214,12 +1234,9 @@ class Symbols {
 	}
 
 	public getExportSymbolName(symbol: ts.Symbol): string {
-		const name = symbol.getName();
-		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
-			return name.substr(1, name.length - 2);
-		}
+		const escapedName = symbol.getEscapedName();
 		// export default foo && export = foo
-		if (tss.isAliasSymbol(symbol) && (name === 'default' || name === 'export=')) {
+		if (tss.isAliasSymbol(symbol) && (escapedName === ts.InternalSymbolName.Default || escapedName === ts.InternalSymbolName.ExportEquals)) {
 			const declarations = symbol.getDeclarations();
 			if (declarations !== undefined && declarations.length === 1) {
 				const declaration = declarations[0];
@@ -1227,6 +1244,14 @@ class Symbols {
 					return declaration.expression.getText();
 				}
 			}
+		}
+		if (Symbols.InternalSymbolNames.has(escapedName as string)) {
+			// A star is not a valid identifier in JS. So it can never appear as a symbol name
+			return '*';
+		}
+		const name = symbol.getName();
+		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
+			return name.substr(1, name.length - 2);
 		}
 		return name;
 	}
@@ -1239,7 +1264,7 @@ class Symbols {
 
 		let result: boolean = false;
 		for (const declaration of declarations) {
-			const path: number[] | undefined = Symbols.topLevelPaths.get(declaration.kind);
+			const path: number[] | undefined = Symbols.TopLevelPaths.get(declaration.kind);
 			if (path === undefined) {
 				result = result || ts.isSourceFile(declaration.parent);
 			} else {
@@ -2278,8 +2303,8 @@ class Visitor implements FactoryContext {
 		if (visit.call(this, node)) {
 			node.forEachChild(child => this.visit(child));
 		}
-		this.dataManager.nodeProcessed(node);
 		endVisit.call(this, node);
+		this.dataManager.nodeProcessed(node);
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
