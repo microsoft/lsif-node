@@ -936,7 +936,7 @@ class Symbols {
 		this.program;
 	}
 
-	public computeAliasExportPaths(context: { getOrCreateSymbolData(symbol: ts.Symbol): SymbolData; getSymbolData(symbolId: SymbolId): SymbolData | undefined; }, sourceFile: ts.SourceFile, symbol: ts.Symbol, exportName: string): [SymbolData, string][] {
+	public computeAdditionalExportPaths(context: { getOrCreateSymbolData(symbol: ts.Symbol): SymbolData; getSymbolData(symbolId: SymbolId): SymbolData | undefined; }, sourceFile: ts.SourceFile, symbol: ts.Symbol, exportName: string): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
 		const seen: Set<string> = new Set();
 
@@ -2258,6 +2258,8 @@ class Visitor implements FactoryContext {
 			case ts.SyntaxKind.ExportDeclaration:
 				this.doVisit(this.visitExportDeclaration, this.endVisitExportDeclaration, node as ts.ExportDeclaration);
 				break;
+			case ts.SyntaxKind.VariableStatement:
+				this.doVisit(this.visitVariableStatement, this.endVisitVariableStatement, node as ts.VariableStatement);
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
 				this.visitIdentifier(identifier);
@@ -2443,33 +2445,6 @@ class Visitor implements FactoryContext {
 		}
 	}
 
-	private addDocumentSymbol(node: tss.Declaration): boolean {
-		let rangeNode = node.name !== undefined ? node.name : node;
-		let symbol = this.program.getTypeChecker().getSymbolAtLocation(rangeNode);
-		let declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
-		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
-			return false;
-		}
-		let symbolData = this.getOrCreateSymbolData(symbol);
-		if (symbolData === undefined) {
-			return false;
-		}
-		let sourceFile = this.currentSourceFile!;
-		let definition = symbolData.findDefinition(sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
-		if (definition === undefined) {
-			return false;
-		}
-		let currentContainer = this.symbolContainer[this.symbolContainer.length - 1];
-		let child: RangeBasedDocumentSymbol = { id: definition.id };
-		if (currentContainer.children === undefined) {
-			currentContainer.children = [ child ];
-		} else {
-			currentContainer.children.push(child);
-		}
-		this.symbolContainer.push(child);
-		return true;
-	}
-
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
 		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
 		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
@@ -2493,15 +2468,8 @@ class Visitor implements FactoryContext {
 		if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
 			const name = node.expression.getText();
 			const sourceFile = node.getSourceFile();
-			const aliasExports = this.symbols.computeAliasExportPaths(this, sourceFile, aliasedSymbol, name);
-			for (const aliasExport of aliasExports) {
-				const resultSet = this.vertex.resultSet();
-				this.emit(resultSet);
-				this.emit(this.edge.next(resultSet, aliasExport[0].getResultSet()));
-				const moniker = this.vertex.moniker('tsc', tss.createMonikerIdentifier(monikerParts.path, aliasExport[1]), UniquenessLevel.group, MonikerKind.export);
-				this.emit(moniker);
-				this.emit(this.edge.moniker(resultSet, moniker));
-			}
+			const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name);
+			this.emitAdditionMonikers(monikerParts.path, additionalExports);
 		}
 		return false;
 	}
@@ -2540,15 +2508,8 @@ class Visitor implements FactoryContext {
 				if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
 					const name = element.propertyName?.getText() || element.name.getText();
 					const sourceFile = node.getSourceFile();
-					const aliasExports = this.symbols.computeAliasExportPaths(this, sourceFile, aliasedSymbol, name);
-					for (const aliasExport of aliasExports) {
-						const resultSet = this.vertex.resultSet();
-						this.emit(resultSet);
-						this.emit(this.edge.next(resultSet, aliasExport[0].getResultSet()));
-						const moniker = this.vertex.moniker('tsc', tss.createMonikerIdentifier(monikerParts.path, aliasExport[1]), UniquenessLevel.group, MonikerKind.export);
-						this.emit(moniker);
-						this.emit(this.edge.moniker(resultSet, moniker));
-					}
+					const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name);
+					this.emitAdditionMonikers(monikerParts.path, additionalExports);
 				}
 			}
 		}
@@ -2556,7 +2517,35 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
+	}
 
+	private visitVariableStatement(node: ts.VariableStatement): boolean {
+		return true;
+	}
+
+	private endVisitVariableStatement(node: ts.VariableStatement): void {
+		if (!ts.isSourceFile(node.parent)) {
+			return;
+		}
+		for (const declaration of node.declarationList.declarations) {
+			const name = declaration.name;
+			const symbol = this.typeChecker.getSymbolAtLocation(name);
+			if (symbol === undefined) {
+				continue;
+			}
+			const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+			if (symbolData === undefined || symbolData.getVisibility() !== SymbolDataVisibility.exported) {
+				continue;
+			}
+			const moniker = symbolData.getMoniker();
+			if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
+				continue;
+			}
+			const monikerParts = TscMoniker.parse(moniker.identifier);
+			const sourceFile = node.getSourceFile();
+			const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, symbol, name.getText());
+			this.emitAdditionMonikers(monikerParts.path, additionalExports);
+		}
 	}
 
 	private visitIdentifier(node: ts.Identifier): void {
@@ -2565,24 +2554,6 @@ class Visitor implements FactoryContext {
 
 	private visitStringLiteral(node: ts.StringLiteral): void {
 		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
-	}
-
-	private handleSymbol(symbol: ts.Symbol | undefined, location: ts.Node): void {
-		if (symbol === undefined) {
-			return;
-		}
-		let symbolData = this.getOrCreateSymbolData(symbol);
-		if (symbolData === undefined) {
-			return;
-		}
-		let sourceFile = this.currentSourceFile!;
-		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
-			return;
-		}
-
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
-		this.currentDocumentData.addRange(reference);
-		symbolData.addReference(sourceFile.fileName, reference, ItemEdgeProperties.references);
 	}
 
 	private visitGeneric(node: ts.Node): boolean {
@@ -2614,6 +2585,62 @@ class Visitor implements FactoryContext {
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile.fileName, reference, ItemEdgeProperties.references);
 		return;
+	}
+
+	private emitAdditionMonikers(path: string | undefined, exports: [SymbolData, string][]): void {
+		for (const item of exports) {
+			const resultSet = this.vertex.resultSet();
+			this.emit(resultSet);
+			this.emit(this.edge.next(resultSet, item[0].getResultSet()));
+			const moniker = this.vertex.moniker('tsc', tss.createMonikerIdentifier(path, item[1]), UniquenessLevel.group, MonikerKind.export);
+			this.emit(moniker);
+			this.emit(this.edge.moniker(resultSet, moniker));
+		}
+	}
+
+	private addDocumentSymbol(node: tss.Declaration): boolean {
+		let rangeNode = node.name !== undefined ? node.name : node;
+		let symbol = this.program.getTypeChecker().getSymbolAtLocation(rangeNode);
+		let declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
+		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
+			return false;
+		}
+		let symbolData = this.getOrCreateSymbolData(symbol);
+		if (symbolData === undefined) {
+			return false;
+		}
+		let sourceFile = this.currentSourceFile!;
+		let definition = symbolData.findDefinition(sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
+		if (definition === undefined) {
+			return false;
+		}
+		let currentContainer = this.symbolContainer[this.symbolContainer.length - 1];
+		let child: RangeBasedDocumentSymbol = { id: definition.id };
+		if (currentContainer.children === undefined) {
+			currentContainer.children = [ child ];
+		} else {
+			currentContainer.children.push(child);
+		}
+		this.symbolContainer.push(child);
+		return true;
+	}
+
+	private handleSymbol(symbol: ts.Symbol | undefined, location: ts.Node): void {
+		if (symbol === undefined) {
+			return;
+		}
+		let symbolData = this.getOrCreateSymbolData(symbol);
+		if (symbolData === undefined) {
+			return;
+		}
+		let sourceFile = this.currentSourceFile!;
+		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
+			return;
+		}
+
+		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
+		this.currentDocumentData.addRange(reference);
+		symbolData.addReference(sourceFile.fileName, reference, ItemEdgeProperties.references);
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {

@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export \\{ RAL \\} with nested public declarations"
+				"-g", "Export variable declaration"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
@@ -354,10 +354,8 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"cwd": "${workspaceFolder}/../vscode",
 			"args": [
-				"--max_old_space_size=4095",
+				"--max_old_space_size=8192",
 				"-p", "./src/tsconfig.json",
-				"--projectRoot", "./",
-				"--outputFormat", "line",
 				"--out", "vscode.lsif"
 			],
 			"preLaunchTask": "npm: watch",
