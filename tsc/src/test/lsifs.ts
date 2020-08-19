@@ -3,6 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
+import * as assert from 'assert';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -108,11 +109,17 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 class TestEmitter implements Emitter {
 
 	private sequence: Element[];
+	private _lastId: Id;
 	public elements: Map<Id, Element>;
 
 	constructor() {
+		this._lastId = -1;
 		this.sequence = [];
 		this.elements = new Map();
+	}
+
+	public get lastId(): Id {
+		return this._lastId;
 	}
 
 	public start(): void {
@@ -120,7 +127,9 @@ class TestEmitter implements Emitter {
 
 	emit(element: Vertex | Edge): void {
 		this.sequence.push(element);
+		assert.ok(!this.elements.has(element.id));
 		this.elements.set(element.id, element);
+		this._lastId = element.id;
 	}
 
 	public end(): void {

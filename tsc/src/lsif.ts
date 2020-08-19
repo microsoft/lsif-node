@@ -332,7 +332,7 @@ enum SymbolDataVisibility {
 	unknown = 1,
 	internal = 2,
 	exported = 3,
-	aliasExported = 4
+	indirectExported = 4
 }
 
 abstract class SymbolData extends LSIFData<SymbolDataContext> {
@@ -355,8 +355,8 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		return this.visibility;
 	}
 
-	public changeVisibility(value: SymbolDataVisibility.aliasExported | SymbolDataVisibility.internal): void {
-		if (value === SymbolDataVisibility.aliasExported && this.visibility === SymbolDataVisibility.exported) {
+	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
+		if (value === SymbolDataVisibility.indirectExported && this.visibility !== SymbolDataVisibility.unknown && this.visibility !== SymbolDataVisibility.indirectExported) {
 			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
 		}
 		if (value === SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.unknown) {
@@ -907,24 +907,24 @@ class Symbols {
 		[ts.SyntaxKind.VariableDeclaration, [ts.SyntaxKind.VariableDeclarationList, ts.SyntaxKind.VariableStatement, ts.SyntaxKind.SourceFile]]
 	]);
 
-	private static InternalSymbolNames: Set<string> = new Set([
-		ts.InternalSymbolName.Call,
-		ts.InternalSymbolName.Constructor,
-		ts.InternalSymbolName.New,
-		ts.InternalSymbolName.Index,
-		ts.InternalSymbolName.ExportStar,
-		ts.InternalSymbolName.Global,
-		ts.InternalSymbolName.Missing,
-		ts.InternalSymbolName.Type,
-		ts.InternalSymbolName.Object,
-		ts.InternalSymbolName.JSXAttributes,
-		ts.InternalSymbolName.Class,
-		ts.InternalSymbolName.Function,
-		ts.InternalSymbolName.Computed,
-		ts.InternalSymbolName.Resolving,
-		ts.InternalSymbolName.ExportEquals,
-		ts.InternalSymbolName.Default,
-		ts.InternalSymbolName.This
+	private static InternalSymbolNames: Map<string, number> = new Map([
+		[ts.InternalSymbolName.Call, 1],
+		[ts.InternalSymbolName.Constructor, 2],
+		[ts.InternalSymbolName.New, 3],
+		[ts.InternalSymbolName.Index, 4],
+		[ts.InternalSymbolName.ExportStar, 5],
+		[ts.InternalSymbolName.Global, 6],
+		[ts.InternalSymbolName.Missing, 7],
+		[ts.InternalSymbolName.Type, 8],
+		[ts.InternalSymbolName.Object, 9],
+		[ts.InternalSymbolName.JSXAttributes, 10],
+		[ts.InternalSymbolName.Class, 11],
+		[ts.InternalSymbolName.Function, 12],
+		[ts.InternalSymbolName.Computed, 13],
+		[ts.InternalSymbolName.Resolving, 14],
+		[ts.InternalSymbolName.ExportEquals, 15],
+		[ts.InternalSymbolName.Default, 16],
+		[ts.InternalSymbolName.This, 17]
 	]);
 
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
@@ -977,7 +977,7 @@ class Symbols {
 
 			const symbolData = context.getSymbolData(symbolKey);
 			if (symbolData !== undefined && symbolData.getVisibility() !== SymbolDataVisibility.exported) {
-				symbolData.changeVisibility(SymbolDataVisibility.aliasExported);
+				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 			}
 			const type = tss.isTypeAlias(symbol)
 				? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
@@ -989,7 +989,7 @@ class Symbols {
 				if (!seen.has(typeSymbolData.getId())) {
 					seen.add(typeSymbolData.getId());
 					if (typeSymbolData.getVisibility() !== SymbolDataVisibility.exported) {
-						typeSymbolData.changeVisibility(SymbolDataVisibility.aliasExported);
+						typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 						typeSymbol.exports?.forEach(symbol => processChild(symbol, exportName));
 						typeSymbol.members?.forEach(symbol => processChild(symbol, exportName));
 					}
@@ -1005,57 +1005,6 @@ class Symbols {
 		};
 		processExports(symbol, exportName);
 		return result;
-	}
-
-	public _recordAliasExportPaths(sourceFile: ts.SourceFile): void {
-		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
-		if (sourceFileSymbol === undefined) {
-			return;
-		}
-		let index: number = 1;
-		const processSymbol = (alias: ts.Symbol, symbol: ts.Symbol, exportName: string, renames: boolean): void => {
-		};
-
-		for (const node of sourceFile.statements) {
-			if (ts.isExportAssignment(node)) {
-				// `export = foo` or an `export default foo` declaration ==> ExportAssignment
-				const exportSymbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
-				const localSymbol = node.expression !== undefined
-					? this.typeChecker.getSymbolAtLocation(node.expression) || tss.getSymbolFromNode(node.expression)
-					: undefined;
-				if (exportSymbol !== undefined && localSymbol !== undefined) {
-					const name = ts.isIdentifier(node.expression) ? node.expression.getText() : `${index++}_export`;
-					processSymbol(exportSymbol, localSymbol, name, false);
-				}
-			} else if (ts.isExportDeclaration(node)) {
-				// `export { foo }` ==> ExportDeclaration
-				// `export { _foo as foo }` ==> ExportDeclaration
-				if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
-					for (const element of node.exportClause.elements) {
-						const exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
-						if (exportSymbol === undefined) {
-							continue;
-						}
-						const name = element.name.getText();
-						const renames = element.propertyName !== undefined && element.propertyName.getText() !== name;
-						const localSymbol = tss.isAliasSymbol(exportSymbol)
-							? this.typeChecker.getAliasedSymbol(exportSymbol)
-							: element.propertyName !== undefined
-								? this.typeChecker.getSymbolAtLocation(element.propertyName)
-								: undefined;
-						if (localSymbol !== undefined) {
-							processSymbol(exportSymbol, localSymbol, name, renames);
-						}
-					}
-				}
-			}
-		}
-
-		// things we need to capture to have correct exports
-		// `export =` or an `export default` declaration ==> ExportAssignment
-		// `exports.bar = function foo() { ... }` ==> ExpressionStatement
-		// `export { root }` ==> ExportDeclaration
-		// `export { _root as root }` ==> ExportDeclaration
 	}
 
 	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
@@ -1245,9 +1194,9 @@ class Symbols {
 				}
 			}
 		}
-		if (Symbols.InternalSymbolNames.has(escapedName as string)) {
-			// A star is not a valid identifier in JS. So it can never appear as a symbol name
-			return '*';
+		const internalSymbolId: number | undefined = Symbols.InternalSymbolNames.get(escapedName as string);
+		if (internalSymbolId !== undefined) {
+			return internalSymbolId.toString();
 		}
 		const name = symbol.getName();
 		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
@@ -1303,6 +1252,11 @@ interface FactoryContext {
 
 
 abstract class SymbolDataFactory {
+
+	private static readonly EmitBoundaries: Set<number> = new Set<number>([
+		ts.SyntaxKind.FunctionDeclaration,
+		ts.SyntaxKind.SourceFile
+	]);
 
 	constructor(protected typeChecker: ts.TypeChecker, protected symbols: Symbols, protected factoryContext: FactoryContext, protected symbolDataContext: SymbolDataContext) {
 	}
@@ -1366,12 +1320,20 @@ abstract class SymbolDataFactory {
 		return undefined;
 	}
 
-	private getDisposeOnNode(declaration: ts.Node): ts.Node {
-		let result = declaration.parent;
-		while (result !== undefined && !tss.EmitBoundaries.has(result.kind)) {
-			result = result.parent;
+	private getDisposeOnNode(declaration: ts.Node, isFunctionScopedVariable: boolean = false): ts.Node {
+		if (isFunctionScopedVariable) {
+			let result = declaration;
+			while (result.kind !== ts.SyntaxKind.FunctionDeclaration && result.kind !== ts.SyntaxKind.FunctionExpression && result.kind !== ts.SyntaxKind.ArrowFunction && result.kind !== ts.SyntaxKind.SourceFile) {
+				result = result.parent;
+			}
+			return result;
+		} else {
+			let result = declaration.parent;
+			while (result !== undefined && !StandardSymbolDataFactory.EmitBoundaries.has(result.kind)) {
+				result = result.parent;
+			}
+			return result;
 		}
-		return result;
 	}
 
 	private getVisibilityAndDisposeNode(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, exportPath: string | undefined, moduleSystem: ModuleSystemKind | undefined, parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
@@ -1379,21 +1341,21 @@ abstract class SymbolDataFactory {
 		if (exportPath !== undefined) {
 			return [SymbolDataVisibility.exported, undefined];
 		}
-		// The module system is global. Since we don't have an export path the symbol in internal.
-		// Global modules have no export statements hence the symbol can't be exported over an
-		// alias
-		const hasSourceFile = sourceFiles !== undefined && sourceFiles.length === 1;
-		if (moduleSystem === ModuleSystemKind.global) {
-			return [SymbolDataVisibility.internal, hasSourceFile ? this.getDisposeOnNode(symbol.declarations[0]) : undefined];
+		const hasOneSourceFile = sourceFiles !== undefined && sourceFiles.length === 1;
+		// If the symbol comes from more than one source file we can't dispose it on a node since
+		// we need to see it in more than one file.
+		if (!hasOneSourceFile) {
+			return [SymbolDataVisibility.unknown, undefined];
 		}
-		let visibility: SymbolDataVisibility = SymbolDataVisibility.unknown;
-		if (tss.isFunctionScopedVariable(symbol) && hasSourceFile) {
-			visibility = SymbolDataVisibility.internal;
+
+		// We have a function scoped variable. Those are always internal.
+		if (tss.isFunctionScopedVariable(symbol)) {
+			return [SymbolDataVisibility.internal, this.getDisposeOnNode(symbol.declarations[0], true)];
 		}
-		if (visibility === SymbolDataVisibility.unknown || parseMode === ParseMode.referenced || !hasSourceFile) {
-			return [visibility, undefined];
-		}
-		return [visibility, this.getDisposeOnNode(symbol.declarations[0])];
+
+		// @todo think about getting smarter here by checking more symbol kind. For
+		// now we trieat it as unknown and check when the file is done
+		return [SymbolDataVisibility.unknown, undefined];
 	}
 
 	protected getExportData(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility, ts.Node | undefined] {
@@ -1671,7 +1633,7 @@ abstract class ProjectDataManager {
 
 	public updateSymbolDataManagement(symbolData: SymbolData): void {
 		const visibility = symbolData.getVisibility();
-		if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.aliasExported) {
+		if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.indirectExported) {
 			this.managedSymbolDatas.push(symbolData);
 		}
 	}
@@ -2006,8 +1968,9 @@ export class DataManager implements SymbolDataContext {
 				const symbolId = symbolData.getId();
 				const visibility = symbolData.getVisibility();
 				const counter = this.validateVisibilityCounter.get(symbolId);
+				// If the counter is already gone then the visibility already changed.
 				if (counter !== undefined) {
-					if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.aliasExported) {
+					if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.indirectExported) {
 						counter.projectDataManager.updateSymbolDataManagement(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
@@ -2416,6 +2379,7 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitMethodSignature(node: ts.MethodSignature): void {
+		this.handleReturnType(node);
 		this.endVisitDeclaration(node);
 	}
 
@@ -2425,7 +2389,49 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitFunctionDeclaration(node: ts.FunctionDeclaration): void {
+		this.handleReturnType(node);
 		this.endVisitDeclaration(node);
+	}
+
+	private handleReturnType(node: ts.FunctionDeclaration | ts.MethodSignature): void {
+		// The return type of a function could be an inferred type or a literal type
+		// In both cases the type has no name and therefore the symbol has no monikers.
+		// Ensure that the return symbol has the correct visibility and moniker.
+		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
+		if (symbol === undefined) {
+			return;
+		}
+		const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		if (symbolData === undefined) {
+			return;
+		}
+		const moniker = symbolData.getMoniker();
+		if (moniker === undefined) {
+			return;
+		}
+		const monikerParts = TscMoniker.parse(moniker.identifier);
+		const visibility = symbolData.getVisibility();
+		if (visibility !== SymbolDataVisibility.exported && visibility !== SymbolDataVisibility.indirectExported) {
+			return;
+		}
+
+		const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+		const signatures = type.getCallSignatures();
+		for (const signature of signatures) {
+			const returnSymbol = signature.getReturnType().getSymbol();
+			if (returnSymbol === undefined) {
+				continue;
+			}
+			const returnSymbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, returnSymbol));
+			if (returnSymbolData === undefined) {
+				continue;
+			}
+			const visibility = returnSymbolData.getVisibility();
+			if (visibility === SymbolDataVisibility.indirectExported || visibility === SymbolDataVisibility.exported) {
+				continue;
+			}
+			this.emitAdditionMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), returnSymbol, monikerParts.name));
+		}
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {

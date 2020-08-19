@@ -418,28 +418,6 @@ export function computeMoniker(nodes: ts.Node[] | undefined): string | undefined
 	return result;
 }
 
-export const EmitBoundaries: Set<number> = new Set<number>([
-	ts.SyntaxKind.TypeParameter,
-	ts.SyntaxKind.Parameter,
-	ts.SyntaxKind.PropertyDeclaration,
-	ts.SyntaxKind.MethodDeclaration,
-	ts.SyntaxKind.Constructor,
-	ts.SyntaxKind.GetAccessor,
-	ts.SyntaxKind.SetAccessor,
-	ts.SyntaxKind.CallSignature,
-	ts.SyntaxKind.FunctionExpression,
-	ts.SyntaxKind.ArrowFunction,
-	ts.SyntaxKind.ClassExpression,
-	ts.SyntaxKind.VariableStatement,
-	ts.SyntaxKind.FunctionDeclaration,
-	ts.SyntaxKind.ClassDeclaration,
-	ts.SyntaxKind.InterfaceDeclaration,
-	ts.SyntaxKind.TypeAliasDeclaration,
-	ts.SyntaxKind.EnumDeclaration,
-	ts.SyntaxKind.ModuleDeclaration,
-	ts.SyntaxKind.SourceFile
-]);
-
 interface InternalProgram extends ts.Program {
 	getCommonSourceDirectory(): string;
 	isSourceFileFromExternalLibrary(sourceFile: ts.SourceFile): boolean;
