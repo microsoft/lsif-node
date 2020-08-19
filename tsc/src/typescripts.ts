@@ -219,58 +219,7 @@ export function createDefinitionInfo(sourceFile: ts.SourceFile, node: ts.Node): 
 	};
 }
 
-export function isSourceFile(symbol: ts.Symbol): boolean  {
-	let declarations = symbol.getDeclarations();
-	return declarations !== undefined && declarations.length === 1 && ts.isSourceFile(declarations[0]);
-}
 
-export function isFunctionScopedVariable(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
-}
-
-export function isBlockScopedVariable(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
-}
-
-export function isFunction(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Function) !== 0;
-}
-
-export function isClass(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Class) !== 0;
-}
-
-export function isInterface(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Interface) !== 0;
-}
-
-export function isTypeLiteral(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeLiteral) !== 0;
-}
-
-export function isMethodSymbol(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Method) !== 0;
-}
-
-export function isAliasSymbol(symbol: ts.Symbol): boolean  {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Alias) !== 0;
-}
-
-export function isValueModule(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
-}
-
-export function isTypeParameter(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
-}
-
-export function isTransient(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Transient) !== 0;
-}
-
-export function isTypeAlias(symbol: ts.Symbol): boolean {
-	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
-}
 
 export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol): boolean {
 	const containingType = (symbol as InternalSymbol).containingType;

@@ -318,7 +318,7 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export infered retun type', () => {
+	test('Export inferred function return type', () => {
 		const emitter = lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -333,6 +333,40 @@ suite('Module System Tests', () => {
 			JSON.parse('{"id":36,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.touch","unique":"group","kind":"export"}')
 		];
 		assert.deepEqual(emitter.lastId, 66);
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export inferred method return type', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export class Foo { public bar() { return { touch: true }; } }'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":43,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.touch","unique":"group","kind":"export"}')
+		];
+		assert.deepEqual(emitter.lastId, 79);
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export composite return type', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface Foo { bar(): { toString(): string } | { toString(): number }; }'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		const validate: Element[] = [
+		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}

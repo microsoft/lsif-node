@@ -1,7 +1,5 @@
-import { RAL } from './provide';
-
-function foo() {
-
+export function foo() {
+	return {
+		foo: () => { return 10; }
+	}
 }
-
-export { foo as default };
