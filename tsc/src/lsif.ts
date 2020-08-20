@@ -365,6 +365,18 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		this.visibility = value;
 	}
 
+	public isExported(): boolean {
+		return this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported;
+	}
+
+	public isInternal(): boolean {
+		return this.visibility === SymbolDataVisibility.internal;
+	}
+
+	public isUnknown(): boolean {
+		return this.visibility === SymbolDataVisibility.unknown;
+	}
+
 	public getResultSet(): ResultSet {
 		return this.resultSet;
 	}
@@ -901,30 +913,96 @@ interface SymbolAlias {
 	name: string;
 }
 
+interface IndirectExportsContext {
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+	getSymbolData(symbolId: SymbolId): SymbolData | undefined;
+}
+
+class AdditionalExportPaths {
+
+	private readonly seen: Set<string>;
+
+	constructor(private context: IndirectExportsContext, private symbols: Symbols, private root: ts.Symbol, private sourceFile: ts.SourceFile, private force: boolean) {
+		this.seen = new Set();
+	}
+
+	private visitSymbol(symbol: ts.Symbol, exportIdentifier: string): void {
+		const symbolData = this.context.getOrCreateSymbolData(symbol);
+		if (this.seen.has(symbolData.getId()) || (!this.force && symbolData.isExported())) {
+			return;
+		}
+
+
+
+		const type = this.symbols.getType(symbol, this.sourceFile);
+		const typeSymbol = type.getSymbol();
+		if (typeSymbol !== undefined) {
+			const typeSymbolData = this.context.getOrCreateSymbolData(typeSymbol);
+			if (!this.seen.has(typeSymbolData.getId())) {
+				this.seen.add(typeSymbolData.getId());
+				if (typeSymbolData.getVisibility() !== SymbolDataVisibility.exported) {
+					typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+					typeSymbol.exports?.forEach(symbol => processChild(symbol, exportName));
+					typeSymbol.members?.forEach(symbol => processChild(symbol, exportName));
+				}
+			}
+		}
+		if (symbol !== typeSymbol) {
+			if (!this.seen.has(symbolData.getId())) {
+				this.seen.add(symbolData.getId());
+				symbol.exports?.forEach(symbol => processChild(symbol, exportName));
+				symbol.members?.forEach(symbol => processChild(symbol, exportName));
+			}
+		}
+		if (type.isUnionOrIntersection()) {
+			const index: number = 0;
+			for (const part of type.types) {
+				const partSymbol = part.getSymbol();
+				if (partSymbol !== undefined) {
+					const partSymbolData = this.context.getOrCreateSymbolData(partSymbol);
+
+
+					this.visitSymbol(partSymbol, `${exportIdentifier}.${index}`);
+				}
+			}
+		} else if (type.isClassOrInterface()) {
+
+		}
+	}
+
+	visit
+
+	private forEachChild(symbol: ts.Symbol, exportIdentifier: string): void {
+		symbol.exports?.forEach(child => this.visitSymbol(child, exportIdentifier));
+		symbol.members?.forEach(child => this.visitSymbol(child, exportIdentifier));
+	}
+
+}
+
 class Symbols {
 
 	private static TopLevelPaths: Map<number, number[]> = new Map([
 		[ts.SyntaxKind.VariableDeclaration, [ts.SyntaxKind.VariableDeclarationList, ts.SyntaxKind.VariableStatement, ts.SyntaxKind.SourceFile]]
 	]);
 
-	private static InternalSymbolNames: Map<string, number> = new Map([
-		[ts.InternalSymbolName.Call, 1],
-		[ts.InternalSymbolName.Constructor, 2],
-		[ts.InternalSymbolName.New, 3],
-		[ts.InternalSymbolName.Index, 4],
-		[ts.InternalSymbolName.ExportStar, 5],
-		[ts.InternalSymbolName.Global, 6],
-		[ts.InternalSymbolName.Missing, 7],
-		[ts.InternalSymbolName.Type, 8],
-		[ts.InternalSymbolName.Object, 9],
-		[ts.InternalSymbolName.JSXAttributes, 10],
-		[ts.InternalSymbolName.Class, 11],
-		[ts.InternalSymbolName.Function, 12],
-		[ts.InternalSymbolName.Computed, 13],
-		[ts.InternalSymbolName.Resolving, 14],
-		[ts.InternalSymbolName.ExportEquals, 15],
-		[ts.InternalSymbolName.Default, 16],
-		[ts.InternalSymbolName.This, 17]
+	private static InternalSymbolNames: Map<string, string> = new Map([
+		[ts.InternalSymbolName.Call, '1I'],
+		[ts.InternalSymbolName.Constructor, '2I'],
+		[ts.InternalSymbolName.New, '3I'],
+		[ts.InternalSymbolName.Index, '4I'],
+		[ts.InternalSymbolName.ExportStar, '5I'],
+		[ts.InternalSymbolName.Global, '6I'],
+		[ts.InternalSymbolName.Missing, '7I'],
+		[ts.InternalSymbolName.Type, '8I'],
+		[ts.InternalSymbolName.Object, '9I'],
+		[ts.InternalSymbolName.JSXAttributes, '10I'],
+		[ts.InternalSymbolName.Class, '11I'],
+		[ts.InternalSymbolName.Function, '12I'],
+		[ts.InternalSymbolName.Computed, '13I'],
+		[ts.InternalSymbolName.Resolving, '14I'],
+		[ts.InternalSymbolName.ExportEquals, '15I'],
+		[ts.InternalSymbolName.Default, '16I'],
+		[ts.InternalSymbolName.This, '17I']
 	]);
 
 
@@ -981,6 +1059,32 @@ class Symbols {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 	}
 
+	public static isPrivate(symbol: ts.Symbol): boolean {
+		const declarations = symbol.getDeclarations();
+		if (declarations) {
+			for (const declaration of declarations) {
+				const modifierFlags = ts.getCombinedModifierFlags(declaration);
+				if ((modifierFlags & ts.ModifierFlags.Private) === 0) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	public static isStatic(symbol: ts.Symbol): boolean {
+		const declarations = symbol.getDeclarations();
+		if (declarations) {
+			for (const declaration of declarations) {
+				const modifierFlags = ts.getCombinedModifierFlags(declaration);
+				if ((modifierFlags & ts.ModifierFlags.Static) === 0) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly exportPathCache: LRUCache<ts.Symbol, string | null>;
@@ -1010,6 +1114,28 @@ class Symbols {
 		this.program;
 	}
 
+	public getType(symbol: ts.Symbol, location: ts.Node): ts.Type {
+		return Symbols.isTypeAlias(symbol)
+			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
+			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : location);
+	}
+
+	public getSymbolsOfType(type: ts.Type): ts.Symbol[] {
+		if (type.isUnionOrIntersection()) {
+			const result: ts.Symbol[] = [];
+			for (const part of type.types) {
+				const symbol = part.getSymbol();
+				if (symbol !== undefined) {
+					result.push(symbol);
+				}
+			}
+			return result;
+		} else {
+			const result = type.getSymbol();
+			return result !== undefined ? [result] : [];
+		}
+	}
+
 	public computeAdditionalExportPaths(context: { getOrCreateSymbolData(symbol: ts.Symbol): SymbolData; getSymbolData(symbolId: SymbolId): SymbolData | undefined; }, sourceFile: ts.SourceFile, symbol: ts.Symbol, exportName: string): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
 		const seen: Set<string> = new Set();
@@ -1027,15 +1153,13 @@ class Symbols {
 				processExports(child, exportName);
 			};
 
-			const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
+			const symbolKey = tss.Symbol.createKey(this.typeChecker, symbol);
 
 			const symbolData = context.getSymbolData(symbolKey);
 			if (symbolData !== undefined && symbolData.getVisibility() !== SymbolDataVisibility.exported) {
 				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 			}
-			const type = Symbols.isTypeAlias(symbol)
-				? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
-				: this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : sourceFile);
+			const type = this.getType(symbol, sourceFile);
 			const typeSymbol = type.getSymbol();
 
 			if (typeSymbol !== undefined) {
@@ -1062,17 +1186,17 @@ class Symbols {
 	}
 
 	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
-		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		const key = tss.Symbol.createKey(this.typeChecker, symbol);
 		this.symbolAliases.set(key, typeAlias);
 	}
 
 	public hasSymbolAlias(symbol: ts.Symbol): boolean {
-		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		const key = tss.Symbol.createKey(this.typeChecker, symbol);
 		return this.symbolAliases.has(key);
 	}
 
 	public deleteSymbolAlias(symbol: ts.Symbol): void {
-		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		const key = tss.Symbol.createKey(this.typeChecker, symbol);
 		this.symbolAliases.delete(key);
 	}
 
@@ -1081,7 +1205,7 @@ class Symbols {
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
-		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		const key = tss.Symbol.createKey(this.typeChecker, symbol);
 		let result = this.baseSymbolCache.get(key);
 		if (result !== undefined) {
 			return result;
@@ -1147,7 +1271,7 @@ class Symbols {
 	}
 
 	public findRootMembers(symbol: ts.Symbol, memberName: string): ts.Symbol[] | undefined {
-		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		const key = tss.Symbol.createKey(this.typeChecker, symbol);
 		let cache = this.baseMemberCache.get(key);
 		if (cache === undefined) {
 			cache = new LRUCache(64);
@@ -1164,7 +1288,7 @@ class Symbols {
 				const symbols = this.findRootMembers(base, memberName);
 				if (symbols !== undefined) {
 					for (const symbol of symbols) {
-						baseResult.set(tss.createSymbolKey(this.typeChecker, symbol), symbol);
+						baseResult.set(tss.Symbol.createKey(this.typeChecker, symbol), symbol);
 					}
 				}
 			}
@@ -1191,12 +1315,12 @@ class Symbols {
 		if (result !== undefined) {
 			return result === null ? undefined : result;
 		}
-		const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
+		const symbolKey = tss.Symbol.createKey(this.typeChecker, symbol);
 		if (Symbols.isSourceFile(symbol) && kind === ModuleSystemKind.module) {
 			this.exportPathCache.set(symbol, '');
 			return '';
 		}
-		const parent = tss.getSymbolParent(symbol);
+		const parent = tss.Symbol.getParent(symbol);
 		const name = this.getExportSymbolName(symbol);
 		if (parent === undefined) {
 			// In a global module system symbol inside other namespace don't have a parent
@@ -1248,9 +1372,9 @@ class Symbols {
 				}
 			}
 		}
-		const internalSymbolId: number | undefined = Symbols.InternalSymbolNames.get(escapedName as string);
+		const internalSymbolId: string | undefined = Symbols.InternalSymbolNames.get(escapedName as string);
 		if (internalSymbolId !== undefined) {
-			return internalSymbolId.toString();
+			return internalSymbolId;
 		}
 		const name = symbol.getName();
 		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
@@ -1481,7 +1605,7 @@ class MethodFactory extends SymbolDataFactory {
 		// console.log(`MethodResolver#resolve for symbol ${id} | ${symbol.getName()}`);
 		const parseMode = projectDataManager.getParseMode();
 		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(sourceFiles, symbol, parseMode);
-		const container = tss.getSymbolParent(symbol);
+		const container = tss.Symbol.getParent(symbol);
 		const fileNames = sourceFiles.map(sf => sf.fileName);
 		if (container === undefined) {
 			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: sourceFiles };
@@ -1597,7 +1721,7 @@ interface TypeLiteralCallback {
 	(index: number, typeAlias: ts.Symbol, literalType: ts.Symbol): number;
 }
 
-class TypeAliasResolver extends StandardSymbolDataFactory {
+class TypeAliasFactory extends StandardSymbolDataFactory {
 	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: FactoryContext, symbolDataContext: SymbolDataContext) {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
@@ -2167,7 +2291,7 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 	}
 
 	private makeKey(key: ts.SymbolChainCacheKey): string {
-		let symbolKey = tss.createSymbolKey(this.typeChecker, key.symbol);
+		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
 		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
 		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
 	}
@@ -2196,7 +2320,7 @@ class Visitor implements FactoryContext {
 		method: MethodFactory;
 		unionOrIntersection: UnionOrIntersectionFactory;
 		transient: TransientFactory;
-		typeAlias: TypeAliasResolver;
+		typeAlias: TypeAliasFactory;
 	};
 
 	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
@@ -2237,7 +2361,7 @@ class Visitor implements FactoryContext {
 			method: new MethodFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			unionOrIntersection: new UnionOrIntersectionFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			transient: new TransientFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			typeAlias: new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager)
+			typeAlias: new TypeAliasFactory(this.typeChecker, this.symbols, this, this.dataManager)
 		};
 	}
 
@@ -2302,6 +2426,10 @@ class Visitor implements FactoryContext {
 				break;
 			case ts.SyntaxKind.VariableStatement:
 				this.doVisit(this.visitVariableStatement, this.endVisitVariableStatement, node as ts.VariableStatement);
+				break;
+			case ts.SyntaxKind.TypeAliasDeclaration:
+				this.doVisit(undefined, this.endVisitTypeAliasDeclaration, node as ts.TypeAliasDeclaration);
+				break;
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
 				this.visitIdentifier(identifier);
@@ -2316,11 +2444,11 @@ class Visitor implements FactoryContext {
 		}
 	}
 
-	private doVisit<T extends ts.Node>(visit: (node: T) => boolean, endVisit: (node: T) => void, node: T): void {
-		if (visit.call(this, node)) {
+	private doVisit<T extends ts.Node>(visit: ((node: T) => boolean) | undefined, endVisit: ((node: T) => void) | undefined, node: T): void {
+		if (visit === undefined || visit.call(this, node)) {
 			node.forEachChild(child => this.visit(child));
 		}
-		endVisit.call(this, node);
+		endVisit?.call(this, node);
 		this.dataManager.nodeProcessed(node);
 	}
 
@@ -2448,25 +2576,33 @@ class Visitor implements FactoryContext {
 		this.endVisitDeclaration(node);
 	}
 
+	private getSymbolAndMonikerParts(node: ts.Node & { name?: ts.Identifier | ts.PropertyName } ): [ts.Symbol | undefined, TscMoniker | undefined] {
+		const emptyResult: [ts.Symbol | undefined, TscMoniker | undefined] = [undefined, undefined];
+		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
+		if (symbol === undefined) {
+			return emptyResult;
+		}
+		const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
+		if (symbolData === undefined) {
+			return emptyResult;
+		}
+		const visibility = symbolData.getVisibility();
+		if (visibility !== SymbolDataVisibility.exported && visibility !== SymbolDataVisibility.indirectExported) {
+			return emptyResult;
+		}
+		const moniker = symbolData.getMoniker();
+		if (moniker === undefined) {
+			return emptyResult;
+		}
+		return [symbol, TscMoniker.parse(moniker.identifier)];
+	}
+
 	private handleReturnType(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature): void {
 		// The return type of a function could be an inferred type or a literal type
 		// In both cases the type has no name and therefore the symbol has no monikers.
 		// Ensure that the return symbol has the correct visibility and moniker.
-		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
-		if (symbol === undefined) {
-			return;
-		}
-		const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
-		if (symbolData === undefined) {
-			return;
-		}
-		const moniker = symbolData.getMoniker();
-		if (moniker === undefined) {
-			return;
-		}
-		const monikerParts = TscMoniker.parse(moniker.identifier);
-		const visibility = symbolData.getVisibility();
-		if (visibility !== SymbolDataVisibility.exported && visibility !== SymbolDataVisibility.indirectExported) {
+		const [symbol, monikerParts] = this.getSymbolAndMonikerParts(node);
+		if (symbol === undefined || monikerParts === undefined) {
 			return;
 		}
 
@@ -2477,7 +2613,7 @@ class Visitor implements FactoryContext {
 			if (returnSymbol === undefined) {
 				continue;
 			}
-			const returnSymbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, returnSymbol));
+			const returnSymbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, returnSymbol));
 			if (returnSymbolData === undefined) {
 				continue;
 			}
@@ -2514,6 +2650,18 @@ class Visitor implements FactoryContext {
 	private endVisitClassExpression(node: ts.ClassExpression): void {
 	}
 
+	private endVisitTypeAliasDeclaration(node: ts.TypeAliasDeclaration): void {
+		const [symbol, monikerParts] = this.getSymbolAndMonikerParts(node);
+		if (symbol === undefined || monikerParts === undefined || !Symbols.isTypeAlias(symbol)) {
+			return;
+		}
+		const type = this.symbols.getType(symbol, node);
+		const symbols = this.symbols.getSymbolsOfType(type);
+		if (symbols.length === 0) {
+			return;
+		}
+	}
+
 	private visitDeclaration(node: tss.Declaration, isContainer: boolean): void {
 		let recordDocumentSymbol: boolean = this.currentRecordDocumentSymbol && isContainer;
 		let didRecord: boolean = recordDocumentSymbol;
@@ -2533,13 +2681,13 @@ class Visitor implements FactoryContext {
 
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
 		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
-		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
 		if (symbol === undefined) {
 			return false;
 		}
 		// Handle the export assignment.
 		this.handleSymbol(symbol, node);
-		const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+		const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
 		if (symbolData === undefined) {
 			return false;
 		}
@@ -2549,7 +2697,7 @@ class Visitor implements FactoryContext {
 		}
 
 		const monikerParts = TscMoniker.parse(moniker.identifier);
-		const aliasedSymbol = this.typeChecker.getSymbolAtLocation(node.expression) || tss.getSymbolFromNode(node.expression);
+		const aliasedSymbol = this.typeChecker.getSymbolAtLocation(node.expression) || tss.Node.getSymbol(node.expression);
 		this.handleSymbol(aliasedSymbol, node.expression);
 		if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
 			const name = node.expression.getText();
@@ -2574,7 +2722,7 @@ class Visitor implements FactoryContext {
 					continue;
 				}
 				this.handleSymbol(symbol, element.name);
-				const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+				const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
 				if (symbolData === undefined) {
 					return false;
 				}
@@ -2619,7 +2767,7 @@ class Visitor implements FactoryContext {
 			if (symbol === undefined) {
 				continue;
 			}
-			const symbolData = this.getSymbolData(tss.createSymbolKey(this.typeChecker, symbol));
+			const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
 			if (symbolData === undefined || symbolData.getVisibility() !== SymbolDataVisibility.exported) {
 				continue;
 			}
@@ -2647,11 +2795,11 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitGeneric(node: ts.Node): void {
-		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.getSymbolFromNode(node);
+		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
 		if (symbol === undefined) {
 			return;
 		}
-		let id = tss.createSymbolKey(this.typeChecker, symbol);
+		let id = tss.Symbol.createKey(this.typeChecker, symbol);
 		let symbolData = this.dataManager.getSymbolData(id);
 		if (symbolData !== undefined) {
 			this.getFactory(symbol).clearForwardSymbolInformation(symbol);
@@ -2807,7 +2955,7 @@ class Visitor implements FactoryContext {
 	}
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
-		const id: SymbolId = tss.createSymbolKey(this.typeChecker, symbol);
+		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			return result;

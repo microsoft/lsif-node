@@ -364,7 +364,6 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {

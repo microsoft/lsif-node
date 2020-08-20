@@ -128,76 +128,87 @@ interface InternalSymbol extends ts.Symbol {
 	__symbol__data__key__: string | undefined;
 }
 
-export function getSymbolParent(symbol: ts.Symbol): ts.Symbol | undefined {
-	return (symbol as InternalSymbol).parent;
+export namespace Symbol {
+
+	const Unknown = 'unkown';
+	const Undefined = 'undefined';
+	const None = 'none';
+
+	export function createKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol): string {
+		let result: string | undefined = (symbol as InternalSymbol).__symbol__data__key__;
+		if (result !== undefined) {
+			return result;
+		}
+		let declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			if (typeChecker.isUnknownSymbol(symbol)) {
+				return Unknown;
+			} else if (typeChecker.isUndefinedSymbol(symbol)) {
+				return Undefined;
+			} else {
+				return None;
+			}
+		}
+		let fragments: { f: string; s: number; e: number; k: number }[] = [];
+		for (let declaration of declarations) {
+			fragments.push({
+				f: declaration.getSourceFile().fileName,
+				s: declaration.getStart(),
+				e: declaration.getEnd(),
+				k: declaration.kind
+			});
+		}
+		if (fragments.length > 1) {
+			fragments.sort((a, b) => {
+				let result = a.f < b.f ? -1 : (a.f > b.f ? 1 : 0);
+				if (result !== 0) {
+					return result;
+				}
+				result = a.s - b.s;
+				if (result !== 0) {
+					return result;
+				}
+				result = a.e - b.e;
+				if (result !== 0) {
+					return result;
+				}
+				return a.k - b.k;
+			});
+		}
+		let hash = crypto.createHash('md5');
+		hash.update(JSON.stringify(fragments, undefined, 0));
+		result = hash.digest('base64');
+		(symbol as InternalSymbol).__symbol__data__key__ = result;
+		return result;
+	}
+
+	export function getParent(symbol: ts.Symbol): ts.Symbol | undefined {
+		return (symbol as InternalSymbol).parent;
+	}
 }
+
 
 interface InternalNode extends ts.Node {
 	symbol?: ts.Symbol;
 }
 
-export function getSymbolFromNode(node: ts.Node): ts.Symbol | undefined {
-	return (node as InternalNode).symbol;
+export namespace Node {
+	export function getSymbol(node: ts.Node): ts.Symbol | undefined {
+		return (node as InternalNode).symbol;
+	}
 }
+
 
 interface InternalSourceFile extends ts.SourceFile {
 	resolvedModules?: ts.Map<ts.ResolvedModuleFull | undefined>;
 }
 
-export function getResolvedModules(sourceFile: ts.SourceFile): ts.Map<ts.ResolvedModuleFull | undefined> | undefined {
-	return (sourceFile as InternalSourceFile).resolvedModules;
+export namespace SourceFile {
+	export function getResolvedModules(sourceFile: ts.SourceFile): ts.Map<ts.ResolvedModuleFull | undefined> | undefined {
+		return (sourceFile as InternalSourceFile).resolvedModules;
+	}
 }
 
-const Unknown = 'unkown';
-const Undefined = 'undefined';
-const None = 'none';
-export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol): string {
-	let result: string | undefined = (symbol as InternalSymbol).__symbol__data__key__;
-	if (result !== undefined) {
-		return result;
-	}
-	let declarations = symbol.getDeclarations();
-	if (declarations === undefined) {
-		if (typeChecker.isUnknownSymbol(symbol)) {
-			return Unknown;
-		} else if (typeChecker.isUndefinedSymbol(symbol)) {
-			return Undefined;
-		} else {
-			return None;
-		}
-	}
-	let fragments: { f: string; s: number; e: number; k: number }[] = [];
-	for (let declaration of declarations) {
-		fragments.push({
-			f: declaration.getSourceFile().fileName,
-			s: declaration.getStart(),
-			e: declaration.getEnd(),
-			k: declaration.kind
-		});
-	}
-	if (fragments.length > 1) {
-		fragments.sort((a, b) => {
-			let result = a.f < b.f ? -1 : (a.f > b.f ? 1 : 0);
-			if (result !== 0) {
-				return result;
-			}
-			result = a.s - b.s;
-			if (result !== 0) {
-				return result;
-			}
-			result = a.e - b.e;
-			if (result !== 0) {
-				return result;
-			}
-			return a.k - b.k;
-		});
-	}
-	let hash = crypto.createHash('md5');
-	hash.update(JSON.stringify(fragments, undefined, 0));
-	result = hash.digest('base64');
-	(symbol as InternalSymbol).__symbol__data__key__ = result;
-	return result;
-}
 
 export interface DefinitionInfo {
 	file: string;
@@ -238,7 +249,7 @@ export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol): boo
 export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol[] | undefined {
 
 	function _getCompositeLeafSymbols(result: Map<string, ts.Symbol>, processed: Set<String>, typeChecker: ts.TypeChecker, symbol: ts.Symbol): void {
-		const symbolKey = createSymbolKey(typeChecker, symbol);
+		const symbolKey = Symbol.createKey(typeChecker, symbol);
 		if (processed.has(symbolKey)) {
 			return;
 		}
@@ -277,32 +288,6 @@ export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.
 	return Array.from(result.values());
 }
 
-export function isPrivate(symbol: ts.Symbol): boolean {
-	let declarations = symbol.getDeclarations();
-	if (declarations) {
-		for (let declaration of declarations) {
-			let modifierFlags = ts.getCombinedModifierFlags(declaration);
-			if ((modifierFlags & ts.ModifierFlags.Private) === 0) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
-
-export function isStatic(symbol: ts.Symbol): boolean {
-	let declarations = symbol.getDeclarations();
-	if (declarations) {
-		for (let declaration of declarations) {
-			let modifierFlags = ts.getCombinedModifierFlags(declaration);
-			if ((modifierFlags & ts.ModifierFlags.Static) === 0) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
-
 export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined): Set<ts.SourceFile> {
 	let result: Set<ts.SourceFile> = new Set();
 	if (declarations === undefined || declarations.length === 0) {
@@ -310,59 +295,6 @@ export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined)
 	}
 	for (let declaration of declarations) {
 		result.add(declaration.getSourceFile());
-	}
-	return result;
-}
-
-const stopKinds: Set<number> = new Set([ts.SyntaxKind.Block, ts.SyntaxKind.ClassExpression, ts.SyntaxKind.FunctionExpression, ts.SyntaxKind.ArrowFunction]);
-function doComputeMoniker(node: ts.Node): string | undefined {
-	function getName(node: ts.Node): string | undefined {
-		let namedDeclaration: ts.NamedDeclaration = node as ts.NamedDeclaration;
-		if (namedDeclaration.name !== undefined) {
-			return namedDeclaration.name.getText();
-		} else {
-			return undefined;
-		}
-	}
-	// No monikers for source files.
-	if (ts.isSourceFile(node)) {
-		return undefined;
-	}
-	let buffer: string[] = [];
-	do {
-		if (stopKinds.has(node.kind)) {
-			// No keys for stuff inside a block, ...
-			return undefined;
-		}
-		let name = getName(node);
-		if (name !== undefined) {
-			buffer.unshift(name);
-		} else if (node.kind === ts.SyntaxKind.ClassDeclaration) {
-			// We have an anonymous class declaration => no key.
-			return undefined;
-		} else if (node.kind === ts.SyntaxKind.FunctionDeclaration) {
-			// We have an anonymous function declaration => no key.
-			return undefined;
-		}
-	} while ((node = node.parent) !== undefined && !ts.isSourceFile(node));
-	return buffer.join('.');
-}
-
-export function computeMoniker(nodes: ts.Node[] | undefined): string | undefined {
-	if (nodes === undefined || nodes.length === 0) {
-		return undefined;
-	}
-	if (nodes.length === 1) {
-		return doComputeMoniker(nodes[0]);
-	}
-	let result: string | undefined = doComputeMoniker(nodes[0]);
-	if (result === undefined) {
-		return undefined;
-	}
-	for (let i = 1; i < nodes.length; i++) {
-		if (result !== doComputeMoniker(nodes[i])) {
-			return undefined;
-		}
 	}
 	return result;
 }

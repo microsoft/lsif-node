@@ -99,4 +99,36 @@ suite('Union Types', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Union types with literals', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export type D = { name: string; } | { name: number; };',
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { D } from "./a";',
+					'let d: D;',
+					'd.name;'
+				].join(os.EOL)
+			],
+			[
+				'/@test/c.ts',
+				[
+					'import { D } from "./a";',
+					'let d: D;',
+					'd.name;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
