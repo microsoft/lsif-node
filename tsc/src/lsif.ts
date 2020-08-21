@@ -340,7 +340,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	private declarationInfo: tss.DefinitionInfo | tss.DefinitionInfo[] | undefined;
 
 	protected resultSet: ResultSet;
-	protected moniker: Moniker | undefined;
+	private _moniker: undefined | Moniker | Moniker[];
 
 	public constructor(context: SymbolDataContext, private id: SymbolId, private visibility: SymbolDataVisibility) {
 		super(context);
@@ -418,15 +418,57 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	}
 
 	public addMoniker(identifier: string, kind: MonikerKind): void {
+		if (this._moniker !== undefined) {
+			throw new Error(`Symbol data ${this.id} already has a primary moniker`);
+		}
 		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.group;
 		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
-		this.moniker = moniker;
+		this._moniker = moniker;
 	}
 
-	public getMoniker(): Moniker | undefined {
-		return this.moniker;
+	public attachMoniker(identifier: string, unique: UniquenessLevel, kind: MonikerKind): void {
+		const primary = this.getPrimaryMoniker();
+		if (primary === undefined) {
+			throw new Error(`Symbol data ${this.id} has no primary moniker attached`);
+		}
+		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
+		this.emit(moniker);
+		this.emit(this.edge.attach(moniker, primary));
+		if (Array.isArray(this._moniker)) {
+			this._moniker.push(moniker);
+		} else {
+			this._moniker = [primary, moniker];
+		}
+	}
+
+	public getPrimaryMoniker(): Moniker | undefined {
+		if (this._moniker === undefined) {
+			return undefined;
+		}
+		if (Array.isArray(this._moniker)) {
+			return this._moniker[0];
+		} else {
+			return this._moniker;
+		}
+	}
+
+	public getMostUniqueMoniker(): Moniker | undefined {
+		if (this._moniker === undefined) {
+			return undefined;
+		}
+		if (Array.isArray(this._moniker)) {
+			// In TS we only have group and document
+			for (const moniker of this._moniker) {
+				if (moniker.unique === UniquenessLevel.group) {
+					return moniker;
+				}
+			}
+			return this._moniker[0];
+		} else {
+			return this._moniker;
+		}
 	}
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
@@ -671,7 +713,7 @@ class MethodSymbolData extends StandardSymbolData {
 		if (this.rootSymbolData !== undefined) {
 			for (let root of this.rootSymbolData) {
 				super.addReference(sourceFile, root.getOrCreateReferenceResult());
-				const moniker = root.getMoniker();
+				const moniker = root.getMostUniqueMoniker();
 				if (moniker !== undefined && moniker.scheme !== 'local') {
 					super.addReference(sourceFile, moniker);
 				}
@@ -721,7 +763,7 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 		super.begin();
 		const sourceFile = this.sourceFiles !== undefined ? this.sourceFiles[0] : undefined;
 		for (let element of this.elements) {
-			const moniker = element.getMoniker();
+			const moniker = element.getMostUniqueMoniker();
 			// We take the first source file to cluster this. We might want to find a source
 			// file that has already changed to make the diff minimal.
 			if (sourceFile) {
@@ -918,65 +960,9 @@ interface IndirectExportsContext {
 	getSymbolData(symbolId: SymbolId): SymbolData | undefined;
 }
 
-class AdditionalExportPaths {
-
-	private readonly seen: Set<string>;
-
-	constructor(private context: IndirectExportsContext, private symbols: Symbols, private root: ts.Symbol, private sourceFile: ts.SourceFile, private force: boolean) {
-		this.seen = new Set();
-	}
-
-	private visitSymbol(symbol: ts.Symbol, exportIdentifier: string): void {
-		const symbolData = this.context.getOrCreateSymbolData(symbol);
-		if (this.seen.has(symbolData.getId()) || (!this.force && symbolData.isExported())) {
-			return;
-		}
-
-
-
-		const type = this.symbols.getType(symbol, this.sourceFile);
-		const typeSymbol = type.getSymbol();
-		if (typeSymbol !== undefined) {
-			const typeSymbolData = this.context.getOrCreateSymbolData(typeSymbol);
-			if (!this.seen.has(typeSymbolData.getId())) {
-				this.seen.add(typeSymbolData.getId());
-				if (typeSymbolData.getVisibility() !== SymbolDataVisibility.exported) {
-					typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-					typeSymbol.exports?.forEach(symbol => processChild(symbol, exportName));
-					typeSymbol.members?.forEach(symbol => processChild(symbol, exportName));
-				}
-			}
-		}
-		if (symbol !== typeSymbol) {
-			if (!this.seen.has(symbolData.getId())) {
-				this.seen.add(symbolData.getId());
-				symbol.exports?.forEach(symbol => processChild(symbol, exportName));
-				symbol.members?.forEach(symbol => processChild(symbol, exportName));
-			}
-		}
-		if (type.isUnionOrIntersection()) {
-			const index: number = 0;
-			for (const part of type.types) {
-				const partSymbol = part.getSymbol();
-				if (partSymbol !== undefined) {
-					const partSymbolData = this.context.getOrCreateSymbolData(partSymbol);
-
-
-					this.visitSymbol(partSymbol, `${exportIdentifier}.${index}`);
-				}
-			}
-		} else if (type.isClassOrInterface()) {
-
-		}
-	}
-
-	visit
-
-	private forEachChild(symbol: ts.Symbol, exportIdentifier: string): void {
-		symbol.exports?.forEach(child => this.visitSymbol(child, exportIdentifier));
-		symbol.members?.forEach(child => this.visitSymbol(child, exportIdentifier));
-	}
-
+enum IndirectExportsMode {
+	handle = 1,
+	traverse = 2
 }
 
 class Symbols {
@@ -1136,52 +1122,81 @@ class Symbols {
 		}
 	}
 
-	public computeAdditionalExportPaths(context: { getOrCreateSymbolData(symbol: ts.Symbol): SymbolData; getSymbolData(symbolId: SymbolId): SymbolData | undefined; }, sourceFile: ts.SourceFile, symbol: ts.Symbol, exportName: string): [SymbolData, string][] {
+	public computeAdditionalExportPaths(context: IndirectExportsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, force: boolean = false): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
 		const seen: Set<string> = new Set();
 
-		const processExports = (symbol: ts.Symbol, exportName: string): void => {
+		const forEachChild = (symbol: ts.Symbol, exportIdentifier: string): void => {
+			symbol.exports?.forEach(child => visitSymbol(child, exportIdentifier, IndirectExportsMode.handle));
+			symbol.members?.forEach(child => visitSymbol(child, exportIdentifier, IndirectExportsMode.handle));
+		};
 
-			const processChild = (child: ts.Symbol, parentPath: string): void => {
-				const symbolData = context.getOrCreateSymbolData(child);
-				if (seen.has(symbolData.getId())) {
-					return;
+		const visitType = (type: ts.Type, parentPath: string): boolean => {
+			if (type.isUnionOrIntersection()) {
+				let index: number = 0;
+				for (const part of type.types) {
+					const partSymbol = part.getSymbol();
+					if (partSymbol !== undefined) {
+						const partSymbolData = context.getOrCreateSymbolData(partSymbol);
+						if (!force && partSymbolData.isExported()) {
+							continue;
+						}
+						const exportIndentifier = `${parentPath}.${index++}L`;
+						result.push([partSymbolData, exportIndentifier]);
+						visitSymbol(partSymbol, exportIndentifier, IndirectExportsMode.traverse);
+					}
 				}
-				seen.add(symbolData.getId());
-				const exportName = `${parentPath}.${this.getExportSymbolName(child)}`;
-				result.push([symbolData, exportName]);
-				processExports(child, exportName);
-			};
-
-			const symbolKey = tss.Symbol.createKey(this.typeChecker, symbol);
-
-			const symbolData = context.getSymbolData(symbolKey);
-			if (symbolData !== undefined && symbolData.getVisibility() !== SymbolDataVisibility.exported) {
-				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+				return true;
+			} else if (type.isClassOrInterface()) {
+				return false;
 			}
+			return false;
+		};
+
+		const visitSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: IndirectExportsMode): void => {
+			const symbolData = context.getOrCreateSymbolData(symbol);
+			if (seen.has(symbolData.getId()) || (!force && symbolData.isExported() && mode === IndirectExportsMode.handle)) {
+				return;
+			}
+
+			if (mode === IndirectExportsMode.handle) {
+				exportIdentifier = `${exportIdentifier}.${this.getExportSymbolName(symbol)}`;
+				result.push([symbolData, exportIdentifier]);
+			}
+
 			const type = this.getType(symbol, sourceFile);
 			const typeSymbol = type.getSymbol();
-
 			if (typeSymbol !== undefined) {
 				const typeSymbolData = context.getOrCreateSymbolData(typeSymbol);
 				if (!seen.has(typeSymbolData.getId())) {
 					seen.add(typeSymbolData.getId());
-					if (typeSymbolData.getVisibility() !== SymbolDataVisibility.exported) {
+					if (force || !typeSymbolData.isExported()) {
 						typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-						typeSymbol.exports?.forEach(symbol => processChild(symbol, exportName));
-						typeSymbol.members?.forEach(symbol => processChild(symbol, exportName));
+						forEachChild(typeSymbol, exportIdentifier);
 					}
 				}
 			}
 			if (symbol !== typeSymbol) {
-				if (!seen.has(symbolKey)) {
-					seen.add(symbolKey);
-					symbol.exports?.forEach(symbol => processChild(symbol, exportName));
-					symbol.members?.forEach(symbol => processChild(symbol, exportName));
+				if (!seen.has(symbolData.getId())) {
+					seen.add(symbolData.getId());
+					if (force || !symbolData.isExported()) {
+						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+						forEachChild(symbol, exportIdentifier);
+					}
 				}
 			}
+			visitType(type, exportIdentifier);
 		};
-		processExports(symbol, exportName);
+		if (tss.Symbol.is(start)) {
+			visitSymbol(start, exportName, IndirectExportsMode.traverse);
+		} else {
+			if (!visitType(start, exportName)) {
+				const symbol = start.getSymbol();
+				if (symbol !== undefined) {
+					visitSymbol(symbol, exportName, IndirectExportsMode.traverse);
+				}
+			}
+		}
 		return result;
 	}
 
@@ -1658,7 +1673,7 @@ class UnionOrIntersectionFactory extends SymbolDataFactory {
 				// For the moniker we need to find out the ands and ors. Not sure how to do this.
 				let monikerIds: string[] = [];
 				for (const symbolData of datas) {
-					const moniker = symbolData.getMoniker();
+					const moniker = symbolData.getMostUniqueMoniker();
 					if (moniker === undefined) {
 						monikerIds = [];
 						break;
@@ -1717,9 +1732,9 @@ class TransientFactory extends SymbolDataFactory {
 	}
 }
 
-interface TypeLiteralCallback {
-	(index: number, typeAlias: ts.Symbol, literalType: ts.Symbol): number;
-}
+// interface TypeLiteralCallback {
+// 	(index: number, typeAlias: ts.Symbol, literalType: ts.Symbol): number;
+// }
 
 class TypeAliasFactory extends StandardSymbolDataFactory {
 	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: FactoryContext, symbolDataContext: SymbolDataContext) {
@@ -1727,48 +1742,48 @@ class TypeAliasFactory extends StandardSymbolDataFactory {
 	}
 
 	public forwardSymbolInformation(symbol: ts.Symbol): void {
-		this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
-			// T1 & (T2 | T3) will be expanded into T1 & T2 | T1 & T3. So check if we have already seens
-			// a literal to ensure we are always using the first one
-			if (this.symbols.hasSymbolAlias(literalType)) {
-				return index;
-			}
-			// We put the number into the front since it is not a valid
-			// identifier. So it can't be in code.
-			const name = `${index++}_${typeAlias.getName()}`;
-			this.symbols.storeSymbolAlias(literalType, { alias: typeAlias, name });
-			return index;
-		});
+		// this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
+		// 	// T1 & (T2 | T3) will be expanded into T1 & T2 | T1 & T3. So check if we have already seens
+		// 	// a literal to ensure we are always using the first one
+		// 	if (this.symbols.hasSymbolAlias(literalType)) {
+		// 		return index;
+		// 	}
+		// 	// We put the number into the front since it is not a valid
+		// 	// identifier. So it can't be in code.
+		// 	const name = `${index++}_${typeAlias.getName()}`;
+		// 	this.symbols.storeSymbolAlias(literalType, { alias: typeAlias, name });
+		// 	return index;
+		// });
 	}
 
 	public clearForwardSymbolInformation(symbol: ts.Symbol): void {
-		this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
-			this.symbols.deleteSymbolAlias(literalType);
-			return index;
-		});
+		// this.visitSymbol(symbol, (index: number, typeAlias: ts.Symbol, literalType: ts.Symbol) => {
+		// 	this.symbols.deleteSymbolAlias(literalType);
+		// 	return index;
+		// });
 	}
 
-	private visitSymbol(symbol: ts.Symbol, cb: TypeLiteralCallback) {
-		const type = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
-		if (type === undefined) {
-			return;
-		}
-		this.visitType(symbol, type, 0, cb);
-	}
+	// private visitSymbol(symbol: ts.Symbol, cb: TypeLiteralCallback) {
+	// 	const type = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
+	// 	if (type === undefined) {
+	// 		return;
+	// 	}
+	// 	this.visitType(symbol, type, 0, cb);
+	// }
 
-	private visitType(typeAlias: ts.Symbol, type: ts.Type, index: number, cb: TypeLiteralCallback): number {
-		if (Symbols.isTypeLiteral(type.symbol)) {
-			return cb(index, typeAlias, type.symbol);
-		}
-		if (type.isUnionOrIntersection()) {
-			if (type.types.length > 0) {
-				for (let item of type.types) {
-					index = this.visitType(typeAlias, item, index, cb);
-				}
-			}
-		}
-		return index;
-	}
+	// private visitType(typeAlias: ts.Symbol, type: ts.Type, index: number, cb: TypeLiteralCallback): number {
+	// 	if (Symbols.isTypeLiteral(type.symbol)) {
+	// 		return cb(index, typeAlias, type.symbol);
+	// 	}
+	// 	if (type.isUnionOrIntersection()) {
+	// 		if (type.types.length > 0) {
+	// 			for (let item of type.types) {
+	// 				index = this.visitType(typeAlias, item, index, cb);
+	// 			}
+	// 		}
+	// 	}
+	// 	return index;
+	// }
 }
 
 export interface Options {
@@ -2590,7 +2605,7 @@ class Visitor implements FactoryContext {
 		if (visibility !== SymbolDataVisibility.exported && visibility !== SymbolDataVisibility.indirectExported) {
 			return emptyResult;
 		}
-		const moniker = symbolData.getMoniker();
+		const moniker = symbolData.getPrimaryMoniker();
 		if (moniker === undefined) {
 			return emptyResult;
 		}
@@ -2609,19 +2624,19 @@ class Visitor implements FactoryContext {
 		const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
 		const signatures = type.getCallSignatures();
 		for (const signature of signatures) {
-			const returnSymbol = signature.getReturnType().getSymbol();
-			if (returnSymbol === undefined) {
-				continue;
+			const returnType = signature.getReturnType();
+			const returnSymbol = returnType.getSymbol();
+			if (returnSymbol !== undefined) {
+				const returnSymbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, returnSymbol));
+				if (returnSymbolData === undefined) {
+					continue;
+				}
+				const visibility = returnSymbolData.getVisibility();
+				if (visibility === SymbolDataVisibility.indirectExported || visibility === SymbolDataVisibility.exported) {
+					continue;
+				}
 			}
-			const returnSymbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, returnSymbol));
-			if (returnSymbolData === undefined) {
-				continue;
-			}
-			const visibility = returnSymbolData.getVisibility();
-			if (visibility === SymbolDataVisibility.indirectExported || visibility === SymbolDataVisibility.exported) {
-				continue;
-			}
-			this.emitAdditionMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), returnSymbol, monikerParts.name));
+			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), returnSymbol ?? returnType, monikerParts.name));
 		}
 	}
 
@@ -2655,11 +2670,8 @@ class Visitor implements FactoryContext {
 		if (symbol === undefined || monikerParts === undefined || !Symbols.isTypeAlias(symbol)) {
 			return;
 		}
-		const type = this.symbols.getType(symbol, node);
-		const symbols = this.symbols.getSymbolsOfType(type);
-		if (symbols.length === 0) {
-			return;
-		}
+
+		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, node.name.getText()));
 	}
 
 	private visitDeclaration(node: tss.Declaration, isContainer: boolean): void {
@@ -2691,7 +2703,7 @@ class Visitor implements FactoryContext {
 		if (symbolData === undefined) {
 			return false;
 		}
-		const moniker = symbolData.getMoniker();
+		const moniker = symbolData.getMostUniqueMoniker();
 		if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
 			return false;
 		}
@@ -2703,7 +2715,7 @@ class Visitor implements FactoryContext {
 			const name = node.expression.getText();
 			const sourceFile = node.getSourceFile();
 			const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name);
-			this.emitAdditionMonikers(monikerParts.path, additionalExports);
+			this.emitAttachedMonikers(monikerParts.path, additionalExports);
 		}
 		return false;
 	}
@@ -2726,7 +2738,7 @@ class Visitor implements FactoryContext {
 				if (symbolData === undefined) {
 					return false;
 				}
-				const moniker = symbolData.getMoniker();
+				const moniker = symbolData.getMostUniqueMoniker();
 				if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
 					continue;
 				}
@@ -2743,7 +2755,7 @@ class Visitor implements FactoryContext {
 					const name = element.propertyName?.getText() || element.name.getText();
 					const sourceFile = node.getSourceFile();
 					const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name);
-					this.emitAdditionMonikers(monikerParts.path, additionalExports);
+					this.emitAttachedMonikers(monikerParts.path, additionalExports);
 				}
 			}
 		}
@@ -2771,14 +2783,14 @@ class Visitor implements FactoryContext {
 			if (symbolData === undefined || symbolData.getVisibility() !== SymbolDataVisibility.exported) {
 				continue;
 			}
-			const moniker = symbolData.getMoniker();
+			const moniker = symbolData.getMostUniqueMoniker();
 			if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
 				continue;
 			}
 			const monikerParts = TscMoniker.parse(moniker.identifier);
 			const sourceFile = node.getSourceFile();
 			const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, symbol, name.getText());
-			this.emitAdditionMonikers(monikerParts.path, additionalExports);
+			this.emitAttachedMonikers(monikerParts.path, additionalExports);
 		}
 	}
 
@@ -2821,14 +2833,16 @@ class Visitor implements FactoryContext {
 		return;
 	}
 
-	private emitAdditionMonikers(path: string | undefined, exports: [SymbolData, string][]): void {
+	private emitAttachedMonikers(path: string | undefined, exports: [SymbolData, string][]): void {
 		for (const item of exports) {
-			const resultSet = this.vertex.resultSet();
-			this.emit(resultSet);
-			this.emit(this.edge.next(resultSet, item[0].getResultSet()));
-			const moniker = this.vertex.moniker('tsc', tss.createMonikerIdentifier(path, item[1]), UniquenessLevel.group, MonikerKind.export);
-			this.emit(moniker);
-			this.emit(this.edge.moniker(resultSet, moniker));
+			const originalMoniker = item[0].getPrimaryMoniker();
+			const indentifier = tss.createMonikerIdentifier(path, item[1]);
+			// We don't have a moniker yet
+			if (originalMoniker === undefined) {
+				item[0].addMoniker(indentifier, MonikerKind.export);
+			} else {
+				item[0].attachMoniker(indentifier, UniquenessLevel.group, MonikerKind.export);
+			}
 		}
 	}
 

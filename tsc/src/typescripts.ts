@@ -185,6 +185,11 @@ export namespace Symbol {
 	export function getParent(symbol: ts.Symbol): ts.Symbol | undefined {
 		return (symbol as InternalSymbol).parent;
 	}
+
+	export function is(value: ts.Symbol | ts.Type): value is ts.Symbol {
+		let candidate = value as ts.Symbol;
+		return candidate.escapedName !== undefined;
+	}
 }
 
 

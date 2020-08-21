@@ -124,9 +124,19 @@ suite('Union Types', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
 		const validate: Element[] = [
+			JSON.parse('{"id":46,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.0L","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":47,"type":"edge","label":"attach","outV":46,"inV":30}'),
+			JSON.parse('{"id":48,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.0L.name","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":49,"type":"edge","label":"attach","outV":48,"inV":23}'),
+			JSON.parse('{"id":50,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.1L","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":51,"type":"edge","label":"attach","outV":50,"inV":42}'),
+			JSON.parse('{"id":52,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.1L.name","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":53,"type":"edge","label":"attach","outV":52,"inV":35}'),
+			JSON.parse('{"id":117,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:D.0L.name,a:D.1L.name]","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":118,"type":"edge","label":"moniker","outV":116,"inV":117}')
 		];
+		assert.deepEqual(emitter.lastId, 195);
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}

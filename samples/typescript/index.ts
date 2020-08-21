@@ -8,4 +8,4 @@ interface Bar {
 	name: string;
 }
 
-export type D = Bar;
+export { Bar };

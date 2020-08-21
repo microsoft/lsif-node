@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Union types with literals"
+				"-g", "Export composite return type"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",

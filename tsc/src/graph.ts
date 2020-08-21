@@ -14,7 +14,7 @@ import {
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, Uri, GroupEvent, MonikerAttachEvent
+	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, Uri, GroupEvent, MonikerAttachEvent, attach
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -507,6 +507,16 @@ export class EdgeBuilder {
 				throw new Error('Shouldn\'t happen');
 		}
 		return result;
+	}
+
+	public attach(from: Moniker, to: Moniker): attach {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.edge,
+			label: EdgeLabels.attach,
+			outV: from.id,
+			inV: to.id
+		};
 	}
 }
 
