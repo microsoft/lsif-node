@@ -2610,27 +2610,34 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitPropertyDeclaration(node: ts.PropertyDeclaration): void {
-		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
-		if (symbol === undefined || monikerParts === undefined) {
-			return;
-		}
-		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
+		this.handlePropertyType(node);
 		this.endVisitDeclaration(node);
 	}
 
 	private visitPropertySignature(node: ts.PropertySignature): boolean {
+		this.visitDeclaration(node, false);
 		return true;
 	}
 
 	private endVisitPropertySignature(node: ts.PropertySignature): void {
-		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
-		if (symbol === undefined || monikerParts === undefined) {
-			return;
-		}
-		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
+		this.handlePropertyType(node);
+		this.endVisitDeclaration(node);
+	}
+	private visitVariableStatement(node: ts.VariableStatement): boolean {
+		return true;
 	}
 
-	private getSymbolAndMonikerPartsIfExported(node: ts.Node & { name?: ts.Identifier | ts.PropertyName } ): [ts.Symbol | undefined, TscMoniker | undefined] {
+	private endVisitVariableStatement(node: ts.VariableStatement): void {
+		for (const declaration of node.declarationList.declarations) {
+			const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(declaration);
+			if (symbol === undefined || monikerParts === undefined) {
+				continue;
+			}
+			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
+		}
+	}
+
+	private getSymbolAndMonikerPartsIfExported(node: ts.Node & { name?: ts.Identifier | ts.PropertyName | ts.BindingName } ): [ts.Symbol | undefined, TscMoniker | undefined] {
 		const emptyResult: [ts.Symbol | undefined, TscMoniker | undefined] = [undefined, undefined];
 		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
 		if (symbol === undefined) {
@@ -2675,6 +2682,14 @@ class Visitor implements FactoryContext {
 			}
 			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), returnSymbol ?? returnType, monikerParts.name));
 		}
+	}
+
+	private handlePropertyType(node: ts.PropertyDeclaration | ts.PropertySignature): void {
+		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
+		if (symbol === undefined || monikerParts === undefined) {
+			return;
+		}
+		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {
@@ -2804,35 +2819,6 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
-	}
-
-	private visitVariableStatement(node: ts.VariableStatement): boolean {
-		return true;
-	}
-
-	private endVisitVariableStatement(node: ts.VariableStatement): void {
-		if (!ts.isSourceFile(node.parent)) {
-			return;
-		}
-		for (const declaration of node.declarationList.declarations) {
-			const name = declaration.name;
-			const symbol = this.typeChecker.getSymbolAtLocation(name);
-			if (symbol === undefined) {
-				continue;
-			}
-			const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
-			if (symbolData === undefined || !symbolData.isExported()) {
-				continue;
-			}
-			const moniker = symbolData.getMostUniqueMoniker();
-			if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
-				continue;
-			}
-			const monikerParts = TscMoniker.parse(moniker.identifier);
-			const sourceFile = node.getSourceFile();
-			const additionalExports = this.symbols.computeAdditionalExportPaths(this, sourceFile, symbol, name.getText());
-			this.emitAttachedMonikers(monikerParts.path, additionalExports);
-		}
 	}
 
 	private visitIdentifier(node: ts.Identifier): void {
