@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export composite return type"
+				"-g", "Export type via property"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",

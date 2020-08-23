@@ -356,8 +356,15 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	}
 
 	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
-		if (value === SymbolDataVisibility.indirectExported && this.visibility !== SymbolDataVisibility.unknown && this.visibility !== SymbolDataVisibility.indirectExported) {
-			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
+		if (value === SymbolDataVisibility.indirectExported) {
+			if (this.visibility === SymbolDataVisibility.exported) {
+				return;
+			}
+			if (this.visibility !== SymbolDataVisibility.unknown && this.visibility !== SymbolDataVisibility.indirectExported) {
+				throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
+			}
+			this.visibility = value;
+			return;
 		}
 		if (value === SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.unknown) {
 			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
@@ -2427,6 +2434,12 @@ class Visitor implements FactoryContext {
 			case ts.SyntaxKind.FunctionDeclaration:
 				this.doVisit(this.visitFunctionDeclaration, this.endVisitFunctionDeclaration, node as ts.FunctionDeclaration);
 				break;
+			case ts.SyntaxKind.PropertyDeclaration:
+				this.doVisit(this.visitPropertyDeclaration, this.endVisitPropertyDeclaration, node as ts.PropertyDeclaration);
+				break;
+			case ts.SyntaxKind.PropertySignature:
+				this.doVisit(this.visitPropertySignature, this.endVisitPropertySignature, node as ts.PropertySignature);
+				break;
 			case ts.SyntaxKind.Parameter:
 				this.doVisit(this.visitParameterDeclaration, this.endVisitParameterDeclaration, node as ts.ParameterDeclaration);
 				break;
@@ -2443,7 +2456,7 @@ class Visitor implements FactoryContext {
 				this.doVisit(this.visitVariableStatement, this.endVisitVariableStatement, node as ts.VariableStatement);
 				break;
 			case ts.SyntaxKind.TypeAliasDeclaration:
-				this.doVisit(undefined, this.endVisitTypeAliasDeclaration, node as ts.TypeAliasDeclaration);
+				this.doVisit(this.visitTypeAliasDeclaration, this.endVisitTypeAliasDeclaration, node as ts.TypeAliasDeclaration);
 				break;
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
@@ -2459,11 +2472,11 @@ class Visitor implements FactoryContext {
 		}
 	}
 
-	private doVisit<T extends ts.Node>(visit: ((node: T) => boolean) | undefined, endVisit: ((node: T) => void) | undefined, node: T): void {
-		if (visit === undefined || visit.call(this, node)) {
+	private doVisit<T extends ts.Node>(visit: (node: T) => boolean, endVisit: (node: T) => void, node: T): void {
+		if (visit.call(this, node)) {
 			node.forEachChild(child => this.visit(child));
 		}
-		endVisit?.call(this, node);
+		endVisit.call(this, node);
 		this.dataManager.nodeProcessed(node);
 	}
 
@@ -2591,7 +2604,33 @@ class Visitor implements FactoryContext {
 		this.endVisitDeclaration(node);
 	}
 
-	private getSymbolAndMonikerParts(node: ts.Node & { name?: ts.Identifier | ts.PropertyName } ): [ts.Symbol | undefined, TscMoniker | undefined] {
+	private visitPropertyDeclaration(node: ts.PropertyDeclaration): boolean {
+		this.visitDeclaration(node, false);
+		return true;
+	}
+
+	private endVisitPropertyDeclaration(node: ts.PropertyDeclaration): void {
+		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
+		if (symbol === undefined || monikerParts === undefined) {
+			return;
+		}
+		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
+		this.endVisitDeclaration(node);
+	}
+
+	private visitPropertySignature(node: ts.PropertySignature): boolean {
+		return true;
+	}
+
+	private endVisitPropertySignature(node: ts.PropertySignature): void {
+		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
+		if (symbol === undefined || monikerParts === undefined) {
+			return;
+		}
+		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), symbol, monikerParts.name));
+	}
+
+	private getSymbolAndMonikerPartsIfExported(node: ts.Node & { name?: ts.Identifier | ts.PropertyName } ): [ts.Symbol | undefined, TscMoniker | undefined] {
 		const emptyResult: [ts.Symbol | undefined, TscMoniker | undefined] = [undefined, undefined];
 		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
 		if (symbol === undefined) {
@@ -2601,8 +2640,7 @@ class Visitor implements FactoryContext {
 		if (symbolData === undefined) {
 			return emptyResult;
 		}
-		const visibility = symbolData.getVisibility();
-		if (visibility !== SymbolDataVisibility.exported && visibility !== SymbolDataVisibility.indirectExported) {
+		if (!symbolData.isExported()) {
 			return emptyResult;
 		}
 		const moniker = symbolData.getPrimaryMoniker();
@@ -2612,11 +2650,11 @@ class Visitor implements FactoryContext {
 		return [symbol, TscMoniker.parse(moniker.identifier)];
 	}
 
-	private handleReturnType(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature): void {
+	private handleReturnType(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration): void {
 		// The return type of a function could be an inferred type or a literal type
 		// In both cases the type has no name and therefore the symbol has no monikers.
 		// Ensure that the return symbol has the correct visibility and moniker.
-		const [symbol, monikerParts] = this.getSymbolAndMonikerParts(node);
+		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
 		if (symbol === undefined || monikerParts === undefined) {
 			return;
 		}
@@ -2631,8 +2669,7 @@ class Visitor implements FactoryContext {
 				if (returnSymbolData === undefined) {
 					continue;
 				}
-				const visibility = returnSymbolData.getVisibility();
-				if (visibility === SymbolDataVisibility.indirectExported || visibility === SymbolDataVisibility.exported) {
+				if (returnSymbolData.isExported()) {
 					continue;
 				}
 			}
@@ -2665,8 +2702,12 @@ class Visitor implements FactoryContext {
 	private endVisitClassExpression(node: ts.ClassExpression): void {
 	}
 
+	private visitTypeAliasDeclaration(node: ts.TypeAliasDeclaration): boolean {
+		return true;
+	}
+
 	private endVisitTypeAliasDeclaration(node: ts.TypeAliasDeclaration): void {
-		const [symbol, monikerParts] = this.getSymbolAndMonikerParts(node);
+		const [symbol, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
 		if (symbol === undefined || monikerParts === undefined || !Symbols.isTypeAlias(symbol)) {
 			return;
 		}
@@ -2780,7 +2821,7 @@ class Visitor implements FactoryContext {
 				continue;
 			}
 			const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
-			if (symbolData === undefined || symbolData.getVisibility() !== SymbolDataVisibility.exported) {
+			if (symbolData === undefined || !symbolData.isExported()) {
 				continue;
 			}
 			const moniker = symbolData.getMostUniqueMoniker();

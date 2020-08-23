@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import * as Is from './utils/is';
 
 export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
-	ts.MethodSignature | ts.ParameterDeclaration;
+	ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
 
 export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
 	let candidate = node as ts.NamedDeclaration;
