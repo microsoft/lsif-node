@@ -428,4 +428,44 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export type via variable declaration in namespace', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface Foo { touch: boolean; }',
+					'export namespace Bar { export let foo: Foo; }'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 85);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"zUtsZKiLRbrRa59l3vSYWw==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":45,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.touch","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":46,"type":"edge","label":"attach","outV":45,"inV":23}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export type via variable declaration with anonymous class declaration', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'abstract class Foo { public abstract doIt(): boolean; }',
+					'export namespace Bar { export const foo: Foo = new class extends Foo { public doIt(): boolean { return true; } } ; }'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 100);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"i1frhLFTp4Ka0OZ9Y4u88g==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":54,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.doIt","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":55,"type":"edge","label":"attach","outV":54,"inV":23}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

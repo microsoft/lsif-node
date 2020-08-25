@@ -1052,6 +1052,10 @@ class Symbols {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 	}
 
+	public static isPrototype(symbol: ts.Symbol): boolean {
+		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Prototype) !== 0;
+	}
+
 	public static isPrivate(symbol: ts.Symbol): boolean {
 		const declarations = symbol.getDeclarations();
 		if (declarations) {
@@ -1161,6 +1165,10 @@ class Symbols {
 		};
 
 		const visitSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: IndirectExportsMode): void => {
+			// The prototype symbol has no range in source.
+			if (Symbols.isPrototype(symbol)) {
+				return;
+			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
 			if (seen.has(symbolData.getId()) || (!force && symbolData.isExported() && mode === IndirectExportsMode.handle)) {
 				return;
