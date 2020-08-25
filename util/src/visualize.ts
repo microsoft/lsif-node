@@ -76,7 +76,8 @@ function printDOT(edges: { [id: string]: LSIF.Element }, vertices: { [id: string
 			const value: string = JSON.stringify((extraInfo as any)[property]);
 			const re: RegExp = new RegExp('"', 'g');
       extraText += `\n${property} = ${value.replace(re, '\\"')}`;
-      extraText = extraText.replace(/\\\\"/g, '\\"');
+      const reEscaped: RegExp = new RegExp('\\\\\\\\"', 'g')
+      extraText = extraText.replace(reEscaped, '\\"');
 		});
 
 		digraph += `  ${vertex.id} [label="[${vertex.id}] ${vertex.label}${extraText}"]\n`;
