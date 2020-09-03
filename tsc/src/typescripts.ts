@@ -11,17 +11,19 @@ import * as ts from 'typescript';
 
 import * as Is from './utils/is';
 
-export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
-	ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
+export namespace Node {
+	export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
+		ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
 
-export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
-	let candidate = node as ts.NamedDeclaration;
-	return candidate !== undefined && candidate.name !== undefined;
-}
+	export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
+		let candidate = node as ts.NamedDeclaration;
+		return candidate !== undefined && candidate.name !== undefined;
+	}
 
-export function isNode(value: any): value is ts.Node {
-	let candidate: ts.Node = value;
-	return candidate !== undefined && Is.number(candidate.flags) && Is.number(candidate.kind);
+	export function isNode(value: any): value is ts.Node {
+		let candidate: ts.Node = value;
+		return candidate !== undefined && Is.number(candidate.flags) && Is.number(candidate.kind);
+	}
 }
 
 export function getDefaultCompilerOptions(configFileName?: string) {

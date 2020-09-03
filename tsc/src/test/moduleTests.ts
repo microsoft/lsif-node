@@ -468,4 +468,67 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export function with literal param', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo(arg: { key: number; value: number }): void { }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { foo } from "./a";',
+					'foo({ key: 10, value: 20 });'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		// Tests that the LSIF tool doesn't throw due to data recreation.
+		assert.deepEqual(emitter.lastId, 153);
+	});
+	test('Export function with callback signature', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo(callback: (entry: { key: string; value: number; }, remove: () => void) => void): void { }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { foo } from "./a";',
+					'foo((entry, remove) => { entry.key; entry.value });'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export function with callback signature as return value', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo(): (entry: { key: number; value: number; }) => void { return (entry: { key: number; value: number; }) => { return; }}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { foo } from "./a";',
+					'foo()({ key: 10, value: 20});'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
