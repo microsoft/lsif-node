@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export type via variable declaration with anonymous class declaration"
+				"-g", "Export \\{ RAL \\} with nested declarations"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
