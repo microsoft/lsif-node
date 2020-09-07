@@ -116,4 +116,35 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Interface with signature', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'interface Thenable<T> {',
+					'	then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => TResult | Thenable<TResult>): Thenable<TResult>;',
+					'	then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult>;',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.d.ts',
+				[
+					'interface Thenable<T> {',
+					'	then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => TResult | Thenable<TResult>): Thenable<TResult>;',
+					'	then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult>;',
+					'}'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 450);
+		const validate: Element[] = [
+			JSON.parse('{"id":51,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onfulfilled","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":176,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onrejected","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
+

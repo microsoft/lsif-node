@@ -1033,6 +1033,14 @@ class Symbols {
 		return !ts.isParameter(declarations[0]);
 	}
 
+	public static asParameterDeclaration(symbol: ts.Symbol): ts.ParameterDeclaration | undefined {
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined || declarations.length !== 1) {
+			return undefined;
+		}
+		return ts.isParameter(declarations[0]) ? declarations[0] as ts.ParameterDeclaration : undefined;
+	}
+
 	public static isBlockScopedVariable(symbol: ts.Symbol): boolean {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 	}
@@ -1160,15 +1168,15 @@ class Symbols {
 
 	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
-		const seen: Set<string> = new Set();
+		const seenSymbol: Set<string> = new Set();
 
 		const visitSymbol = (symbol: ts.Symbol, parentPath: string, exportSymbol: boolean): [boolean, string | undefined] => {
 			if (Symbols.isPrototype(symbol)) {
 				return [false, undefined];
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || seen.has(symbolData.getId())) {
-				seen.add(symbolData.getId());
+			if (symbolData.isExported() || seenSymbol.has(symbolData.getId())) {
+				seenSymbol.add(symbolData.getId());
 				return [false, undefined];
 			}
 
@@ -1194,21 +1202,35 @@ class Symbols {
 		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, exportSymbol: boolean, traverseSymbol: boolean = true): void => {
 			// We have a call signature
 			if (tss.Type.isCallSignature(type)) {
+				const seenType: Set<ts.Type> = new Set();
 				for (const signature of type.getCallSignatures()) {
 					for (const parameter of signature.getParameters()) {
-						const parameterSymbolData = context.getOrCreateSymbolData(parameter);
-						if (parameterSymbolData.isExported()) {
+						const parameterType = this.getType(parameter, sourceFile);
+						if (seenType.has(parameterType)) {
+							continue;
+						}
+						seenType.add(parameterType);
+						const paramterTypeSymbol = parameterType.getSymbol();
+						if (paramterTypeSymbol === undefined) {
+							continue;
+						}
+						const parameterTypeSymbolData = context.getOrCreateSymbolData(paramterTypeSymbol);
+						if (parameterTypeSymbolData.isExported()) {
 							continue;
 						}
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
-						if (mode === FlowMode.imported) {
-							result.push([parameterSymbolData, exportIdentifier]);
-						}
-						const parameterType = this.getType(parameter, sourceFile);
 						const newMode = tss.Type.isCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
 						walkType(parameterType, exportIdentifier, newMode, newMode === FlowMode.exported ? false : true, true);
+						if (mode === FlowMode.imported && !parameterTypeSymbolData.isExported()) {
+							parameterTypeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+							result.push([parameterTypeSymbolData, exportIdentifier]);
+						}
 					}
 					const returnType = signature.getReturnType();
+					if (seenType.has(returnType)) {
+						continue;
+					}
+					seenType.add(returnType);
 					const returnSymbol = returnType.getSymbol();
 					if (returnSymbol !== undefined) {
 						const returnSymbolData = context.getOrCreateSymbolData(returnSymbol);
@@ -1251,7 +1273,7 @@ class Symbols {
 				return;
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || seen.has(symbolData.getId())) {
+			if (symbolData.isExported() || seenSymbol.has(symbolData.getId())) {
 				return;
 			}
 
@@ -1259,8 +1281,8 @@ class Symbols {
 			const typeSymbol = type.getSymbol();
 			if (typeSymbol !== undefined) {
 				const typeSymbolData = context.getOrCreateSymbolData(typeSymbol);
-				if (!seen.has(typeSymbolData.getId())) {
-					seen.add(typeSymbolData.getId());
+				if (!seenSymbol.has(typeSymbolData.getId())) {
+					seenSymbol.add(typeSymbolData.getId());
 					if (!typeSymbolData.isExported()) {
 						typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 						forEachChild(typeSymbol, exportIdentifier, mode, exportSymbol);
@@ -1268,8 +1290,8 @@ class Symbols {
 				}
 			}
 			if (symbol !== typeSymbol) {
-				if (!seen.has(symbolData.getId())) {
-					seen.add(symbolData.getId());
+				if (!seenSymbol.has(symbolData.getId())) {
+					seenSymbol.add(symbolData.getId());
 					if (!symbolData.isExported()) {
 						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 						forEachChild(symbol, exportIdentifier, mode, exportSymbol);
@@ -1432,9 +1454,25 @@ class Symbols {
 			// In a global module system symbol inside other namespace don't have a parent
 			// if the symbol is not exported. So we need to check if the symbol is a top
 			// level symbol
-			if (kind === ModuleSystemKind.global && this.isTopLevelSymbol(symbol)) {
-				this.exportPathCache.set(symbol, name);
-				return name;
+			if (kind === ModuleSystemKind.global) {
+				if (this.isTopLevelSymbol(symbol)) {
+					this.exportPathCache.set(symbol, name);
+					return name;
+				}
+				// In a global module system signature can be merged across file. So even parameters
+				// must be exported to allow merging across files.
+				const parameterDeclaration = Symbols.asParameterDeclaration(symbol);
+				if (parameterDeclaration !== undefined && parameterDeclaration.parent.name !== undefined) {
+					const parentSymbol = this.typeChecker.getSymbolAtLocation(parameterDeclaration.parent.name);
+					if (parentSymbol !== undefined) {
+						const parentValue = this.getExportPath(parentSymbol, kind);
+						if (parentValue !== undefined) {
+							result = `${parentValue}.${name}`;
+							this.exportPathCache.set(symbol, result);
+							return result;
+						}
+					}
+				}
 			}
 			const typeAlias = this.symbolAliases.get(symbolKey);
 			if (typeAlias !== undefined && this.getExportPath(typeAlias.alias, kind) !== undefined) {

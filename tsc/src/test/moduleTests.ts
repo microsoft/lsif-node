@@ -499,19 +499,16 @@ suite('Module System Tests', () => {
 				'/@test/b.ts',
 				[
 					'import { foo } from "./a";',
-					'foo((entry, remove) => { entry.key; entry.value });'
+					'foo((e, r) => { e.key; r.value });'
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 214);
+		assert.deepEqual(emitter.lastId, 210);
 		const validate: Element[] = [
-			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":73,"type":"edge","label":"attach","outV":72,"inV":30}'),
-			JSON.parse('{"id":74,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.key","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":75,"type":"edge","label":"attach","outV":74,"inV":37}'),
-			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.value","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":77,"type":"edge","label":"attach","outV":76,"inV":44}'),
-			JSON.parse('{"id":78,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.remove","unique":"group","kind":"export"}')
+			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.key","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":73,"type":"edge","label":"attach","outV":72,"inV":37}'),
+			JSON.parse('{"id":74,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":75,"type":"edge","label":"attach","outV":74,"inV":44}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
