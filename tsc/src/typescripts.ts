@@ -194,6 +194,13 @@ export namespace Symbol {
 	}
 }
 
+export namespace Type {
+	export function isCallSignature(type: ts.Type): boolean {
+		const signatures = type.getCallSignatures();
+		return signatures.length > 0;
+	}
+}
+
 
 interface InternalNode extends ts.Node {
 	symbol?: ts.Symbol;

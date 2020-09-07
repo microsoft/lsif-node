@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export \\{ RAL \\} with nested declarations"
+				"-g", "Export function with callback signature"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",

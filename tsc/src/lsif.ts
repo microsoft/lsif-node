@@ -967,23 +967,24 @@ interface ExportPathsContext {
 	getSymbolData(symbolId: SymbolId): SymbolData | undefined;
 }
 
-enum ExportPathFlowMode {
-	params = 1,
-	result = 2
+enum FlowMode {
+	exported = 1,
+	imported = 2
 }
 
-namespace ExportPathFlowMode {
-	export function reverse(mode: ExportPathFlowMode): ExportPathFlowMode {
+namespace FlowMode {
+	export function reverse(mode: FlowMode): FlowMode {
 		switch (mode) {
-			case ExportPathFlowMode.params:
-				return ExportPathFlowMode.result;
-			case ExportPathFlowMode.result:
-				return ExportPathFlowMode.params;
+			case FlowMode.exported:
+				return FlowMode.imported;
+			case FlowMode.imported:
+				return FlowMode.exported;
 			default:
 				throw new Error(`Unknown flow mode ${mode}`);
 		}
 	}
 }
+
 
 class Symbols {
 
@@ -1157,11 +1158,11 @@ class Symbols {
 		}
 	}
 
-	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, mode: ExportPathFlowMode): [SymbolData, string][] {
+	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
 		const seen: Set<string> = new Set();
 
-		const visitSymbol = (symbol: ts.Symbol, parentPath: string): [boolean, string | undefined] => {
+		const visitSymbol = (symbol: ts.Symbol, parentPath: string, exportSymbol: boolean): [boolean, string | undefined] => {
 			if (Symbols.isPrototype(symbol)) {
 				return [false, undefined];
 			}
@@ -1172,23 +1173,53 @@ class Symbols {
 			}
 
 			const identifier = `${parentPath}.${this.getExportSymbolName(symbol)}`;
-			result.push([symbolData, identifier]);
+			if (exportSymbol) {
+				result.push([symbolData, identifier]);
+			}
 			return [true, identifier];
 		};
 
-		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: ExportPathFlowMode): void => {
+		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: FlowMode, exportSymbol: boolean): void => {
 			const handler = (child: ts.Symbol) => {
-				const [traverse, identifier] = visitSymbol(child, parentPath);
+				const [traverse, identifier] = visitSymbol(child, parentPath, exportSymbol);
 				if (traverse === false || identifier === undefined) {
 					return;
 				}
-				walkSymbol(child, identifier, mode);
+				walkSymbol(child, identifier, mode, exportSymbol);
 			};
 			symbol.exports?.forEach(handler);
 			symbol.members?.forEach(handler);
 		};
 
-		const walkType = (type: ts.Type, parentPath: string, mode: ExportPathFlowMode): boolean => {
+		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, exportSymbol: boolean, traverseSymbol: boolean = true): void => {
+			// We have a call signature
+			if (tss.Type.isCallSignature(type)) {
+				for (const signature of type.getCallSignatures()) {
+					for (const parameter of signature.getParameters()) {
+						const parameterSymbolData = context.getOrCreateSymbolData(parameter);
+						if (parameterSymbolData.isExported()) {
+							continue;
+						}
+						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
+						if (mode === FlowMode.imported) {
+							result.push([parameterSymbolData, exportIdentifier]);
+						}
+						const parameterType = this.getType(parameter, sourceFile);
+						const newMode = tss.Type.isCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
+						walkType(parameterType, exportIdentifier, newMode, newMode === FlowMode.exported ? false : true, true);
+					}
+					const returnType = signature.getReturnType();
+					const returnSymbol = returnType.getSymbol();
+					if (returnSymbol !== undefined) {
+						const returnSymbolData = context.getOrCreateSymbolData(returnSymbol);
+						if (returnSymbolData.isExported()) {
+							continue;
+						}
+					}
+					walkType(returnType, parentPath, mode, mode === FlowMode.exported ? true : false, true);
+				}
+			}
+
 			if (type.isUnionOrIntersection()) {
 				let index: number = 0;
 				for (const part of type.types) {
@@ -1200,32 +1231,21 @@ class Symbols {
 						}
 						const exportIndentifier = `${parentPath}.${index++}L`;
 						result.push([partSymbolData, exportIndentifier]);
-						walkSymbol(partSymbol, exportIndentifier, mode);
+						walkSymbol(partSymbol, exportIndentifier, mode, exportSymbol);
 					}
 				}
-				return true;
-			} else if (type.getCallSignatures().length > 0) {
-				for (const signature of type.getCallSignatures()) {
-					for (const parameter of signature.getParameters()) {
-						const parameterSymbolData = context.getOrCreateSymbolData(parameter);
-						if (parameterSymbolData.isExported()) {
-							continue;
-						}
-						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
-						if (mode === ExportPathFlowMode.params) {
-							result.push([parameterSymbolData, exportIdentifier]);
-						}
-						walkSymbol(parameter, exportIdentifier, ExportPathFlowMode.reverse(mode));
-					}
-				}
-				return false;
-			} else if (type.isClassOrInterface()) {
-				return false;
 			}
-			return false;
+
+			if (traverseSymbol) {
+				// Walk the symbol if we have no special handling for the type.
+				const symbol = type.getSymbol();
+				if (symbol !== undefined) {
+					walkSymbol(symbol, parentPath, mode, exportSymbol);
+				}
+			}
 		};
 
-		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: ExportPathFlowMode): void => {
+		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: FlowMode, exportSymbol: boolean): void => {
 			// The prototype symbol has no range in source.
 			if (Symbols.isPrototype(symbol)) {
 				return;
@@ -1243,7 +1263,7 @@ class Symbols {
 					seen.add(typeSymbolData.getId());
 					if (!typeSymbolData.isExported()) {
 						typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-						forEachChild(typeSymbol, exportIdentifier, mode);
+						forEachChild(typeSymbol, exportIdentifier, mode, exportSymbol);
 					}
 				}
 			}
@@ -1252,21 +1272,17 @@ class Symbols {
 					seen.add(symbolData.getId());
 					if (!symbolData.isExported()) {
 						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-						forEachChild(symbol, exportIdentifier, mode);
+						forEachChild(symbol, exportIdentifier, mode, exportSymbol);
 					}
 				}
 			}
-			walkType(type, exportIdentifier, mode);
+			walkType(type, exportIdentifier, mode, false);
 		};
+
 		if (tss.Symbol.is(start)) {
-			walkSymbol(start, exportName, mode);
+			walkSymbol(start, exportName, FlowMode.exported, true);
 		} else {
-			if (!walkType(start, exportName, mode)) {
-				const symbol = start.getSymbol();
-				if (symbol !== undefined) {
-					walkSymbol(symbol, exportName, mode);
-				}
-			}
+			walkType(start, exportName, FlowMode.exported, true);
 		}
 		return result;
 	}
@@ -2655,7 +2671,7 @@ class Visitor implements FactoryContext {
 				continue;
 			}
 			const type = this.symbols.getType(symbol, node);
-			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name, ExportPathFlowMode.result));
+			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
 		}
 	}
 
@@ -2689,37 +2705,10 @@ class Visitor implements FactoryContext {
 		}
 
 		const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
-		const signatures = type.getCallSignatures();
-		for (const signature of signatures) {
-			const parameters = signature.getParameters();
-			for (const parameter of parameters) {
-				const parameterType = this.symbols.getType(parameter, node);
-				const parameterSymbol = parameterType.getSymbol();
-				if (parameterSymbol === undefined) {
-					continue;
-				}
-				const parameterSymbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, parameterSymbol));
-				if (parameterSymbolData === undefined || parameterSymbolData.isExported()) {
-					continue;
-				}
-				this.emitAttachedMonikers(
-					monikerParts.path,
-					this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), parameterType, `${monikerParts.name}.${parameter.getName()}`, ExportPathFlowMode.params)
-				);
-			}
-			const returnType = signature.getReturnType();
-			const returnSymbol = returnType.getSymbol();
-			if (returnSymbol !== undefined) {
-				const returnSymbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, returnSymbol));
-				if (returnSymbolData === undefined || returnSymbolData.isExported()) {
-					continue;
-				}
-			}
-			this.emitAttachedMonikers(
-				monikerParts.path,
-				this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), returnSymbol ?? returnType, monikerParts.name, ExportPathFlowMode.result)
-			);
-		}
+		this.emitAttachedMonikers(
+			monikerParts.path,
+			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name)
+		);
 	}
 
 	private handlePropertyType(node: ts.PropertyDeclaration | ts.PropertySignature): void {
@@ -2729,7 +2718,7 @@ class Visitor implements FactoryContext {
 		}
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name, ExportPathFlowMode.result)
+			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -2770,7 +2759,7 @@ class Visitor implements FactoryContext {
 
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), node.name.getText(), ExportPathFlowMode.result)
+			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), node.name.getText())
 		);
 	}
 
@@ -2816,7 +2805,7 @@ class Visitor implements FactoryContext {
 			const sourceFile = node.getSourceFile();
 			this.emitAttachedMonikers(
 				monikerParts.path,
-				this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name, ExportPathFlowMode.result)
+				this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name)
 			);
 		}
 		return false;
@@ -2858,7 +2847,7 @@ class Visitor implements FactoryContext {
 					const sourceFile = node.getSourceFile();
 					this.emitAttachedMonikers(
 						monikerParts.path,
-						this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name, ExportPathFlowMode.result)
+						this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name)
 					);
 				}
 			}
