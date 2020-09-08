@@ -178,6 +178,9 @@ export namespace Symbol {
 			});
 		}
 		let hash = crypto.createHash('md5');
+		if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
+			hash.update(JSON.stringify({ trans: true }, undefined, 0));
+		}
 		hash.update(JSON.stringify(fragments, undefined, 0));
 		result = hash.digest('base64');
 		(symbol as InternalSymbol).__symbol__data__key__ = result;
@@ -198,6 +201,14 @@ export namespace Type {
 	export function isCallSignature(type: ts.Type): boolean {
 		const signatures = type.getCallSignatures();
 		return signatures.length > 0;
+	}
+
+	export function isObjectType(type: ts.Type): type is ts.ObjectType {
+		return (type.flags & ts.TypeFlags.Object) !== 0;
+	}
+
+	export function isTypeReference(type: ts.ObjectType): type is ts.TypeReference {
+		return (type.objectFlags & ts.ObjectFlags.Reference) !== 0;
 	}
 }
 

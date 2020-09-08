@@ -375,13 +375,13 @@ suite('Module System Tests', () => {
 		]), compilerOptions);
 		assert.deepEqual(emitter.lastId, 104);
 		const validate: Element[] = [
-			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0L","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0C","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":37}'),
-			JSON.parse('{"id":55,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0L.toString","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":55,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0C.toString","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":56,"type":"edge","label":"attach","outV":55,"inV":30}'),
-			JSON.parse('{"id":57,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1L","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":57,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1C","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":58,"type":"edge","label":"attach","outV":57,"inV":49}'),
-			JSON.parse('{"id":59,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1L.toString","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":59,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1C.toString","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":60,"type":"edge","label":"attach","outV":59,"inV":42}')
 		];
 		for (const elem of validate) {
@@ -532,6 +532,100 @@ suite('Module System Tests', () => {
 		]), compilerOptions);
 		assert.deepEqual(emitter.lastId, 216);
 		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Transient symbols', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface IEditorMinimapOptions {',
+					'	enabled?: boolean;',
+					'}',
+					'export let minimapOpts: Readonly<Required<IEditorMinimapOptions>>;'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { minimapOpts } from "./a";',
+					'minimapOpts.enabled;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 151);
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Property with ReadonlyArray<string>', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface CodeActionProvider {',
+					'	readonly providedCodeActionKinds?: ReadonlyArray<string>;',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 76);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.providedCodeActionKinds","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Property with ReadonlyArray<literal type>', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface CodeActionProvider {',
+					'	readonly documentation?: ReadonlyArray<{ readonly kind: string, readonly command: number }>',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 114);
+		const validate: Element[] = [
+			JSON.parse('{"id":61,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.documentation.kind","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":62,"type":"edge","label":"attach","outV":61,"inV":43}'),
+			JSON.parse('{"id":63,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.documentation.command","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":64,"type":"edge","label":"attach","outV":63,"inV":50}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Property with literal type[]', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface IModelTokensChangedEvent {',
+					'	readonly ranges: {',
+					'		readonly fromLineNumber: number;',
+					'		readonly toLineNumber: number;',
+					'	}[];',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 116);
+		const validate: Element[] = [
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent.ranges","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":63,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent.ranges.fromLineNumber","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":64,"type":"edge","label":"attach","outV":63,"inV":30}'),
+			JSON.parse('{"id":65,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent.ranges.toLineNumber","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":66,"type":"edge","label":"attach","outV":65,"inV":37}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
