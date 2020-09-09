@@ -992,6 +992,25 @@ namespace FlowMode {
 	}
 }
 
+enum TraverseMode {
+	done = 1,
+	mark = 2,
+	noExport = 3,
+	export = 4
+}
+
+namespace TraverseMode {
+	export function from(current: TraverseMode, flowMode: FlowMode): TraverseMode {
+		if (current === TraverseMode.done || current === TraverseMode.mark) {
+			return current;
+		}
+		if (flowMode === FlowMode.exported) {
+			return TraverseMode.export;
+		} else {
+			return TraverseMode.noExport;
+		}
+	}
+}
 
 class Symbols {
 
@@ -1178,36 +1197,85 @@ class Symbols {
 		const seenSymbol: Set<string> = new Set();
 		const seenType: Set<ts.Type> = new Set();
 
-		const visitSymbol = (symbol: ts.Symbol, parentPath: string, exportSymbol: boolean): [boolean, string | undefined] => {
+		const getSymbolData = (type: ts.Type): SymbolData | undefined => {
+			const symbol = type.getSymbol();
+			if (symbol === undefined) {
+				return undefined;
+			}
+			return context.getOrCreateSymbolData(symbol);
+		};
+
+		const symbolTraverseMode = (symbol: ts.Symbol, current: TraverseMode): TraverseMode => {
+			if (current === TraverseMode.done || current === TraverseMode.mark) {
+				return current;
+			}
+			const symbolData = context.getOrCreateSymbolData(symbol);
+			if (symbolData.isExported() || symbolData.isIndirectExported()) {
+				return TraverseMode.done;
+			}
+			return current;
+		};
+
+		const typeTraverseMode = (type: ts.Type, current: TraverseMode): TraverseMode => {
+			// Always continue with call signatures even if they are exported.
+			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type)) {
+				return current;
+			}
+			const symbol = type.getSymbol();
+			if (symbol === undefined) {
+				return current;
+			}
+			const symbolData = context.getOrCreateSymbolData(symbol);
+			if (symbolData.isExported() || symbolData.isIndirectExported()) {
+				return TraverseMode.done;
+			}
+			const escapedName = symbol.escapedName;
+			if (Symbols.InternalSymbolNames.has(escapedName as string)) {
+				return TraverseMode.export;
+			}
+			return TraverseMode.mark;
+		};
+
+		const visitSymbol = (symbol: ts.Symbol, parentPath: string, traverseMode: TraverseMode): [boolean, string | undefined] => {
 			if (Symbols.isPrototype(symbol)) {
 				return [false, undefined];
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || seenSymbol.has(symbolData.getId())) {
-				seenSymbol.add(symbolData.getId());
-				return [false, undefined];
-			}
-
 			const identifier = `${parentPath}.${this.getExportSymbolName(symbol)}`;
-			if (exportSymbol) {
+			if (traverseMode === TraverseMode.export) {
 				result.push([symbolData, identifier]);
+			}
+			if (!symbolData.isExported()) {
+				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 			}
 			return [true, identifier];
 		};
 
-		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: FlowMode, exportSymbol: boolean): void => {
+		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: FlowMode, traverseMode: TraverseMode): void => {
 			const handler = (child: ts.Symbol) => {
-				const [traverse, identifier] = visitSymbol(child, parentPath, exportSymbol);
-				if (traverse === false || identifier === undefined) {
+				const childTraverseMode = symbolTraverseMode(child, traverseMode);
+				if (childTraverseMode === TraverseMode.done) {
 					return;
 				}
-				walkSymbol(child, identifier, mode, exportSymbol);
+				const [cont, identifier] = visitSymbol(child, parentPath, childTraverseMode);
+				if (cont === false || identifier === undefined) {
+					return;
+				}
+				walkSymbol(child, identifier, mode, traverseMode);
 			};
 			symbol.exports?.forEach(handler);
 			symbol.members?.forEach(handler);
 		};
 
-		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, exportSymbol: boolean, traverseSymbol: boolean = true): void => {
+		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, traverseMode: TraverseMode): void => {
+			if (seenType.has(type)) {
+				return;
+			}
+			seenType.add(type);
+			if (traverseMode === TraverseMode.done) {
+				return;
+			}
+
 			// We have a call signature
 			if (tss.Type.isCallSignature(type)) {
 				for (const signature of type.getCallSignatures()) {
@@ -1216,53 +1284,39 @@ class Symbols {
 						if (seenType.has(parameterType)) {
 							continue;
 						}
-						seenType.add(parameterType);
-						const paramterTypeSymbol = parameterType.getSymbol();
-						if (paramterTypeSymbol === undefined) {
-							continue;
-						}
-						const parameterTypeSymbolData = context.getOrCreateSymbolData(paramterTypeSymbol);
-						if (parameterTypeSymbolData.isExported()) {
+						const parameterTraverseMode = typeTraverseMode(parameterType, traverseMode);
+						if (parameterTraverseMode === TraverseMode.done) {
 							continue;
 						}
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
-						if (mode === FlowMode.imported && !parameterTypeSymbolData.isExported()) {
-							parameterTypeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-							result.push([parameterTypeSymbolData, exportIdentifier]);
+						if (mode === FlowMode.imported && parameterTraverseMode === TraverseMode.export) {
+							const symbolData = getSymbolData(type);
+							if (symbolData !== undefined) {
+								result.push([symbolData, exportIdentifier]);
+							}
 						}
 						const newMode = tss.Type.isCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
-						walkType(parameterType, exportIdentifier, newMode, newMode === FlowMode.exported ? false : true, true);
+						walkType(parameterType, exportIdentifier, newMode, TraverseMode.from(parameterTraverseMode, mode));
 					}
 					const returnType = signature.getReturnType();
-					if (seenType.has(returnType)) {
+					const returnTraverseMode = typeTraverseMode(returnType, traverseMode);
+					if (returnTraverseMode === TraverseMode.done) {
 						continue;
 					}
-					seenType.add(returnType);
-					const returnSymbol = returnType.getSymbol();
-					if (returnSymbol !== undefined) {
-						const returnSymbolData = context.getOrCreateSymbolData(returnSymbol);
-						if (returnSymbolData.isExported()) {
-							continue;
-						}
-					}
-					walkType(returnType, parentPath, mode, mode === FlowMode.exported ? true : false, true);
+					walkType(returnType, parentPath, mode, TraverseMode.from(returnTraverseMode, mode));
 				}
 			}
 
 			if (type.isUnionOrIntersection()) {
-				let index: number = 0;
 				for (const part of type.types) {
-					const partSymbol = part.getSymbol();
-					if (partSymbol !== undefined) {
-						const partSymbolData = context.getOrCreateSymbolData(partSymbol);
-						if (partSymbolData.isExported()) {
-							continue;
-						}
-						const symbolName = this.getExportSymbolName(partSymbol, `${index++}C`);
-						const exportIndentifier = `${parentPath}.${symbolName}`;
-						result.push([partSymbolData, exportIndentifier]);
-						walkSymbol(partSymbol, exportIndentifier, mode, exportSymbol);
+					if (seenType.has(part)) {
+						continue;
 					}
+					const partTraversMode = typeTraverseMode(part, traverseMode);
+					if (partTraversMode === TraverseMode.done) {
+						continue;
+					}
+					walkType(part, parentPath, mode, partTraversMode);
 				}
 			}
 
@@ -1273,59 +1327,58 @@ class Symbols {
 						if (seenType.has(reference)) {
 							continue;
 						}
-						seenType.add(reference);
-						walkType(reference, parentPath, mode, exportSymbol, true);
+						const referenceTraverseMode = typeTraverseMode(reference, traverseMode);
+						if (referenceTraverseMode === TraverseMode.done) {
+							continue;
+						}
+						walkType(reference, parentPath, mode, referenceTraverseMode);
 					}
 				}
 			}
 
-			if (traverseSymbol) {
-				// Walk the symbol if we have no special handling for the type.
-				const symbol = type.getSymbol();
-				if (symbol !== undefined) {
-					walkSymbol(symbol, parentPath, mode, exportSymbol);
+			const symbol = type.getSymbol();
+			if (symbol !== undefined) {
+				const key = tss.Symbol.createKey(this.typeChecker, symbol);
+				if (!seenSymbol.has(key)) {
+					seenSymbol.add(key);
+					const newTraverseMode = symbolTraverseMode(symbol, traverseMode);
+					if (newTraverseMode === TraverseMode.done) {
+						return;
+					}
+					// We don't need to visit the symbol since it represents a type.
+					const symbolData = context.getOrCreateSymbolData(symbol);
+					if (!symbolData.isExported()) {
+						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+					}
+					forEachChild(symbol, parentPath, mode, newTraverseMode);
 				}
 			}
 		};
 
-		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: FlowMode, exportSymbol: boolean): void => {
+		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: FlowMode, traverseMode: TraverseMode): void => {
 			// The prototype symbol has no range in source.
-			if (Symbols.isPrototype(symbol)) {
+			if (Symbols.isPrototype(symbol) || traverseMode === TraverseMode.done) {
 				return;
 			}
-			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || seenSymbol.has(symbolData.getId())) {
+
+			const symbolKey = tss.Symbol.createKey(this.typeChecker, symbol);
+			if (seenSymbol.has(symbolKey)) {
 				return;
 			}
 
 			const type = this.getType(symbol, sourceFile);
-			const typeSymbol = type.getSymbol();
-			if (typeSymbol !== undefined) {
-				const typeSymbolData = context.getOrCreateSymbolData(typeSymbol);
-				if (!seenSymbol.has(typeSymbolData.getId())) {
-					seenSymbol.add(typeSymbolData.getId());
-					if (!typeSymbolData.isExported()) {
-						typeSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-						forEachChild(typeSymbol, exportIdentifier, mode, exportSymbol);
-					}
-				}
+			walkType(type, exportIdentifier, mode, typeTraverseMode(type, traverseMode));
+			if (seenSymbol.has(symbolKey)) {
+				return;
 			}
-			if (symbol !== typeSymbol) {
-				if (!seenSymbol.has(symbolData.getId())) {
-					seenSymbol.add(symbolData.getId());
-					if (!symbolData.isExported()) {
-						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-						forEachChild(symbol, exportIdentifier, mode, exportSymbol);
-					}
-				}
-			}
-			walkType(type, exportIdentifier, mode, false);
+			seenSymbol.add(symbolKey);
+			forEachChild(symbol, exportIdentifier, mode, traverseMode);
 		};
 
 		if (tss.Symbol.is(start)) {
-			walkSymbol(start, exportName, FlowMode.exported, true);
+			walkSymbol(start, exportName, FlowMode.exported, symbolTraverseMode(start, TraverseMode.export));
 		} else {
-			walkType(start, exportName, FlowMode.exported, true);
+			walkType(start, exportName, FlowMode.exported, typeTraverseMode(start, TraverseMode.export));
 		}
 		return result;
 	}
@@ -1811,21 +1864,24 @@ class UnionOrIntersectionFactory extends SymbolDataFactory {
 			}
 			if (Symbols.isTransient(symbol)) {
 				// For the moniker we need to find out the ands and ors. Not sure how to do this.
-				let monikerIds: string[] = [];
+				let monikerIds: Set<string> = new Set();
 				for (const symbolData of datas) {
 					const moniker = symbolData.getMostUniqueMoniker();
 					if (moniker === undefined) {
-						monikerIds = [];
+						monikerIds.clear();
 						break;
 					} else {
-						monikerIds.push(moniker.identifier);
+						monikerIds.add(moniker.identifier);
 					}
 				}
-				if (monikerIds.length > 0) {
+				if (monikerIds.size > 0) {
+					const exportPath: string = monikerIds.size === 1
+						? monikerIds.values().next().value
+						: `[${Array.from(monikerIds).sort().join(',')}]`;
 					return {
 						symbolData: new UnionOrIntersectionSymbolData(this.symbolDataContext, id, fileNames, datas, shard, visibility),
 						moduleSystem: ModuleSystemKind.global,
-						exportPath: `[${monikerIds.sort().join(',')}]`
+						exportPath: exportPath
 					};
 				} else {
 					return {
@@ -3094,6 +3150,9 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
+		if (id === 'xkjW6pMXcaQ524pITYaIYg==') {
+			debugger;
+		}
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			return result;
@@ -3125,7 +3184,7 @@ class Visitor implements FactoryContext {
 			}
 		}
 
-		if (declarations === undefined || declarations.length === 0) {
+		if (declarations === undefined || declarations.length === 0 || Symbols.isTransient(symbol)) {
 			return result;
 		}
 

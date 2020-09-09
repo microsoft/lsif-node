@@ -1,11 +1,23 @@
-export function foo() {
-	return {
-		foo: () => { return 10; }
-	}
+// file A
+export const values: ReadonlyArray<{ line: number; character: number}> = [];
+
+// file B
+values[1].character;
+values.find(() => true).character;
+
+
+// file A
+interface Hidden {
+	line2: number;
+	character: number;
 }
 
-interface Bar {
-	name: string;
-}
+export const range: {
+	start: Hidden,
+	end: Hidden
+} = { start: { line2: 10, character: 10 }, end: { line2: 10, character: 10 } };
 
-export { Bar };
+
+// file B
+range.start.line2;
+range.end.line2;

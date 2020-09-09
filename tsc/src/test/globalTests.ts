@@ -137,16 +137,8 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 441);
+		assert.deepEqual(emitter.lastId, 421);
 		const validate: Element[] = [
-			JSON.parse('{"id":145,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onfulfilled.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":146,"type":"edge","label":"attach","outV":145,"inV":44}'),
-			JSON.parse('{"id":147,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onfulfilled.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":148,"type":"edge","label":"attach","outV":147,"inV":110}'),
-			JSON.parse('{"id":149,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onfulfilled.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":150,"type":"edge","label":"attach","outV":149,"inV":123}'),
-			JSON.parse('{"id":151,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.onfulfilled.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":152,"type":"edge","label":"attach","outV":151,"inV":136}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
