@@ -249,13 +249,12 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 96);
+		assert.deepEqual(emitter.lastId, 94);
+		// There is no a:RAL.Buffer.end since _Buffer is named.
 		const validate: Element[] = [
 			JSON.parse('{"id":47,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.Buffer","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":37}'),
-			JSON.parse('{"id":55,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.Buffer.end","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":56,"type":"edge","label":"attach","outV":55,"inV":23}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -373,16 +372,12 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 104);
+		assert.deepEqual(emitter.lastId, 100);
 		const validate: Element[] = [
-			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0C","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":37}'),
-			JSON.parse('{"id":55,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.0C.toString","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":56,"type":"edge","label":"attach","outV":55,"inV":30}'),
-			JSON.parse('{"id":57,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1C","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":58,"type":"edge","label":"attach","outV":57,"inV":49}'),
-			JSON.parse('{"id":59,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.1C.toString","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":60,"type":"edge","label":"attach","outV":59,"inV":42}')
+			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.toString","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":30}'),
+			JSON.parse('{"id":55,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.toString","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":56,"type":"edge","label":"attach","outV":55,"inV":42}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -396,17 +391,19 @@ suite('Module System Tests', () => {
 					'interface Foo { touch: boolean; }',
 					'export class Bar { foo: Foo; }'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Bar } from "./a";',
+					'let bar: Bar = new Bar();',
+					'bar.foo.touch;'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 85);
-		const validate: Element[] = [
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"zUtsZKiLRbrRa59l3vSYWw==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":45,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.touch","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":46,"type":"edge","label":"attach","outV":45,"inV":23}')
-		];
-		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
-		}
+		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
+		// However symbol data must survive for b.ts
+		assert.deepEqual(emitter.lastId, 136);
 	});
 	test('Export type via property signature', () => {
 		const emitter = lsif('/@test', new Map([
@@ -416,17 +413,19 @@ suite('Module System Tests', () => {
 					'interface Foo { touch: boolean; }',
 					'export interface Bar { foo: Foo; }'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Bar } from "./a";',
+					'let bar: Bar;',
+					'bar.foo.touch;'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 85);
-		const validate: Element[] = [
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"zUtsZKiLRbrRa59l3vSYWw==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":45,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.touch","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":46,"type":"edge","label":"attach","outV":45,"inV":23}')
-		];
-		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
-		}
+		assert.deepEqual(emitter.lastId, 134);
+		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
+		// However symbol data must survive for b.ts
 	});
 	test('Export type via variable declaration in namespace', () => {
 		const emitter = lsif('/@test', new Map([
@@ -436,17 +435,18 @@ suite('Module System Tests', () => {
 					'interface Foo { touch: boolean; }',
 					'export namespace Bar { export let foo: Foo; }'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Bar } from "./a";',
+					'Bar.foo.touch;'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 85);
-		const validate: Element[] = [
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"zUtsZKiLRbrRa59l3vSYWw==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":45,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.touch","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":46,"type":"edge","label":"attach","outV":45,"inV":23}')
-		];
-		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
-		}
+		assert.deepEqual(emitter.lastId, 118);
+		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
+		// However symbol data must survive for b.ts
 	});
 	test('Export type via variable declaration with anonymous class declaration', () => {
 		const emitter = lsif('/@test', new Map([
@@ -456,17 +456,18 @@ suite('Module System Tests', () => {
 					'abstract class Foo { public abstract doIt(): boolean; }',
 					'export namespace Bar { export const foo: Foo = new class extends Foo { public doIt(): boolean { return true; } } ; }'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Bar } from "./a";',
+					'Bar.foo.doIt();'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 100);
-		const validate: Element[] = [
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"i1frhLFTp4Ka0OZ9Y4u88g==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":54,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Bar.foo.doIt","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":55,"type":"edge","label":"attach","outV":54,"inV":23}')
-		];
-		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
-		}
+		assert.deepEqual(emitter.lastId, 133);
+		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
+		// However symbol data must survive for b.ts
 	});
 	test('Export function with literal param', () => {
 		const emitter = lsif('/@test', new Map([
@@ -503,6 +504,7 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
+		console.log(emitter.toString());
 		assert.deepEqual(emitter.lastId, 210);
 		const validate: Element[] = [
 			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.key","unique":"group","kind":"export"}'),

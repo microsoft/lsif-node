@@ -994,20 +994,62 @@ namespace FlowMode {
 
 enum TraverseMode {
 	done = 1,
-	mark = 2,
-	noExport = 3,
-	export = 4
+	noMark = 2,
+	mark = 3,
+	noExport = 4,
+	export = 5
 }
 
 namespace TraverseMode {
-	export function from(current: TraverseMode, flowMode: FlowMode): TraverseMode {
-		if (current === TraverseMode.done || current === TraverseMode.mark) {
+	export function forParameter(current: TraverseMode, flowMode: FlowMode): TraverseMode {
+		if (current === TraverseMode.done) {
 			return current;
 		}
-		if (flowMode === FlowMode.exported) {
-			return TraverseMode.export;
-		} else {
-			return TraverseMode.noExport;
+		switch (flowMode) {
+			case FlowMode.exported:
+				switch (current) {
+					case TraverseMode.noMark:
+					case TraverseMode.mark:
+						return TraverseMode.noMark;
+					case TraverseMode.noExport:
+					case TraverseMode.export:
+						return TraverseMode.noExport;
+				}
+			case FlowMode.imported:
+				switch (current) {
+					case TraverseMode.noMark:
+					case TraverseMode.mark:
+						return TraverseMode.mark;
+					case TraverseMode.noExport:
+					case TraverseMode.export:
+						return TraverseMode.export;
+				}
+		}
+	}
+
+	export function forReturn(current: TraverseMode, flowMode: FlowMode): TraverseMode {
+		if (current === TraverseMode.done) {
+			return current;
+		}
+		switch (flowMode) {
+			case FlowMode.exported:
+				switch (current) {
+					case TraverseMode.noMark:
+					case TraverseMode.mark:
+						return TraverseMode.mark;
+					case TraverseMode.noExport:
+					case TraverseMode.export:
+						return TraverseMode.export;
+				}
+			case FlowMode.imported:
+				switch (current) {
+					case TraverseMode.noMark:
+					case TraverseMode.mark:
+						return TraverseMode.noMark;
+					case TraverseMode.noExport:
+					case TraverseMode.export:
+						return TraverseMode.noExport;
+				}
 		}
 	}
 }
@@ -1197,14 +1239,6 @@ class Symbols {
 		const seenSymbol: Set<string> = new Set();
 		const seenType: Set<ts.Type> = new Set();
 
-		const getSymbolData = (type: ts.Type): SymbolData | undefined => {
-			const symbol = type.getSymbol();
-			if (symbol === undefined) {
-				return undefined;
-			}
-			return context.getOrCreateSymbolData(symbol);
-		};
-
 		const symbolTraverseMode = (symbol: ts.Symbol, current: TraverseMode): TraverseMode => {
 			if (current === TraverseMode.done || current === TraverseMode.mark) {
 				return current;
@@ -1251,7 +1285,7 @@ class Symbols {
 			return [true, identifier];
 		};
 
-		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: FlowMode, traverseMode: TraverseMode): void => {
+		const forEachChild = (symbol: ts.Symbol, parentPath: string, mode: FlowMode, traverseMode: TraverseMode, level: number): void => {
 			const handler = (child: ts.Symbol) => {
 				const childTraverseMode = symbolTraverseMode(child, traverseMode);
 				if (childTraverseMode === TraverseMode.done) {
@@ -1261,13 +1295,13 @@ class Symbols {
 				if (cont === false || identifier === undefined) {
 					return;
 				}
-				walkSymbol(child, identifier, mode, traverseMode);
+				walkSymbol(child, identifier, mode, traverseMode, level + 1);
 			};
 			symbol.exports?.forEach(handler);
 			symbol.members?.forEach(handler);
 		};
 
-		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, traverseMode: TraverseMode): void => {
+		const walkType = (type: ts.Type, parentPath: string, mode: FlowMode, traverseMode: TraverseMode, level: number): void => {
 			if (seenType.has(type)) {
 				return;
 			}
@@ -1289,21 +1323,15 @@ class Symbols {
 							continue;
 						}
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
-						if (mode === FlowMode.imported && parameterTraverseMode === TraverseMode.export) {
-							const symbolData = getSymbolData(type);
-							if (symbolData !== undefined) {
-								result.push([symbolData, exportIdentifier]);
-							}
-						}
 						const newMode = tss.Type.isCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
-						walkType(parameterType, exportIdentifier, newMode, TraverseMode.from(parameterTraverseMode, mode));
+						walkType(parameterType, exportIdentifier, newMode, TraverseMode.forParameter(parameterTraverseMode, newMode), level + 1);
 					}
 					const returnType = signature.getReturnType();
 					const returnTraverseMode = typeTraverseMode(returnType, traverseMode);
 					if (returnTraverseMode === TraverseMode.done) {
 						continue;
 					}
-					walkType(returnType, parentPath, mode, TraverseMode.from(returnTraverseMode, mode));
+					walkType(returnType, parentPath, mode, TraverseMode.forReturn(returnTraverseMode, mode), level + 1);
 				}
 			}
 
@@ -1316,7 +1344,7 @@ class Symbols {
 					if (partTraversMode === TraverseMode.done) {
 						continue;
 					}
-					walkType(part, parentPath, mode, partTraversMode);
+					walkType(part, parentPath, mode, partTraversMode, level + 1);
 				}
 			}
 
@@ -1331,7 +1359,7 @@ class Symbols {
 						if (referenceTraverseMode === TraverseMode.done) {
 							continue;
 						}
-						walkType(reference, parentPath, mode, referenceTraverseMode);
+						walkType(reference, parentPath, mode, referenceTraverseMode, level + 1);
 					}
 				}
 			}
@@ -1350,12 +1378,12 @@ class Symbols {
 					if (!symbolData.isExported()) {
 						symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 					}
-					forEachChild(symbol, parentPath, mode, newTraverseMode);
+					forEachChild(symbol, parentPath, mode, newTraverseMode, level + 1);
 				}
 			}
 		};
 
-		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: FlowMode, traverseMode: TraverseMode): void => {
+		const walkSymbol = (symbol: ts.Symbol, exportIdentifier: string, mode: FlowMode, traverseMode: TraverseMode, level: number): void => {
 			// The prototype symbol has no range in source.
 			if (Symbols.isPrototype(symbol) || traverseMode === TraverseMode.done) {
 				return;
@@ -1367,18 +1395,20 @@ class Symbols {
 			}
 
 			const type = this.getType(symbol, sourceFile);
-			walkType(type, exportIdentifier, mode, typeTraverseMode(type, traverseMode));
+			// On the first level we start with a symbol or type that is exported. So don't recompute the
+			// traverse mode.
+			walkType(type, exportIdentifier, mode, level === 0 ? traverseMode : typeTraverseMode(type, traverseMode), level);
 			if (seenSymbol.has(symbolKey)) {
 				return;
 			}
 			seenSymbol.add(symbolKey);
-			forEachChild(symbol, exportIdentifier, mode, traverseMode);
+			forEachChild(symbol, exportIdentifier, mode, traverseMode, level);
 		};
 
 		if (tss.Symbol.is(start)) {
-			walkSymbol(start, exportName, FlowMode.exported, symbolTraverseMode(start, TraverseMode.export));
+			walkSymbol(start, exportName, FlowMode.exported, symbolTraverseMode(start, TraverseMode.export), 0);
 		} else {
-			walkType(start, exportName, FlowMode.exported, typeTraverseMode(start, TraverseMode.export));
+			walkType(start, exportName, FlowMode.exported, typeTraverseMode(start, TraverseMode.export), 0);
 		}
 		return result;
 	}

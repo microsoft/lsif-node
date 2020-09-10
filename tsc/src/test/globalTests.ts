@@ -137,7 +137,7 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 421);
+		assert.deepEqual(emitter.lastId, 419);
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {
