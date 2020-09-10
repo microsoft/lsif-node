@@ -21,3 +21,11 @@ export const range: {
 // file B
 range.start.line2;
 range.end.line2;
+
+
+abstract class Foo {
+    run(): void { }
+}
+export class Bar extends Foo {
+    do(): void { }
+}

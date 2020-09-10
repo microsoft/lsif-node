@@ -344,9 +344,6 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public constructor(context: SymbolDataContext, private id: SymbolId, private visibility: SymbolDataVisibility) {
 		super(context);
-		if (id === 'WpxEqttj0+CG6SNFYYq95A==') {
-			debugger;
-		}
 		this.resultSet = this.vertex.resultSet();
 	}
 
@@ -360,9 +357,6 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
 		if (value === SymbolDataVisibility.indirectExported) {
-			if (this.id === 'WpxEqttj0+CG6SNFYYq95A==') {
-				debugger;
-			}
 			if (this.visibility === SymbolDataVisibility.exported) {
 				return;
 			}
@@ -1256,7 +1250,7 @@ class Symbols {
 
 		const typeTraverseMode = (type: ts.Type, current: TraverseMode): TraverseMode => {
 			// Always continue with call signatures even if they are exported.
-			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type)
+			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type) || tss.Type.isClassOrInterface(type)
 				|| (tss.Type.isObjectType(type) && tss.Type.isTypeReference(type) && this.typeChecker.getTypeArguments(type).length > 0)) {
 				return current;
 			}
@@ -1349,11 +1343,56 @@ class Symbols {
 					if (seenType.has(part)) {
 						continue;
 					}
-					const partTraversMode = typeTraverseMode(part, traverseMode);
-					if (partTraversMode === TraverseMode.done) {
+					const partTraverseMode = typeTraverseMode(part, traverseMode);
+					if (partTraverseMode === TraverseMode.done) {
 						continue;
 					}
-					walkType(part, parentPath, mode, partTraversMode, level + 1);
+					walkType(part, parentPath, mode, partTraverseMode, level + 1);
+				}
+			}
+
+			if (tss.Type.isInterface(type)) {
+				const bases = type.getBaseTypes();
+				if (bases !== undefined) {
+					for (const base of bases) {
+						if (seenType.has(base)) {
+							continue;
+						}
+						const baseTraverseMode = typeTraverseMode(base, traverseMode);
+						if (baseTraverseMode === TraverseMode.done) {
+							continue;
+						}
+						walkType(base, parentPath, mode, baseTraverseMode, level + 1);
+					}
+				}
+			}
+
+			if (tss.Type.isClass(type)) {
+				const symbol = type.getSymbol();
+				if (symbol !== undefined) {
+					const declarations = symbol.getDeclarations();
+					if (declarations !== undefined) {
+						for (const declaration of declarations) {
+							if (ts.isClassDeclaration(declaration)) {
+								const heritageClauses = declaration.heritageClauses;
+								if (heritageClauses !== undefined) {
+									for (const heritageClause of heritageClauses) {
+										for (const type of heritageClause.types) {
+											const base = this.typeChecker.getTypeAtLocation(type.expression);
+											if (seenType.has(base)) {
+												continue;
+											}
+											const baseTraverseMode = typeTraverseMode(base, traverseMode);
+											if (baseTraverseMode === TraverseMode.done) {
+												continue;
+											}
+											walkType(base, parentPath, mode, baseTraverseMode, level + 1);
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 			}
 
@@ -2751,6 +2790,7 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitClassOrInterfaceDeclaration(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
+		this.handleBase(node);
 		this.endVisitDeclaration(node);
 	}
 
@@ -2863,6 +2903,15 @@ class Visitor implements FactoryContext {
 			monikerParts.path,
 			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
+	}
+
+	private handleBase(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
+		const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
+		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
+			return;
+		}
+		const type = this.symbols.getType(symbol, node);
+		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {
@@ -3185,7 +3234,7 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === 'cZYrZphTGo0J539a75fR1A==') {
+		if (id === 'VM5Gg9rIWZ59INHYPqNebg==') {
 			debugger;
 		}
 		let result = this.dataManager.getSymbolData(id);

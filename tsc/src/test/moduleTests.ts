@@ -640,4 +640,33 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Extend private class', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'abstract class Foo {',
+					'    run(): void { }',
+					'}',
+					'export class Bar extends Foo {',
+					'    do(): void { }',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Bar } from "./a"',
+					'let bar: Bar = new Bar();',
+					'bar.run();'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 141);
+		const validate: Element[] = [
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

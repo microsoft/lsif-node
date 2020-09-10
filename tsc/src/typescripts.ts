@@ -210,6 +210,30 @@ export namespace Type {
 	export function isTypeReference(type: ts.ObjectType): type is ts.TypeReference {
 		return (type.objectFlags & ts.ObjectFlags.Reference) !== 0;
 	}
+
+	export function isClassOrInterface(type: ts.Type): boolean {
+		const symbol = type.getSymbol();
+		if (symbol !== undefined) {
+			return (symbol.flags & (ts.SymbolFlags.Interface | ts.SymbolFlags.Class)) !== 0;
+		}
+		return type.isClassOrInterface();
+	}
+
+	export function isClass(type: ts.Type): boolean {
+		const symbol = type.getSymbol();
+		if (symbol !== undefined) {
+			return (symbol.flags & ts.SymbolFlags.Class) !== 0;
+		}
+		return type.isClass();
+	}
+
+	export function isInterface(type: ts.Type): boolean {
+		const symbol = type.getSymbol();
+		if (symbol !== undefined) {
+			return (symbol.flags & ts.SymbolFlags.Interface) !== 0;
+		}
+		return type.isClassOrInterface() && !type.isClass();
+	}
 }
 
 
