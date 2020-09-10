@@ -110,7 +110,6 @@ suite('Global Module Tests', () => {
 		]), { });
 		const validate: Element[] = [
 			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":34,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.1I","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

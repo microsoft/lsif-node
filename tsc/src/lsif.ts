@@ -341,12 +341,13 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	protected resultSet: ResultSet;
 	private _moniker: undefined | Moniker | Moniker[];
-	public additionalExportPathComputed: boolean;
 
 	public constructor(context: SymbolDataContext, private id: SymbolId, private visibility: SymbolDataVisibility) {
 		super(context);
+		if (id === 'WpxEqttj0+CG6SNFYYq95A==') {
+			debugger;
+		}
 		this.resultSet = this.vertex.resultSet();
-		this.additionalExportPathComputed = false;
 	}
 
 	public getId(): string {
@@ -359,6 +360,9 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
 		if (value === SymbolDataVisibility.indirectExported) {
+			if (this.id === 'WpxEqttj0+CG6SNFYYq95A==') {
+				debugger;
+			}
 			if (this.visibility === SymbolDataVisibility.exported) {
 				return;
 			}
@@ -1244,7 +1248,7 @@ class Symbols {
 				return current;
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || symbolData.isIndirectExported()) {
+			if (symbolData.isExported()) {
 				return TraverseMode.done;
 			}
 			return current;
@@ -1261,7 +1265,7 @@ class Symbols {
 				return current;
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported() || symbolData.isIndirectExported()) {
+			if (symbolData.isExported()) {
 				return TraverseMode.done;
 			}
 			const escapedName = symbol.escapedName;
@@ -1276,9 +1280,13 @@ class Symbols {
 				return [false, undefined];
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			const identifier = `${parentPath}.${this.getExportSymbolName(symbol)}`;
-			if (traverseMode === TraverseMode.export) {
-				result.push([symbolData, identifier]);
+			const escapedName = symbol.escapedName;
+			let identifier = parentPath;
+			if (!Symbols.InternalSymbolNames.has(escapedName as string)) {
+				identifier = `${parentPath}.${this.getExportSymbolName(symbol)}`;
+				if (traverseMode === TraverseMode.export) {
+					result.push([symbolData, identifier]);
+				}
 			}
 			if (!symbolData.isExported()) {
 				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
@@ -2807,7 +2815,6 @@ class Visitor implements FactoryContext {
 			}
 			const type = this.symbols.getType(symbol, node);
 			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
-			symbolData.additionalExportPathComputed = true;
 		}
 	}
 
@@ -2821,7 +2828,7 @@ class Visitor implements FactoryContext {
 		if (symbolData === undefined) {
 			return emptyResult;
 		}
-		if (symbolData.additionalExportPathComputed || (!symbolData.isExported() && !symbolData.isIndirectExported())) {
+		if (!symbolData.isExported() && !symbolData.isIndirectExported()) {
 			return emptyResult;
 		}
 		const moniker = symbolData.getPrimaryMoniker();
@@ -2845,7 +2852,6 @@ class Visitor implements FactoryContext {
 			monikerParts.path,
 			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name)
 		);
-		symbolData.additionalExportPathComputed = true;
 	}
 
 	private handlePropertyType(node: ts.PropertyDeclaration | ts.PropertySignature): void {
@@ -2857,7 +2863,6 @@ class Visitor implements FactoryContext {
 			monikerParts.path,
 			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
-		symbolData.additionalExportPathComputed = true;
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {
@@ -2899,7 +2904,6 @@ class Visitor implements FactoryContext {
 			monikerParts.path,
 			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), node.name.getText())
 		);
-		symbolData.additionalExportPathComputed = true;
 	}
 
 	private visitDeclaration(node: tss.Node.Declaration, isContainer: boolean): void {
@@ -3181,7 +3185,7 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === 'xkjW6pMXcaQ524pITYaIYg==') {
+		if (id === 'cZYrZphTGo0J539a75fR1A==') {
 			debugger;
 		}
 		let result = this.dataManager.getSymbolData(id);
