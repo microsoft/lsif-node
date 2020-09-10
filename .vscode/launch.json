@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Interface with signature"
+				"-g", "Export type via variable declaration with anonymous class declaration"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",

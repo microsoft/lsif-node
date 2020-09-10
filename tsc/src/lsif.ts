@@ -1252,7 +1252,8 @@ class Symbols {
 
 		const typeTraverseMode = (type: ts.Type, current: TraverseMode): TraverseMode => {
 			// Always continue with call signatures even if they are exported.
-			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type)) {
+			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type)
+				|| (tss.Type.isObjectType(type) && tss.Type.isTypeReference(type) && this.typeChecker.getTypeArguments(type).length > 0)) {
 				return current;
 			}
 			const symbol = type.getSymbol();

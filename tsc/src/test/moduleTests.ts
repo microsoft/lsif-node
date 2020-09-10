@@ -504,7 +504,6 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
 		assert.deepEqual(emitter.lastId, 210);
 		const validate: Element[] = [
 			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.callback.entry.key","unique":"group","kind":"export"}'),
@@ -593,9 +592,17 @@ suite('Module System Tests', () => {
 					'	readonly documentation?: ReadonlyArray<{ readonly kind: string, readonly command: number }>',
 					'}'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { CodeActionProvider } from "./a";',
+					'let provider: CodeActionProvider;',
+					'provider?.documentation?[0].kind'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 114);
+		assert.deepEqual(emitter.lastId, 166);
 		const validate: Element[] = [
 			JSON.parse('{"id":61,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.documentation.kind","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":62,"type":"edge","label":"attach","outV":61,"inV":43}'),
