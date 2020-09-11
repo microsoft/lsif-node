@@ -358,19 +358,26 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
 		if (value === SymbolDataVisibility.indirectExported) {
-			if (this.visibility === SymbolDataVisibility.exported) {
+			if (this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported) {
 				return;
 			}
-			if (this.visibility !== SymbolDataVisibility.unknown && this.visibility !== SymbolDataVisibility.indirectExported) {
+			if (this.visibility === SymbolDataVisibility.internal) {
 				throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
 			}
 			this.visibility = value;
 			return;
 		}
-		if (value === SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.internal && this.visibility !== SymbolDataVisibility.unknown) {
-			throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
+		if (value === SymbolDataVisibility.internal) {
+			if (this.visibility === SymbolDataVisibility.internal) {
+				return;
+			}
+			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported) {
+				throw new Error(`Can't downgrade symbol data visibility from ${this.visibility} to ${value}`);
+			}
+			this.visibility = value;
+			return;
 		}
-		this.visibility = value;
+		throw new Error (`Should never happen`);
 	}
 
 	public isExported(): boolean {
@@ -1065,6 +1072,41 @@ namespace TraverseMode {
 	}
 }
 
+class Types {
+
+	public constructor(private typeChecker: ts.TypeChecker) {
+	}
+
+	public getBaseTypes(type: ts.Type): ts.Type[] | undefined {
+		return type.getBaseTypes();
+	}
+
+	public getExtendsTypes(type: ts.Type): ts.Type[] | undefined {
+		const symbol = type.getSymbol();
+		if (symbol === undefined) {
+			return undefined;
+		}
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			return undefined;
+		}
+		const result: ts.Type[] = [];
+		for (const declaration of declarations) {
+			if (ts.isClassDeclaration(declaration)) {
+				const heritageClauses = declaration.heritageClauses;
+				if (heritageClauses !== undefined) {
+					for (const heritageClause of heritageClauses) {
+						for (const type of heritageClause.types) {
+							result.push(this.typeChecker.getTypeAtLocation(type.expression));
+						}
+					}
+				}
+			}
+		}
+		return result;
+	}
+}
+
 class Symbols {
 
 	private static TopLevelPaths: Map<number, number[]> = new Map([
@@ -1194,6 +1236,8 @@ class Symbols {
 		return true;
 	}
 
+	public readonly types: Types;
+
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly exportPathCache: LRUCache<ts.Symbol, string | null>;
@@ -1202,6 +1246,7 @@ class Symbols {
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
+		this.types = new Types(typeChecker);
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportPathCache = new LRUCache(2048);
@@ -1245,7 +1290,7 @@ class Symbols {
 		}
 	}
 
-	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string): [SymbolData, string][] {
+	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, traverseMode?: TraverseMode): [SymbolData, string][] {
 		const result: [SymbolData, string][] = [];
 		const seenSymbol: Set<string> = new Set();
 		const seenType: Set<ts.Type> = new Set();
@@ -1366,7 +1411,7 @@ class Symbols {
 			}
 
 			if (tss.Type.isInterface(type)) {
-				const bases = type.getBaseTypes();
+				const bases = this.types.getBaseTypes(type);
 				if (bases !== undefined) {
 					for (const base of bases) {
 						if (seenType.has(base)) {
@@ -1382,30 +1427,17 @@ class Symbols {
 			}
 
 			if (tss.Type.isClass(type)) {
-				const symbol = type.getSymbol();
-				if (symbol !== undefined) {
-					const declarations = symbol.getDeclarations();
-					if (declarations !== undefined) {
-						for (const declaration of declarations) {
-							if (ts.isClassDeclaration(declaration)) {
-								const heritageClauses = declaration.heritageClauses;
-								if (heritageClauses !== undefined) {
-									for (const heritageClause of heritageClauses) {
-										for (const type of heritageClause.types) {
-											const base = this.typeChecker.getTypeAtLocation(type.expression);
-											if (seenType.has(base)) {
-												continue;
-											}
-											const baseTraverseMode = typeTraverseMode(base, traverseMode);
-											if (baseTraverseMode === TraverseMode.done) {
-												continue;
-											}
-											walkType(base, parentPath, mode, baseTraverseMode, level + 1);
-										}
-									}
-								}
-							}
+				const bases = this.types.getExtendsTypes(type);
+				if (bases !== undefined) {
+					for (const base of bases) {
+						if (seenType.has(base)) {
+							continue;
 						}
+						const baseTraverseMode = typeTraverseMode(base, traverseMode);
+						if (baseTraverseMode === TraverseMode.done) {
+							continue;
+						}
+						walkType(base, parentPath, mode, baseTraverseMode, level + 1);
 					}
 				}
 			}
@@ -1469,9 +1501,9 @@ class Symbols {
 
 		// We start in export mode since this is why we got called.
 		if (tss.Symbol.is(start)) {
-			walkSymbol(start, exportName, FlowMode.exported, symbolTraverseMode(start, TraverseMode.export), 0);
+			walkSymbol(start, exportName, FlowMode.exported, traverseMode ?? symbolTraverseMode(start, TraverseMode.export), 0);
 		} else {
-			walkType(start, exportName, FlowMode.exported, typeTraverseMode(start, TraverseMode.export), 0);
+			walkType(start, exportName, FlowMode.exported, traverseMode ?? typeTraverseMode(start, TraverseMode.export), 0);
 		}
 		return result;
 	}
@@ -2691,6 +2723,12 @@ class Visitor implements FactoryContext {
 			case ts.SyntaxKind.TypeAliasDeclaration:
 				this.doVisit(this.visitTypeAliasDeclaration, this.endVisitTypeAliasDeclaration, node as ts.TypeAliasDeclaration);
 				break;
+			case ts.SyntaxKind.SetAccessor:
+				this.doVisit(this.visitGeneric, this.endVisitSetAccessor, node as ts.SetAccessorDeclaration);
+				break;
+			case ts.SyntaxKind.GetAccessor:
+				this.doVisit(this.visitGeneric, this.endVisitGetAccessor, node as ts.GetAccessorDeclaration);
+				break;
 			case ts.SyntaxKind.ArrayType:
 				this.doVisit(this.visitArrayType, this.endVisitArrayType, node as ts.ArrayTypeNode);
 				break;
@@ -2895,7 +2933,7 @@ class Visitor implements FactoryContext {
 		return [symbol, symbolData, TscMoniker.parse(moniker.identifier)];
 	}
 
-	private handleSignatures(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration): void {
+	private handleSignatures(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration | ts.SetAccessorDeclaration | ts.GetAccessorDeclaration): void {
 		// The return type of a function could be an inferred type or a literal type
 		// In both cases the type has no name and therefore the symbol has no monikers.
 		// Ensure that the return symbol has the correct visibility and moniker.
@@ -2928,7 +2966,19 @@ class Visitor implements FactoryContext {
 			return;
 		}
 		const type = this.symbols.getType(symbol, node);
-		this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+		// We don't need t traverse the class or interface itself. Only the parents.
+		const bases = this.symbols.types.getBaseTypes(type);
+		if (bases !== undefined) {
+			for (const type of bases) {
+				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+			}
+		}
+		const extendz = this.symbols.types.getExtendsTypes(type);
+		if (extendz !== undefined) {
+			for (const type of extendz) {
+				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+			}
+		}
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {
@@ -3065,6 +3115,14 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
+	}
+
+	private endVisitSetAccessor(node: ts.SetAccessorDeclaration): void {
+		this.handleSignatures(node);
+	}
+
+	private endVisitGetAccessor(node: ts.GetAccessorDeclaration): void {
+		this.handleSignatures(node);
 	}
 
 	private visitArrayType(node: ts.ArrayTypeNode): boolean {
@@ -3251,7 +3309,7 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === 'VM5Gg9rIWZ59INHYPqNebg==') {
+		if (id === 'YLMKMNmyMeEDnqLjxdXniQ==') {
 			debugger;
 		}
 		let result = this.dataManager.getSymbolData(id);
