@@ -331,8 +331,9 @@ class DocumentData extends LSIFData<EmitterContext> {
 enum SymbolDataVisibility {
 	internal = 1,
 	unknown = 2,
-	indirectExported = 3,
-	exported = 4,
+	transient = 3,
+	indirectExported = 4,
+	exported = 5,
 }
 
 abstract class SymbolData extends LSIFData<SymbolDataContext> {
@@ -380,12 +381,24 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		return this.visibility === SymbolDataVisibility.indirectExported;
 	}
 
+	public isTransient(): boolean {
+		return this.visibility === SymbolDataVisibility.transient;
+	}
+
+	public keep(): boolean {
+		return this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.transient;
+	}
+
 	public isInternal(): boolean {
 		return this.visibility === SymbolDataVisibility.internal;
 	}
 
 	public isUnknown(): boolean {
 		return this.visibility === SymbolDataVisibility.unknown;
+	}
+
+	public release(): boolean {
+		return this.visibility === SymbolDataVisibility.internal || this.visibility === SymbolDataVisibility.unknown;
 	}
 
 	public getResultSet(): ResultSet {
@@ -764,7 +777,7 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 	private shard: Project | Document;
 
 	constructor(context: SymbolDataContext, id: string, sourceFiles: string[] | undefined, elements: SymbolData[], shard: Project | Document, visibility: SymbolDataVisibility) {
-		super(context, id, visibility === SymbolDataVisibility.exported ? visibility : SymbolDataVisibility.indirectExported);
+		super(context, id, visibility);
 		this.elements = elements;
 		this.sourceFiles = sourceFiles;
 		this.shard = shard;
@@ -822,7 +835,7 @@ class UnionOrIntersectionSymbolData extends StandardSymbolData {
 class TransientSymbolData extends StandardSymbolData {
 
 	constructor(context: SymbolDataContext, id: string, visibility: SymbolDataVisibility) {
-		super(context, id, visibility === SymbolDataVisibility.exported ? visibility : SymbolDataVisibility.indirectExported);
+		super(context, id, visibility);
 	}
 
 	public begin(): void {
@@ -1238,11 +1251,11 @@ class Symbols {
 		const seenType: Set<ts.Type> = new Set();
 
 		const symbolTraverseMode = (symbol: ts.Symbol, current: TraverseMode): TraverseMode => {
-			if (current === TraverseMode.done || current === TraverseMode.mark) {
+			if (current === TraverseMode.done || current === TraverseMode.mark || current === TraverseMode.noMark) {
 				return current;
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported()) {
+			if (symbolData.isExported() || symbolData.isIndirectExported()) {
 				return TraverseMode.done;
 			}
 			return current;
@@ -1250,7 +1263,8 @@ class Symbols {
 
 		const typeTraverseMode = (type: ts.Type, current: TraverseMode): TraverseMode => {
 			// Always continue with call signatures even if they are exported.
-			if (current === TraverseMode.done || current === TraverseMode.mark || tss.Type.isCallSignature(type) || tss.Type.isClassOrInterface(type)
+			if (current === TraverseMode.done || current === TraverseMode.mark || current === TraverseMode.noMark
+			 	|| tss.Type.isCallSignature(type)
 				|| (tss.Type.isObjectType(type) && tss.Type.isTypeReference(type) && this.typeChecker.getTypeArguments(type).length > 0)) {
 				return current;
 			}
@@ -1259,7 +1273,7 @@ class Symbols {
 				return current;
 			}
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			if (symbolData.isExported()) {
+			if (symbolData.isExported() || symbolData.isIndirectExported()) {
 				return TraverseMode.done;
 			}
 			const escapedName = symbol.escapedName;
@@ -1453,6 +1467,7 @@ class Symbols {
 			forEachChild(symbol, exportIdentifier, mode, traverseMode, level);
 		};
 
+		// We start in export mode since this is why we got called.
 		if (tss.Symbol.is(start)) {
 			walkSymbol(start, exportName, FlowMode.exported, symbolTraverseMode(start, TraverseMode.export), 0);
 		} else {
@@ -1809,6 +1824,10 @@ abstract class SymbolDataFactory {
 		if (exportPath !== undefined) {
 			return [SymbolDataVisibility.exported, undefined];
 		}
+		if (Symbols.isTransient(symbol)) {
+			return [SymbolDataVisibility.transient, undefined];
+		}
+
 		const hasOneSourceFile = sourceFiles !== undefined && sourceFiles.length === 1;
 		// If the symbol comes from more than one source file we can't dispose it on a node since
 		// we need to see it in more than one file.
@@ -2048,8 +2067,7 @@ abstract class ProjectDataManager {
 	public abstract getParseMode(): ParseMode;
 
 	public updateSymbolDataManagement(symbolData: SymbolData): void {
-		const visibility = symbolData.getVisibility();
-		if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.indirectExported) {
+		if (symbolData.keep()) {
 			this.managedSymbolDatas.push(symbolData);
 		}
 	}
@@ -2382,15 +2400,14 @@ export class DataManager implements SymbolDataContext {
 		if (validateVisibilityOn !== undefined) {
 			for (const symbolData of validateVisibilityOn) {
 				const symbolId = symbolData.getId();
-				const visibility = symbolData.getVisibility();
 				const counter = this.validateVisibilityCounter.get(symbolId);
 				// If the counter is already gone then the visibility already changed.
 				if (counter !== undefined) {
-					if (visibility === SymbolDataVisibility.exported || visibility === SymbolDataVisibility.indirectExported) {
+					if (symbolData.keep()) {
 						counter.projectDataManager.updateSymbolDataManagement(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
-						if (visibility === SymbolDataVisibility.unknown || visibility === SymbolDataVisibility.internal) {
+						if (symbolData.release()) {
 							handledSymbolData.add(symbolId);
 							symbolData.end();
 							this.symbolDatas.set(symbolId, null);
