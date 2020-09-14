@@ -1135,8 +1135,22 @@ class Symbols {
 
 
 	public static isSourceFile(symbol: ts.Symbol): boolean  {
-		let declarations = symbol.getDeclarations();
+		const declarations = symbol.getDeclarations();
 		return declarations !== undefined && declarations.length === 1 && ts.isSourceFile(declarations[0]);
+	}
+
+	public static mayBeSourceFile(symbol: ts.Symbol): boolean {
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			return false;
+		}
+		for (const declaration of declarations) {
+			if (ts.isSourceFile(declaration)) {
+				return true;
+			}
+		}
+		return false;
+
 	}
 
 	public static isFunctionScopedVariable(symbol: ts.Symbol): boolean {
@@ -1269,7 +1283,7 @@ class Symbols {
 	}
 
 	public getType(symbol: ts.Symbol, location: ts.Node): ts.Type {
-		return Symbols.isTypeAlias(symbol)
+		return Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)
 			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
 			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : location);
 	}
@@ -1502,6 +1516,11 @@ class Symbols {
 		// We start in export mode since this is why we got called.
 		if (tss.Symbol.is(start)) {
 			walkSymbol(start, exportName, FlowMode.exported, traverseMode ?? symbolTraverseMode(start, TraverseMode.export), 0);
+			// If the symbol is not exported now mark it at least as indirect exported.
+			const symbolData = context.getOrCreateSymbolData(start);
+			if (!symbolData.isExported()) {
+				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+			}
 		} else {
 			walkType(start, exportName, FlowMode.exported, traverseMode ?? typeTraverseMode(start, TraverseMode.export), 0);
 		}
@@ -3320,6 +3339,9 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
+		if (id === '1p2laoVvSqa9X1r/95cPBQ==') {
+			debugger;
+		}
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			return result;
@@ -3328,7 +3350,7 @@ class Visitor implements FactoryContext {
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
 		const sourceFiles: ts.SourceFile[] | undefined = factory.getSourceFiles(symbol);
 		// Don't do this for symbols that are source files to avoid recursive initialization (e.g. moniker assignment)
-		if (!Symbols.isSourceFile(symbol) && sourceFiles !== undefined) {
+		if (!Symbols.mayBeSourceFile(symbol) && sourceFiles !== undefined) {
 			for (const sourceFile of sourceFiles) {
 				this.getOrCreateDocumentData(sourceFile);
 			}
