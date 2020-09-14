@@ -211,6 +211,10 @@ export namespace Type {
 		return (type.objectFlags & ts.ObjectFlags.Reference) !== 0;
 	}
 
+	export function isConditionalType(type: ts.Type): type is ts.ConditionalType {
+		return (type.flags & ts.TypeFlags.Conditional) !== 0;
+	}
+
 	export function isClassOrInterface(type: ts.Type): boolean {
 		const symbol = type.getSymbol();
 		if (symbol !== undefined) {

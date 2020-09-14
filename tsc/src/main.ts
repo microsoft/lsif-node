@@ -16,7 +16,7 @@ import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-pr
 
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager } from './lsif';
+import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager, DataMode } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
 import { Builder } from './graph';
 import * as tss from './typescripts';
@@ -517,7 +517,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		stdout: options.stdout,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout, DataMode.keep);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	dataManager.end();

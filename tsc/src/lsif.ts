@@ -1324,6 +1324,7 @@ class Symbols {
 			// Always continue with call signatures even if they are exported.
 			if (current === TraverseMode.done || current === TraverseMode.mark || current === TraverseMode.noMark
 			 	|| tss.Type.isCallSignature(type)
+				|| type.aliasTypeArguments !== undefined
 				|| (tss.Type.isObjectType(type) && tss.Type.isTypeReference(type) && this.typeChecker.getTypeArguments(type).length > 0)) {
 				return current;
 			}
@@ -1391,36 +1392,19 @@ class Symbols {
 				for (const signature of type.getCallSignatures()) {
 					for (const parameter of signature.getParameters()) {
 						const parameterType = this.getType(parameter, sourceFile);
-						if (seenType.has(parameterType)) {
-							continue;
-						}
 						const parameterTraverseMode = typeTraverseMode(parameterType, traverseMode);
-						if (parameterTraverseMode === TraverseMode.done) {
-							continue;
-						}
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
 						const newMode = tss.Type.isCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
 						walkType(parameterType, exportIdentifier, newMode, TraverseMode.forParameter(parameterTraverseMode, newMode), level + 1);
 					}
 					const returnType = signature.getReturnType();
-					const returnTraverseMode = typeTraverseMode(returnType, traverseMode);
-					if (returnTraverseMode === TraverseMode.done) {
-						continue;
-					}
-					walkType(returnType, parentPath, mode, TraverseMode.forReturn(returnTraverseMode, mode), level + 1);
+					walkType(returnType, parentPath, mode, TraverseMode.forReturn(typeTraverseMode(returnType, traverseMode), mode), level + 1);
 				}
 			}
 
 			if (type.isUnionOrIntersection()) {
 				for (const part of type.types) {
-					if (seenType.has(part)) {
-						continue;
-					}
-					const partTraverseMode = typeTraverseMode(part, traverseMode);
-					if (partTraverseMode === TraverseMode.done) {
-						continue;
-					}
-					walkType(part, parentPath, mode, partTraverseMode, level + 1);
+					walkType(part, parentPath, mode, typeTraverseMode(part, traverseMode), level + 1);
 				}
 			}
 
@@ -1428,14 +1412,7 @@ class Symbols {
 				const bases = this.types.getBaseTypes(type);
 				if (bases !== undefined) {
 					for (const base of bases) {
-						if (seenType.has(base)) {
-							continue;
-						}
-						const baseTraverseMode = typeTraverseMode(base, traverseMode);
-						if (baseTraverseMode === TraverseMode.done) {
-							continue;
-						}
-						walkType(base, parentPath, mode, baseTraverseMode, level + 1);
+						walkType(base, parentPath, mode, typeTraverseMode(base, traverseMode), level + 1);
 					}
 				}
 			}
@@ -1444,14 +1421,7 @@ class Symbols {
 				const bases = this.types.getExtendsTypes(type);
 				if (bases !== undefined) {
 					for (const base of bases) {
-						if (seenType.has(base)) {
-							continue;
-						}
-						const baseTraverseMode = typeTraverseMode(base, traverseMode);
-						if (baseTraverseMode === TraverseMode.done) {
-							continue;
-						}
-						walkType(base, parentPath, mode, baseTraverseMode, level + 1);
+						walkType(base, parentPath, mode, typeTraverseMode(base, traverseMode), level + 1);
 					}
 				}
 			}
@@ -1460,16 +1430,22 @@ class Symbols {
 				if (tss.Type.isTypeReference(type)) {
 					const typeReferences = this.typeChecker.getTypeArguments(type);
 					for (const reference of typeReferences) {
-						if (seenType.has(reference)) {
-							continue;
-						}
-						const referenceTraverseMode = typeTraverseMode(reference, traverseMode);
-						if (referenceTraverseMode === TraverseMode.done) {
-							continue;
-						}
-						walkType(reference, parentPath, mode, referenceTraverseMode, level + 1);
+						walkType(reference, parentPath, mode, typeTraverseMode(reference, traverseMode), level + 1);
 					}
 				}
+			}
+
+			if (type.aliasTypeArguments !== undefined) {
+				for (const aliasTypeArgument of type.aliasTypeArguments) {
+					walkType(aliasTypeArgument, parentPath, mode, typeTraverseMode(aliasTypeArgument, traverseMode), level + 1);
+				}
+			}
+
+			if (tss.Type.isConditionalType(type)) {
+				walkType(type.checkType, parentPath, mode, typeTraverseMode(type.checkType, traverseMode), level + 1);
+				walkType(type.extendsType, parentPath, mode, typeTraverseMode(type.extendsType, traverseMode), level + 1);
+				walkType(type.resolvedTrueType, parentPath, mode, typeTraverseMode(type.resolvedTrueType, traverseMode), level + 1);
+				walkType(type.resolvedFalseType, parentPath, mode, typeTraverseMode(type.resolvedFalseType, traverseMode), level + 1);
 			}
 
 			const symbol = type.getSymbol();
@@ -2323,6 +2299,11 @@ interface DataManagerResult {
 	readonly moduleSystem?: ModuleSystemKind;
 }
 
+export enum DataMode {
+	free = 1,
+	keep = 2
+}
+
 export class DataManager implements SymbolDataContext {
 
 	private static readonly GlobalId: string = 'bc450df0-741c-4ee7-9e0e-eddd95f8f314';
@@ -2331,6 +2312,7 @@ export class DataManager implements SymbolDataContext {
 	private readonly context: EmitterContext;
 	private readonly group: Group;
 	private readonly reportStats: boolean;
+	private readonly dataMode: DataMode;
 
 	private readonly globalPDM: GlobalProjectDataManager;
 	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
@@ -2345,10 +2327,11 @@ export class DataManager implements SymbolDataContext {
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
 
-	public constructor(context: EmitterContext, group: Group, groupRoot: string, reportStats: boolean) {
+	public constructor(context: EmitterContext, group: Group, groupRoot: string, reportStats: boolean, dataMode: DataMode) {
 		this.context = context;
 		this.group = group;
 		this.reportStats = reportStats;
+		this.dataMode = dataMode;
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.disposeOnNode = new Map();
@@ -2458,7 +2441,7 @@ export class DataManager implements SymbolDataContext {
 						counter.projectDataManager.updateSymbolDataManagement(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
-						if (symbolData.release()) {
+						if (symbolData.release() && this.dataMode === DataMode.free) {
 							handledSymbolData.add(symbolId);
 							symbolData.end();
 							this.symbolDatas.set(symbolId, null);
@@ -3339,7 +3322,7 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === '1p2laoVvSqa9X1r/95cPBQ==') {
+		if (id === 'A2ZAULC1s06yruSz2W9aqQ==') {
 			debugger;
 		}
 		let result = this.dataManager.getSymbolData(id);
