@@ -2732,6 +2732,9 @@ class Visitor implements FactoryContext {
 			case ts.SyntaxKind.ArrayType:
 				this.doVisit(this.visitArrayType, this.endVisitArrayType, node as ts.ArrayTypeNode);
 				break;
+			case ts.SyntaxKind.Constructor:
+				this.doVisit(this.visitGeneric, this.endVisitConstructor, node as ts.ConstructorDeclaration);
+				break;
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
 				this.visitIdentifier(identifier);
@@ -2949,7 +2952,7 @@ class Visitor implements FactoryContext {
 		);
 	}
 
-	private handlePropertyType(node: ts.PropertyDeclaration | ts.PropertySignature): void {
+	private handlePropertyType(node: ts.PropertyDeclaration | ts.PropertySignature | ts.ParameterDeclaration): void {
 		const [symbol, symbolData,  monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 			return;
@@ -3123,6 +3126,14 @@ class Visitor implements FactoryContext {
 
 	private endVisitGetAccessor(node: ts.GetAccessorDeclaration): void {
 		this.handleSignatures(node);
+	}
+	private endVisitConstructor(node: ts.ConstructorDeclaration): void {
+		for (const param of node.parameters) {
+			const flags  = ts.getCombinedModifierFlags(param);
+			if ((flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected | ts.ModifierFlags.Public)) !== 0) {
+				this.handlePropertyType(param);
+			}
+		}
 	}
 
 	private visitArrayType(node: ts.ArrayTypeNode): boolean {
@@ -3309,9 +3320,6 @@ class Visitor implements FactoryContext {
 
 	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === 'YLMKMNmyMeEDnqLjxdXniQ==') {
-			debugger;
-		}
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			return result;
