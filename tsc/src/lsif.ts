@@ -331,9 +331,10 @@ class DocumentData extends LSIFData<EmitterContext> {
 enum SymbolDataVisibility {
 	internal = 1,
 	unknown = 2,
-	transient = 3,
-	indirectExported = 4,
-	exported = 5,
+	forceKeep = 3,
+	transient = 4,
+	indirectExported = 5,
+	exported = 6,
 }
 
 abstract class SymbolData extends LSIFData<SymbolDataContext> {
@@ -356,9 +357,19 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		return this.visibility;
 	}
 
-	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
+	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.forceKeep | SymbolDataVisibility.internal): void {
 		if (value === SymbolDataVisibility.indirectExported) {
 			if (this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported) {
+				return;
+			}
+			if (this.visibility === SymbolDataVisibility.internal) {
+				throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
+			}
+			this.visibility = value;
+			return;
+		}
+		if (value === SymbolDataVisibility.forceKeep) {
+			if (this.visibility === SymbolDataVisibility.forceKeep) {
 				return;
 			}
 			if (this.visibility === SymbolDataVisibility.internal) {
@@ -371,7 +382,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 			if (this.visibility === SymbolDataVisibility.internal) {
 				return;
 			}
-			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported) {
+			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.forceKeep) {
 				throw new Error(`Can't downgrade symbol data visibility from ${this.visibility} to ${value}`);
 			}
 			this.visibility = value;
@@ -393,7 +404,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	}
 
 	public keep(): boolean {
-		return this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.transient;
+		return this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.transient || this.visibility === SymbolDataVisibility.forceKeep;
 	}
 
 	public isInternal(): boolean {
@@ -1756,9 +1767,6 @@ interface FactoryResult {
 }
 
 interface FactoryContext {
-	// Todo@dirkb need to think about using root files instead.
-	isFullContentIgnored(sourceFile: ts.SourceFile): boolean;
-	getSymbolData(id: SymbolId): SymbolData | undefined;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
 
@@ -2061,6 +2069,8 @@ export interface Options {
 	projectName: string;
 	tsConfigFile: string | undefined;
 	stdout: boolean;
+	dataMode: DataMode;
+	monikerErrorHandler?: (symbol: ts.Symbol, symbolId: string, location: ts.Node | undefined) => void;
 }
 
 enum ParseMode {
@@ -2441,10 +2451,14 @@ export class DataManager implements SymbolDataContext {
 						counter.projectDataManager.updateSymbolDataManagement(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
-						if (symbolData.release() && this.dataMode === DataMode.free) {
-							handledSymbolData.add(symbolId);
-							symbolData.end();
-							this.symbolDatas.set(symbolId, null);
+						if (symbolData.release()) {
+							if (this.dataMode === DataMode.free) {
+								handledSymbolData.add(symbolId);
+								symbolData.end();
+								this.symbolDatas.set(symbolId, null);
+							} else {
+								symbolData.changeVisibility(SymbolDataVisibility.forceKeep);
+							}
 						}
 						this.validateVisibilityCounter.delete(symbolId);
 					} else {
@@ -3170,7 +3184,7 @@ class Visitor implements FactoryContext {
 			// Todo@dbaeumer thinks about whether we should add a reference here.
 			return;
 		}
-		symbolData = this.getOrCreateSymbolData(symbol);
+		symbolData = this.getOrCreateSymbolData(symbol, node);
 		if (symbolData === undefined) {
 			return;
 		}
@@ -3205,7 +3219,7 @@ class Visitor implements FactoryContext {
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return false;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol);
+		let symbolData = this.getOrCreateSymbolData(symbol, node);
 		if (symbolData === undefined) {
 			return false;
 		}
@@ -3229,7 +3243,7 @@ class Visitor implements FactoryContext {
 		if (symbol === undefined) {
 			return;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol);
+		let symbolData = this.getOrCreateSymbolData(symbol, location);
 		if (symbolData === undefined) {
 			return;
 		}
@@ -3308,7 +3322,7 @@ class Visitor implements FactoryContext {
 		// So even if we don't parse the source file we need to create a symbol data so that when
 		// referenced we have the data.
 		if (symbol !== undefined) {
-			this.getOrCreateSymbolData(symbol);
+			this.getOrCreateSymbolData(symbol, sourceFile);
 		}
 		return result;
 	}
@@ -3320,13 +3334,13 @@ class Visitor implements FactoryContext {
 		return this.dataManager.getSymbolData(symbolId);
 	}
 
-	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
+	public getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (id === 'A2ZAULC1s06yruSz2W9aqQ==') {
-			debugger;
-		}
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
+			if (result.getVisibility() === SymbolDataVisibility.forceKeep) {
+				this.options.monikerErrorHandler && this.options.monikerErrorHandler(symbol, id, __location);
+			}
 			return result;
 		}
 		const factory = this.getFactory(symbol);
@@ -3343,7 +3357,6 @@ class Visitor implements FactoryContext {
 			return factory.create(sourceFiles, symbol, id, projectDataManager);
 		});
 		result = symbolData;
-
 		const [monikerIdentifer, external] = this.getMonikerIdentifier(sourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
 
 		if (monikerIdentifer === undefined) {

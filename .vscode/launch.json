@@ -49,9 +49,10 @@
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "tsconfig.json",
-				 "--outputFormat", "line",
-				 "--stdout"
+				"-v",
+				"-p", "tsconfig.json",
+				"--outputFormat", "line",
+				"--stdout"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,

@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 
 import { URI } from 'vscode-uri';
-import * as minimist from 'minimist';
+import * as yargs from 'yargs';
 
 import * as ts from 'typescript';
 
@@ -28,6 +28,7 @@ interface CommonOptions {
 	id: 'number' | 'uuid';
 	noContents: boolean;
 	typeAcquisition: boolean;
+	moniker: 'strict' | 'lenient'
 	out: string | undefined;
 	stdout: boolean;
 }
@@ -49,15 +50,6 @@ interface GroupConfig {
 	}
 }
 
-interface OptionDescription {
-	id: keyof Options;
-	type: 'boolean' | 'string';
-	alias?: string;
-	default: any;
-	values?: string[];
-	description: string;
-}
-
 namespace Options {
 	export const defaults: Options = {
 		help: false,
@@ -68,21 +60,10 @@ namespace Options {
 		projectName: undefined,
 		noContents: false,
 		typeAcquisition: false,
+		moniker: 'lenient',
 		out: undefined,
 		stdout: false
 	};
-	export const descriptions: OptionDescription[] = [
-		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
-		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'outputFormat', type: 'string', default: 'line', values: ['line', 'json'], description: 'Specifies the output format. Allowed values are: \'line\' and \'json\'.'},
-		{ id: 'id', type: 'string', default: 'number', values: ['number', 'uuid'], description: 'Specifies the id format. Allowed values are: \'number\' and \'uuid\'.'},
-		{ id: 'group', type: 'string', default: undefined, description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.'},
-		{ id: 'projectName', type: 'string', default: undefined, description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.'},
-		{ id: 'noContents', type: 'boolean', default: false, description: 'File contents will not be embedded into the dump.'},
-		{ id: 'typeAcquisition', type: 'boolean', default: false, description: 'Run automatic type acquisition for JavaScript npm modules.'},
-		{ id: 'out', type: 'string', default: undefined, description: 'The output file the dump is save to.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout.'}
-	];
 }
 
 interface ResolvedGroupConfig extends GroupConfig {
@@ -249,6 +230,8 @@ interface ProcessProjectOptions {
 	projectName?:string;
 	typeAcquisition: boolean;
 	stdout: boolean;
+	dataMode: DataMode;
+	monikerErrorHandler: (symbol: ts.Symbol, symbolId: string, location: ts.Node | undefined) => void;
 	processed: Map<String, ProjectInfo>;
 }
 
@@ -383,7 +366,9 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		projectRoot: options.projectRoot,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
-		stdout: options.stdout
+		stdout: options.stdout,
+		monikerErrorHandler: options.monikerErrorHandler,
+		dataMode: options.dataMode,
 	};
 
 	const result = lsif(emitter, languageService, dataManager, dependsOn, lsifOptions);
@@ -395,46 +380,70 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 async function run(this: void, args: string[]): Promise<void> {
 
-	const minOpts: minimist.Opts = {
-		string: [],
-		boolean: [],
-		default: Object.create(null),
-		alias: Object.create(null)
-	};
+	const options: Options = Object.assign(Options.defaults,
+		yargs.
+			exitProcess(false).
+			usage(`Languag Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
+			example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
+			version(false).
+			option('v', {
+				alias: 'version',
+				description: 'Output the version number',
+				boolean: true
+			}).
+			option('h', {
+				alias: 'help',
+				description: 'Output usage information',
+				boolean: true
+			}).
+			option('outputFormat', {
+				 description: 'Specifies the output format.',
+				 choices: ['line', 'json'],
+				 default: 'line'
+			}).
+			option('id', {
+				description: 'Specifies the id format.',
+				choices: ['number', 'uuid'],
+				default: 'number'
+			}).
+			option('group', {
+				description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.',
+				string: true
+			}).
+			option('projectName', {
+				description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.',
+				string: true
+			}).
+			option('noContents', {
+				description: 'File contents will not be embedded into the dump.',
+				boolean: true
+			}).
+			option('typeAcquisition', {
+				description: 'Run automatic type acquisition for JavaScript npm modules.',
+				boolean: true
+			}).
+			option('moniker', {
+				description: 'Monikers are use to relate symbols across repositories. In lenient mode the tool will proceed if a moniker was not generated for a visible symbol. In strict mode it will throw an exception.',
+				choices: ['strict', 'lenient'],
+				default: 'lenient'
+			}).
+			option('out', {
+				description: 'The output file the dump is save to.',
+				string: true
+			}).
+			option('stdout', {
+				description: 'Writes the dump to stdout.',
+				boolean: true
+			}).
+			argv
+	);
 
-	let longestId: number = 0;
-	for (let description of Options.descriptions) {
-		longestId = Math.max(longestId, description.id.length);
-		(minOpts[description.type] as string[]).push(description.id);
-		minOpts.default![description.id] = description.default;
-		if (description.alias !== undefined) {
-			minOpts.alias![description.id] = [description.alias];
-		}
-	}
-
-	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
-
-	if (options.version) {
-		console.log(require('../package.json').version);
+	if (options.help) {
 		return;
 	}
 
-	const buffer: string[] = [];
-	if (options.help) {
-		buffer.push(`Languag Server Index Format tool for TypeScript`);
-		buffer.push(`Version: ${require('../package.json').version}`);
-		buffer.push('');
-		buffer.push(`Usage: lsif-tsc [options][tsc options]`);
-		buffer.push('');
-		buffer.push(`Options`);
-		for (let description of Options.descriptions) {
-			if (description.alias !== undefined) {
-				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			} else {
-				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			}
-		}
-		console.log(buffer.join('\n'));
+	if (options.version) {
+		console.log(require('../package.json').version);
 		return;
 	}
 
@@ -509,15 +518,41 @@ async function run(this: void, args: string[]): Promise<void> {
 	group.repository = resolvedGroupConfig.repository;
 	emitter.emit(group);
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.begin, group));
+	const reported: Set<string> = new Set();
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
 		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
 		stdout: options.stdout,
+		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
+		monikerErrorHandler: (symbol, symbolId, location) => {
+			if (reported.has(symbolId)) {
+				return;
+			}
+			reported.add(symbolId);
+			console.error(`\nThe symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
+			const declarations = symbol.getDeclarations();
+			if (declarations === undefined) {
+				console.error(`  The symbol has no visible declarations.`);
+			} else {
+				console.error(`  The symbol is declared in the following files:`);
+				for (const declaration of declarations) {
+					const sourceFile = declaration.getSourceFile();
+					const lc = ts.getLineAndCharacterOfPosition(sourceFile, declaration.getStart());
+					console.error(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+				}
+			}
+			if (location !== undefined) {
+				const sourceFile = location.getSourceFile();
+				const lc = ts.getLineAndCharacterOfPosition(sourceFile, location.getStart());
+				console.error(`  Problem got detected while parsing the following file:`);
+				console.error(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+			}
+		},
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout, DataMode.keep);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout, processProjectOptions.dataMode);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	dataManager.end();

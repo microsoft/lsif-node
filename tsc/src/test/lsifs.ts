@@ -11,7 +11,7 @@ import * as ts from 'typescript';
 
 import { Vertex, Edge, Id, Element } from 'lsif-protocol';
 
-import { lsif as _lsif, EmitterContext, DataManager, DataMode } from '../lsif';
+import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode } from '../lsif';
 import { Emitter } from '../emitters/emitter';
 import { Builder } from '../graph';
 import { URI } from 'vscode-uri';
@@ -166,10 +166,11 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
 	emitterContext.emit(group);
-	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, false, DataMode.free);
+	const lsifOptions: LSIFOptions = { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, dataMode: DataMode.free };
+	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, false, lsifOptions.dataMode);
 	try {
 		dataManager.begin();
-		_lsif(emitterContext, languageService, dataManager, [], { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined });
+		_lsif(emitterContext, languageService, dataManager, [], lsifOptions);
 	} finally {
 		dataManager.end();
 	}
