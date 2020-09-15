@@ -18,7 +18,6 @@
 	},
 	"dependencies": {
 		"lsif-protocol": "0.5.0-next.4",
-		"minimist": "^1.2.5",
 		"yargs": "^16.0.3",
 		"npm": "^6.14.7",
 		"uuid": "^8.2.0",
@@ -26,7 +25,6 @@
 		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/3.8.3-lsif/typescript-3.8.3-lsif.tgz"
 	},
 	"devDependencies": {
-		"@types/minimist": "^1.2.0",
 		"@types/yargs": "^15.0.5",
 		"@types/uuid": "^8.0.0",
 		"@types/npm": "^2.0.31",

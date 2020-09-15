@@ -557,7 +557,7 @@ suite('Module System Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 151);
+		assert.deepEqual(emitter.lastId, 154);
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {
