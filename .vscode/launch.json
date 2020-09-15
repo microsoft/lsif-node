@@ -244,6 +244,24 @@
 		{
 			"type": "node",
 			"request": "launch",
+			"name": "LSP Full",
+			"cwd": "${workspaceFolder}/../../LanguageServer/Node",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "tsconfig.json",
+				 "--outputFormat", "line",
+				 "--out", "lsp.lsif"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
 			"name": "LSP JSONRPC",
 			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
 			"program": "${workspaceFolder}/tsc/lib/main.js",

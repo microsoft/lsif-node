@@ -2146,7 +2146,10 @@ abstract class ProjectDataManager {
 			}
 		}
 		for (const data of this.documentDatas) {
-			data.close();
+			if (!data.isClosed) {
+				data.end();
+				data.close();
+			}
 		}
 		this.projectData.end();
 		if (this.emitStats) {
