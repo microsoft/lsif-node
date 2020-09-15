@@ -3,6 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
+import * as assert from 'assert';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -10,7 +11,7 @@ import * as ts from 'typescript';
 
 import { Vertex, Edge, Id, Element } from 'lsif-protocol';
 
-import { lsif as _lsif } from '../lsif';
+import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode } from '../lsif';
 import { Emitter } from '../emitters/emitter';
 import { Builder } from '../graph';
 import { URI } from 'vscode-uri';
@@ -108,11 +109,17 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 class TestEmitter implements Emitter {
 
 	private sequence: Element[];
+	private _lastId: Id;
 	public elements: Map<Id, Element>;
 
 	constructor() {
+		this._lastId = -1;
 		this.sequence = [];
 		this.elements = new Map();
+	}
+
+	public get lastId(): Id {
+		return this._lastId;
 	}
 
 	public start(): void {
@@ -120,7 +127,9 @@ class TestEmitter implements Emitter {
 
 	emit(element: Vertex | Edge): void {
 		this.sequence.push(element);
+		assert.ok(!this.elements.has(element.id));
 		this.elements.set(element.id, element);
+		this._lastId = element.id;
 	}
 
 	public end(): void {
@@ -144,8 +153,26 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 		return counter++;
 	};
 	const builder = new Builder({ idGenerator: generator, emitSource: false });
-
+	const emitterContext: EmitterContext = {
+		get edge() {
+			return builder.edge;
+		},
+		get vertex() {
+			return builder.vertex;
+		},
+		emit(element: Vertex | Edge): void {
+			emitter.emit(element);
+		}
+	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
-	_lsif(emitter, builder, languageService, [], { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined });
+	emitterContext.emit(group);
+	const lsifOptions: LSIFOptions = { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, dataMode: DataMode.free };
+	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, false, lsifOptions.dataMode);
+	try {
+		dataManager.begin();
+		_lsif(emitterContext, languageService, dataManager, [], lsifOptions);
+	} finally {
+		dataManager.end();
+	}
 	return emitter;
 }

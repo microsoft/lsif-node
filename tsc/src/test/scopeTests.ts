@@ -4,19 +4,29 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as assert from 'assert';
+import * as os from 'os';
 
 import { lsif } from './lsifs';
+import * as ts from 'typescript';
 import { Element } from 'lsif-protocol';
 
-suite('Simple Tests', () => {
-	test('Single export', () => {
+suite('Scope Tests', () => {
+	const compilerOptions: ts.CompilerOptions = {
+		module: ts.ModuleKind.CommonJS,
+		target: ts.ScriptTarget.ES5,
+		rootDir: '/@test'
+	};
+	test('Function parameter', () => {
 		const emitter = lsif('/@test', new Map([
-			['/@test/a.ts', 'export const x = 10;']
-		]), { });
+			[
+				'/@test/a.ts',
+				[
+					'export function foo(x: number): void { };',
+				].join(os.EOL)
+			]
+		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":18,"type":"vertex","label":"range","start":{"line":0,"character":13},"end":{"line":0,"character":14},"tag":{"type":"definition","text":"x","kind":7,"fullRange":{"start":{"line":0,"character":13},"end":{"line":0,"character":19}}}}')
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"KXyaWAVvNlCv7grudI07wg==","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

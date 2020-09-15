@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Union type \\(3\\)"
+				"-g", "Default export"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
@@ -49,9 +49,10 @@
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "tsconfig.json",
-				 "--outputFormat", "line",
-				 "--stdout"
+				"-v",
+				"-p", "tsconfig.json",
+				"--outputFormat", "line",
+				"--stdout"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
@@ -247,10 +248,10 @@
 			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "./src/common/tsconfig.json",
+				 "-p", "./tsconfig.json",
 				 "--noContents",
 				 "--outputFormat", "line",
-				 "--stdout"
+				 "--out", "jsonrpc.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
@@ -354,10 +355,8 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"cwd": "${workspaceFolder}/../vscode",
 			"args": [
-				"--max_old_space_size=4095",
+				"--max_old_space_size=8192",
 				"-p", "./src/tsconfig.json",
-				"--projectRoot", "./",
-				"--outputFormat", "line",
 				"--out", "vscode.lsif"
 			],
 			"preLaunchTask": "npm: watch",

@@ -1,3 +1,8 @@
+/* --------------------------------------------------------------------------------------------
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License. See License.txt in the project root for license information.
+ * ------------------------------------------------------------------------------------------ */
+
 interface Item<K, V> {
 	previous: Item<K, V> | undefined;
 	next: Item<K, V> | undefined;
@@ -11,18 +16,23 @@ export const enum Touch {
 	AsNew = 2
 }
 
-export class LinkedMap<K, V> {
+export class LinkedMap<K, V> implements Map<K, V> {
+
+	readonly [Symbol.toStringTag] = 'LinkedMap';
 
 	private _map: Map<K, Item<K, V>>;
 	private _head: Item<K, V> | undefined;
 	private _tail: Item<K, V> | undefined;
 	private _size: number;
 
+	private _state: number;
+
 	constructor() {
 		this._map = new Map<K, Item<K, V>>();
 		this._head = undefined;
 		this._tail = undefined;
 		this._size = 0;
+		this._state = 0;
 	}
 
 	clear(): void {
@@ -30,6 +40,7 @@ export class LinkedMap<K, V> {
 		this._head = undefined;
 		this._tail = undefined;
 		this._size = 0;
+		this._state++;
 	}
 
 	isEmpty(): boolean {
@@ -38,6 +49,14 @@ export class LinkedMap<K, V> {
 
 	get size(): number {
 		return this._size;
+	}
+
+	get first(): V | undefined {
+		return this._head?.value;
+	}
+
+	get last(): V | undefined {
+		return this._tail?.value;
 	}
 
 	has(key: K): boolean {
@@ -55,7 +74,7 @@ export class LinkedMap<K, V> {
 		return item.value;
 	}
 
-	set(key: K, value: V, touch: Touch = Touch.None): void {
+	set(key: K, value: V, touch: Touch = Touch.None): this {
 		let item = this._map.get(key);
 		if (item) {
 			item.value = value;
@@ -81,6 +100,7 @@ export class LinkedMap<K, V> {
 			this._map.set(key, item);
 			this._size++;
 		}
+		return this;
 	}
 
 	delete(key: K): boolean {
@@ -113,6 +133,7 @@ export class LinkedMap<K, V> {
 	}
 
 	forEach(callbackfn: (value: V, key: K, map: LinkedMap<K, V>) => void, thisArg?: any): void {
+		const state = this._state;
 		let current = this._head;
 		while (current) {
 			if (thisArg) {
@@ -120,23 +141,31 @@ export class LinkedMap<K, V> {
 			} else {
 				callbackfn(current.value, current.key, this);
 			}
+			if (this._state !== state) {
+				throw new Error(`LinkedMap got modified during iteration.`);
+			}
 			current = current.next;
 		}
 	}
 
 	keys(): IterableIterator<K> {
+		const map = this;
+		const state = this._state;
 		let current = this._head;
 		const iterator: IterableIterator<K> = {
 			[Symbol.iterator]() {
 				return iterator;
 			},
-			next():IteratorResult<K> {
+			next(): IteratorResult<K> {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
 				if (current) {
 					const result = { value: current.key, done: false };
 					current = current.next;
 					return result;
 				} else {
-					return { value: undefined as any, done: true };
+					return { value: undefined, done: true };
 				}
 			}
 		};
@@ -144,22 +173,55 @@ export class LinkedMap<K, V> {
 	}
 
 	values(): IterableIterator<V> {
+		const map = this;
+		const state = this._state;
 		let current = this._head;
 		const iterator: IterableIterator<V> = {
 			[Symbol.iterator]() {
 				return iterator;
 			},
-			next():IteratorResult<V> {
+			next(): IteratorResult<V> {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
 				if (current) {
 					const result = { value: current.value, done: false };
 					current = current.next;
 					return result;
 				} else {
-					return { value: undefined as any, done: true };
+					return { value: undefined, done: true };
 				}
 			}
 		};
 		return iterator;
+	}
+
+	entries(): IterableIterator<[K, V]> {
+		const map = this;
+		const state = this._state;
+		let current = this._head;
+		const iterator: IterableIterator<[K, V]> = {
+			[Symbol.iterator]() {
+				return iterator;
+			},
+			next(): IteratorResult<[K, V]> {
+				if (map._state !== state) {
+					throw new Error(`LinkedMap got modified during iteration.`);
+				}
+				if (current) {
+					const result: IteratorResult<[K, V]> = { value: [current.key, current.value], done: false };
+					current = current.next;
+					return result;
+				} else {
+					return { value: undefined, done: true };
+				}
+			}
+		};
+		return iterator;
+	}
+
+	[Symbol.iterator](): IterableIterator<[K, V]> {
+		return this.entries();
 	}
 
 	protected trimOld(newSize: number) {
@@ -182,6 +244,7 @@ export class LinkedMap<K, V> {
 		if (current) {
 			current.previous = undefined;
 		}
+		this._state++;
 	}
 
 	private addItemFirst(item: Item<K, V>): void {
@@ -195,6 +258,7 @@ export class LinkedMap<K, V> {
 			this._head.previous = item;
 		}
 		this._head = item;
+		this._state++;
 	}
 
 	private addItemLast(item: Item<K, V>): void {
@@ -208,6 +272,7 @@ export class LinkedMap<K, V> {
 			this._tail.next = item;
 		}
 		this._tail = item;
+		this._state++;
 	}
 
 	private removeItem(item: Item<K, V>): void {
@@ -244,6 +309,7 @@ export class LinkedMap<K, V> {
 		}
 		item.next = undefined;
 		item.previous = undefined;
+		this._state++;
 	}
 
 	private touch(item: Item<K, V>, touch: Touch): void {
@@ -280,6 +346,7 @@ export class LinkedMap<K, V> {
 			item.next = this._head;
 			this._head.previous = item;
 			this._head = item;
+			this._state++;
 		} else if (touch === Touch.AsNew) {
 			if (item === this._tail) {
 				return;
@@ -303,6 +370,7 @@ export class LinkedMap<K, V> {
 			item.previous = this._tail;
 			this._tail.next = item;
 			this._tail = item;
+			this._state++;
 		}
 	}
 
@@ -354,17 +422,18 @@ export class LRUCache<K, V> extends LinkedMap<K, V> {
 		this.checkTrim();
 	}
 
-	get(key: K): V | undefined {
-		return super.get(key, Touch.AsNew);
+	get(key: K, touch: Touch = Touch.AsNew): V | undefined {
+		return super.get(key, touch);
 	}
 
 	peek(key: K): V | undefined {
 		return super.get(key, Touch.None);
 	}
 
-	set(key: K, value: V): void {
+	set(key: K, value: V): this {
 		super.set(key, value, Touch.AsNew);
 		this.checkTrim();
+		return this;
 	}
 
 	private checkTrim() {
