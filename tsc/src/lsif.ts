@@ -787,7 +787,7 @@ class MethodSymbolData extends StandardSymbolData {
 	}
 }
 
-class UnionOrIntersectionSymbolData extends StandardSymbolData {
+class SymbolDataWithRoots extends StandardSymbolData {
 
 	private sourceFiles: string[] | undefined;
 	private elements: SymbolData[];
@@ -1968,7 +1968,7 @@ class MethodFactory extends SymbolDataFactory {
 	}
 }
 
-class UnionOrIntersectionFactory extends SymbolDataFactory {
+class SymbolDataWithRootsFactory extends SymbolDataFactory {
 
 	constructor(typeChecker: ts.TypeChecker, protected symbols: Symbols, resolverContext: FactoryContext, symbolDataContext: SymbolDataContext) {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
@@ -1983,52 +1983,58 @@ class UnionOrIntersectionFactory extends SymbolDataFactory {
 
 	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(sourceFiles, symbol, parseMode);
+		const [,,visibility] = this.getExportData(sourceFiles, symbol, parseMode);
 		const shard = projectDataManager.getProjectData().project;
 		const fileNames = Symbols.isTransient(symbol)
 			? undefined
 			: sourceFiles !== undefined ? sourceFiles.map(sf => sf.fileName) : undefined;
-		const composites = tss.getCompositeLeafSymbols(this.typeChecker, symbol);
-		if (composites !== undefined) {
-			const datas: SymbolData[] = [];
-			for (const symbol of composites) {
-				datas.push(this.factoryContext.getOrCreateSymbolData(symbol));
+		const roots = this.typeChecker.getRootSymbols(symbol);
+		if (roots.length === 0) {
+			throw new Error(`Root symbol data factory called with symbol without roots.`);
+		}
+		const datas: SymbolData[] = [];
+		// The root symbols are not unique. So skipped the once we have already seen
+		const seen: Set<SymbolId> = new Set();
+		seen.add(tss.Symbol.createKey(this.typeChecker, symbol));
+		for (const symbol of roots) {
+			const symbolData = this.factoryContext.getOrCreateSymbolData(symbol);
+			if (!seen.has(symbolData.getId())) {
+				seen.add(symbolData.getId());
+				datas.push(symbolData);
 			}
-			if (Symbols.isTransient(symbol)) {
-				// For the moniker we need to find out the ands and ors. Not sure how to do this.
-				let monikerIds: Set<string> = new Set();
-				for (const symbolData of datas) {
-					const moniker = symbolData.getMostUniqueMoniker();
-					if (moniker === undefined) {
-						monikerIds.clear();
-						break;
-					} else {
-						monikerIds.add(moniker.identifier);
-					}
-				}
-				if (monikerIds.size > 0) {
-					const exportPath: string = monikerIds.size === 1
-						? monikerIds.values().next().value
-						: `[${Array.from(monikerIds).sort().join(',')}]`;
-					return {
-						symbolData: new UnionOrIntersectionSymbolData(this.symbolDataContext, id, fileNames, datas, shard, visibility),
-						moduleSystem: ModuleSystemKind.global,
-						exportPath: exportPath
-					};
+		}
+		if (Symbols.isTransient(symbol)) {
+			// For the moniker we need to find out the ands and ors. Not sure how to do this.
+			let monikerIds: Set<string> = new Set();
+			for (const symbolData of datas) {
+				const moniker = symbolData.getMostUniqueMoniker();
+				if (moniker === undefined) {
+					monikerIds.clear();
+					break;
 				} else {
-					return {
-						symbolData: new UnionOrIntersectionSymbolData(this.symbolDataContext, id, fileNames, datas, shard, visibility),
-					};
+					monikerIds.add(moniker.identifier);
 				}
-			} else {
-				const [moduleSystem, exportPath] = this.getExportData(sourceFiles, symbol, parseMode);
+			}
+			if (monikerIds.size > 0) {
+				const exportPath: string = monikerIds.size === 1
+					? monikerIds.values().next().value
+					: `[${Array.from(monikerIds).sort().join(',')}]`;
 				return {
-					symbolData: new UnionOrIntersectionSymbolData(this.symbolDataContext, id, fileNames, datas, shard, visibility),
-					moduleSystem, exportPath
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
+					moduleSystem: ModuleSystemKind.global,
+					exportPath: exportPath
+				};
+			} else {
+				return {
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
 				};
 			}
 		} else {
-			return { symbolData: new StandardSymbolData(this.symbolDataContext, id, visibility), moduleSystem, exportPath, disposeOn, validateVisibilityOn: sourceFiles };
+			const [moduleSystem, exportPath] = this.getExportData(sourceFiles, symbol, parseMode);
+			return {
+				symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
+				moduleSystem, exportPath
+			};
 		}
 	}
 
@@ -2624,7 +2630,7 @@ class Visitor implements FactoryContext {
 		standard: StandardSymbolDataFactory;
 		alias: AliasFactory;
 		method: MethodFactory;
-		unionOrIntersection: UnionOrIntersectionFactory;
+		withRoots: SymbolDataWithRootsFactory;
 		transient: TransientFactory;
 		typeAlias: TypeAliasFactory;
 	};
@@ -2665,7 +2671,7 @@ class Visitor implements FactoryContext {
 			standard: new StandardSymbolDataFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			alias: new AliasFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			method: new MethodFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			unionOrIntersection: new UnionOrIntersectionFactory(this.typeChecker, this.symbols, this, this.dataManager),
+			withRoots: new SymbolDataWithRootsFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			transient: new TransientFactory(this.typeChecker, this.symbols, this, this.dataManager),
 			typeAlias: new TypeAliasFactory(this.typeChecker, this.symbols, this, this.dataManager)
 		};
@@ -3472,17 +3478,13 @@ class Visitor implements FactoryContext {
 	}
 
 	private getFactory(symbol: ts.Symbol): SymbolDataFactory {
+		const rootSymbols = this.typeChecker.getRootSymbols(symbol);
+		if (rootSymbols.length > 0 && rootSymbols[0] !== symbol) {
+			return this.symbolDataFactories.withRoots;
+		}
+
 		if (Symbols.isTransient(symbol)) {
-			if (tss.isComposite(this.typeChecker, symbol)) {
-				return this.symbolDataFactories.unionOrIntersection;
-			} else {
-				const rootSymbols = this.typeChecker.getRootSymbols(symbol);
-				if (rootSymbols.length > 0) {
-					return this.symbolDataFactories.transient;
-				} else {
-					return this.symbolDataFactories.standard;
-				}
-			}
+			return this.symbolDataFactories.transient;
 		}
 		if (Symbols.isTypeAlias(symbol)) {
 			return this.symbolDataFactories.typeAlias;
