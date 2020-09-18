@@ -192,8 +192,23 @@ export namespace Symbol {
 	}
 
 	export function is(value: ts.Symbol | ts.Type): value is ts.Symbol {
-		let candidate = value as ts.Symbol;
-		return candidate.escapedName !== undefined;
+		let symbolCount: number = 0;
+		const candidate = value as ts.Symbol;
+		if (candidate.declarations !== undefined) {
+			symbolCount++;
+		}
+		if (candidate.valueDeclaration !== undefined) {
+			symbolCount++;
+		}
+		let typeCount: number = 0;
+		const typeCandidate = value as ts.Type;
+		if (typeCandidate.symbol !== undefined) {
+			typeCount++;
+		}
+		if (symbolCount > 0 && typeCount > 0) {
+			throw new Error(`Can't decide if value is symbol or type`);
+		}
+		return symbolCount > 0;
 	}
 }
 
