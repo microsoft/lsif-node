@@ -56,10 +56,10 @@ suite('Union Types', () => {
 		const validate: Element[] = [
 			JSON.parse('{"id":128,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":129,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":154,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":155,"type":"edge","label":"textDocument/references","outV":128,"inV":154}'),
-			JSON.parse('{"id":156,"type":"edge","label":"item","outV":154,"inVs":[70,83],"shard":2,"property":"referenceResults"}'),
-			JSON.parse('{"id":157,"type":"edge","label":"item","outV":154,"inVs":[23,37],"shard":2,"property":"referenceLinks"}')
+			JSON.parse('{"id":148,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":149,"type":"edge","label":"textDocument/references","outV":128,"inV":148}'),
+			JSON.parse('{"id":150,"type":"edge","label":"item","outV":148,"inVs":[70,83],"shard":98,"property":"referenceResults"}'),
+			JSON.parse('{"id":151,"type":"edge","label":"item","outV":148,"inVs":[23,37],"shard":98,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -90,10 +90,10 @@ suite('Union Types', () => {
 			JSON.parse('{"id":37,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:B.name","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":156,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":157,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":182,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":183,"type":"edge","label":"textDocument/references","outV":156,"inV":182}'),
-			JSON.parse('{"id":184,"type":"edge","label":"item","outV":182,"inVs":[86,99],"shard":2,"property":"referenceResults"}'),
-			JSON.parse('{"id":185,"type":"edge","label":"item","outV":182,"inVs":[23,37],"shard":2,"property":"referenceLinks"}')
+			JSON.parse('{"id":176,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":177,"type":"edge","label":"textDocument/references","outV":156,"inV":176}'),
+			JSON.parse('{"id":178,"type":"edge","label":"item","outV":176,"inVs":[86,99],"shard":126,"property":"referenceResults"}'),
+			JSON.parse('{"id":179,"type":"edge","label":"item","outV":176,"inVs":[23,37],"shard":126,"property":"referenceLinks"}'),
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

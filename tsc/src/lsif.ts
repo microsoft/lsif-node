@@ -789,29 +789,28 @@ class MethodSymbolData extends StandardSymbolData {
 
 class SymbolDataWithRoots extends StandardSymbolData {
 
-	private sourceFiles: string[] | undefined;
+	private sourceFilePartition: string | undefined;
 	private elements: SymbolData[];
 	private transientPartition: SymbolDataPartition | undefined;
 	private shard: Project | Document;
 
-	constructor(context: SymbolDataContext, id: string, sourceFiles: string[] | undefined, elements: SymbolData[], shard: Project | Document, visibility: SymbolDataVisibility) {
+	constructor(context: SymbolDataContext, id: string, sourceFilePartition: string | undefined, elements: SymbolData[], shard: Project | Document, visibility: SymbolDataVisibility) {
 		super(context, id, visibility);
 		this.elements = elements;
-		this.sourceFiles = sourceFiles;
+		this.sourceFilePartition = sourceFilePartition;
 		this.shard = shard;
 	}
 
 	public begin(): void {
 		super.begin();
-		const sourceFile = this.sourceFiles !== undefined ? this.sourceFiles[0] : undefined;
 		for (let element of this.elements) {
 			const moniker = element.getMostUniqueMoniker();
 			// We take the first source file to cluster this. We might want to find a source
 			// file that has already changed to make the diff minimal.
-			if (sourceFile) {
-				super.addReference(sourceFile, element.getOrCreateReferenceResult());
+			if (this.sourceFilePartition !== undefined) {
+				super.addReference(this.sourceFilePartition, element.getOrCreateReferenceResult());
 				if (moniker !== undefined && moniker.scheme !== 'local') {
-					super.addReference(sourceFile, moniker);
+					super.addReference(this.sourceFilePartition, moniker);
 				}
 			} else {
 				if (this.transientPartition === undefined) {
@@ -823,7 +822,7 @@ class SymbolDataWithRoots extends StandardSymbolData {
 				}
 			}
 		}
-		this.sourceFiles = undefined;
+		this.sourceFilePartition = undefined;
 	}
 
 	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
@@ -1785,7 +1784,7 @@ abstract class SymbolDataFactory {
 		return symbol.getDeclarations();
 	}
 
-	public getSourceFiles(symbol: ts.Symbol): ts.SourceFile[]  | undefined {
+	public getDeclarationSourceFiles(symbol: ts.Symbol): ts.SourceFile[]  | undefined {
 		let sourceFiles = tss.getUniqueSourceFiles(symbol.getDeclarations());
 		if (sourceFiles.size === 0) {
 			return [];
@@ -1854,7 +1853,7 @@ abstract class SymbolDataFactory {
 		}
 	}
 
-	private getVisibilityAndDisposeNode(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
+	private getVisibilityAndDisposeNode(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
 		// The symbol is exported.
 		if (exportPath !== undefined) {
 			return [SymbolDataVisibility.exported, undefined];
@@ -1863,7 +1862,7 @@ abstract class SymbolDataFactory {
 			return [SymbolDataVisibility.transient, undefined];
 		}
 
-		const hasOneSourceFile = sourceFiles !== undefined && sourceFiles.length === 1;
+		const hasOneSourceFile = declarationSourceFiles !== undefined && declarationSourceFiles.length === 1;
 		// If the symbol comes from more than one source file we can't dispose it on a node since
 		// we need to see it in more than one file.
 		if (!hasOneSourceFile) {
@@ -1880,14 +1879,14 @@ abstract class SymbolDataFactory {
 		return [SymbolDataVisibility.unknown, undefined];
 	}
 
-	protected getExportData(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility, ts.Node | undefined] {
-		const moduleSystem = this.getModuleSystemKind(sourceFiles);
+	protected getExportData(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility, ts.Node | undefined] {
+		const moduleSystem = this.getModuleSystemKind(declarationSourceFiles);
 		const exportPath = this.symbols.getExportPath(symbol, moduleSystem);
-		const [visibility, disposeOn] = this.getVisibilityAndDisposeNode(sourceFiles, symbol, exportPath, moduleSystem, parseMode);
+		const [visibility, disposeOn] = this.getVisibilityAndDisposeNode(symbol, declarationSourceFiles, exportPath, moduleSystem, parseMode);
 		return [moduleSystem, exportPath, visibility, disposeOn];
 	}
 
-	public abstract create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult;
+	public abstract create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult;
 }
 
 class StandardSymbolDataFactory extends SymbolDataFactory {
@@ -1896,12 +1895,12 @@ class StandardSymbolDataFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(sourceFiles, symbol, projectDataManager.getParseMode());
+	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
+		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, projectDataManager.getParseMode());
 		return {
 			symbolData: new StandardSymbolData(this.symbolDataContext, id, visibility),
 			exportPath, moduleSystem, disposeOn,
-			validateVisibilityOn: sourceFiles
+			validateVisibilityOn: declarationSourceFiles
 		};
 	}
 }
@@ -1912,9 +1911,9 @@ class AliasFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
+	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(sourceFiles, symbol, parseMode);
+		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const aliased = this.typeChecker.getAliasedSymbol(symbol);
 		let symbolData: SymbolData | undefined;
 		if (aliased !== undefined) {
@@ -1931,7 +1930,7 @@ class AliasFactory extends SymbolDataFactory {
 			symbolData,
 			moduleSystem, exportPath,
 			disposeOn,
-			validateVisibilityOn: sourceFiles,
+			validateVisibilityOn: declarationSourceFiles,
 		};
 	}
 }
@@ -1942,29 +1941,29 @@ class MethodFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
-		if (sourceFiles === undefined) {
+	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
+		if (declarationSourceFiles === undefined) {
 			throw new Error(`Need to understand how a method symbol can exist without a source file`);
 		}
 
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(sourceFiles, symbol, parseMode);
+		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const container = tss.Symbol.getParent(symbol);
-		const fileNames = sourceFiles.map(sf => sf.fileName);
+		const fileNames = declarationSourceFiles.map(sf => sf.fileName);
 		if (container === undefined) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: sourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractMembers = this.symbols.findRootMembers(container, symbol.getName());
 		// No abstract membes found
 		if (mostAbstractMembers === undefined || mostAbstractMembers.length === 0) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: sourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
 		}
 		// It is the symbol itself
 		if (mostAbstractMembers.length === 1 && mostAbstractMembers[0] === symbol) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: sourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractSymbolData = mostAbstractMembers.map(member => this.factoryContext.getOrCreateSymbolData(member));
-		return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, mostAbstractSymbolData, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: sourceFiles };
+		return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, mostAbstractSymbolData, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
 	}
 }
 
@@ -1981,13 +1980,14 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 		return false;
 	}
 
-	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
+	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
-		const [,,visibility] = this.getExportData(sourceFiles, symbol, parseMode);
+		const [,,visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const shard = projectDataManager.getProjectData().project;
-		const fileNames = Symbols.isTransient(symbol)
-			? undefined
-			: sourceFiles !== undefined ? sourceFiles.map(sf => sf.fileName) : undefined;
+		// const currentParsedSourceFileName = Symbols.isTransient(symbol)
+		// 	? undefined
+		// 	: currentParsedSourceFile !== undefined ? currentParsedSourceFile.fileName : undefined;
+		const currentParsedSourceFileName = currentParsedSourceFile !== undefined ? currentParsedSourceFile.fileName : undefined;
 
 		const roots = this.typeChecker.getRootSymbols(symbol);
 		if (roots.length === 0) {
@@ -2021,19 +2021,19 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 					? monikerIds.values().next().value
 					: `[${Array.from(monikerIds).sort().join(',')}]`;
 				return {
-					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
 					moduleSystem: ModuleSystemKind.global,
 					exportPath: exportPath
 				};
 			} else {
 				return {
-					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
 				};
 			}
 		} else {
-			const [moduleSystem, exportPath] = this.getExportData(sourceFiles, symbol, parseMode);
+			const [moduleSystem, exportPath] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 			return {
-				symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, fileNames, datas, shard, visibility),
+				symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
 				moduleSystem, exportPath
 			};
 		}
@@ -2057,9 +2057,9 @@ class TransientFactory extends SymbolDataFactory {
 		return true;
 	}
 
-	public create(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, id: SymbolId, projectDataManager: ProjectDataManager): FactoryResult {
+	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility] = this.getExportData(sourceFiles, symbol, parseMode);
+		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		return { symbolData: new TransientSymbolData(this.symbolDataContext, id, visibility), moduleSystem, exportPath, disposeOn: undefined, validateVisibilityOn: undefined };
 	}
 }
@@ -3201,26 +3201,26 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitGeneric(node: ts.Node): void {
-		let symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
+		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
 		if (symbol === undefined) {
 			return;
 		}
-		let id = tss.Symbol.createKey(this.typeChecker, symbol);
+		const id = tss.Symbol.createKey(this.typeChecker, symbol);
 		let symbolData = this.dataManager.getSymbolData(id);
 		if (symbolData !== undefined) {
 			// Todo@dbaeumer thinks about whether we should add a reference here.
 			return;
 		}
-		symbolData = this.getOrCreateSymbolData(symbol, node);
+		const sourceFile = this.currentSourceFile!;
+		symbolData = this.getOrCreateSymbolData(symbol, node, sourceFile);
 		if (symbolData === undefined) {
 			return;
 		}
-		let sourceFile = this.currentSourceFile!;
 		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, node))) {
 			return;
 		}
 
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
+		const reference = this.vertex.range(Converter.rangeFromNode(sourceFile, node), { type: RangeTagTypes.reference, text: node.getText() });
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile.fileName, reference, ItemEdgeProperties.references);
 		return;
@@ -3240,23 +3240,23 @@ class Visitor implements FactoryContext {
 	}
 
 	private addDocumentSymbol(node: tss.Node.Declaration): boolean {
-		let rangeNode = node.name !== undefined ? node.name : node;
-		let symbol = this.program.getTypeChecker().getSymbolAtLocation(rangeNode);
-		let declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
+		const rangeNode = node.name !== undefined ? node.name : node;
+		const symbol = this.program.getTypeChecker().getSymbolAtLocation(rangeNode);
+		const declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return false;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol, node);
+		const sourceFile = this.currentSourceFile!;
+		const symbolData = this.getOrCreateSymbolData(symbol, node, sourceFile);
 		if (symbolData === undefined) {
 			return false;
 		}
-		let sourceFile = this.currentSourceFile!;
-		let definition = symbolData.findDefinition(sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
+		const definition = symbolData.findDefinition(sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
 		if (definition === undefined) {
 			return false;
 		}
-		let currentContainer = this.symbolContainer[this.symbolContainer.length - 1];
-		let child: RangeBasedDocumentSymbol = { id: definition.id };
+		const currentContainer = this.symbolContainer[this.symbolContainer.length - 1];
+		const child: RangeBasedDocumentSymbol = { id: definition.id };
 		if (currentContainer.children === undefined) {
 			currentContainer.children = [ child ];
 		} else {
@@ -3270,16 +3270,16 @@ class Visitor implements FactoryContext {
 		if (symbol === undefined) {
 			return;
 		}
-		let symbolData = this.getOrCreateSymbolData(symbol, location);
+		const sourceFile = this.currentSourceFile!;
+		const symbolData = this.getOrCreateSymbolData(symbol, location, sourceFile);
 		if (symbolData === undefined) {
 			return;
 		}
-		let sourceFile = this.currentSourceFile!;
 		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
 			return;
 		}
 
-		let reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
+		const reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
 		this.currentDocumentData.addRange(reference);
 		symbolData.addReference(sourceFile.fileName, reference, ItemEdgeProperties.references);
 	}
@@ -3361,7 +3361,7 @@ class Visitor implements FactoryContext {
 		return this.dataManager.getSymbolData(symbolId);
 	}
 
-	public getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node): SymbolData {
+	public getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): SymbolData {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
@@ -3372,19 +3372,19 @@ class Visitor implements FactoryContext {
 		}
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
-		const sourceFiles: ts.SourceFile[] | undefined = factory.getSourceFiles(symbol);
+		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
 		// Don't do this for symbols that are source files to avoid recursive initialization (e.g. moniker assignment)
-		if (!Symbols.mayBeSourceFile(symbol) && sourceFiles !== undefined) {
-			for (const sourceFile of sourceFiles) {
+		if (!Symbols.mayBeSourceFile(symbol) && declarationSourceFiles !== undefined) {
+			for (const sourceFile of declarationSourceFiles) {
 				this.getOrCreateDocumentData(sourceFile);
 			}
 		}
 
-		const { symbolData, exportPath, moduleSystem } = this.dataManager.getOrCreateSymbolData(id, sourceFiles, factory.useGlobalProjectDataManager(symbol), (projectDataManager) => {
-			return factory.create(sourceFiles, symbol, id, projectDataManager);
+		const { symbolData, exportPath, moduleSystem } = this.dataManager.getOrCreateSymbolData(id, declarationSourceFiles, factory.useGlobalProjectDataManager(symbol), (projectDataManager) => {
+			return factory.create(symbol, id, declarationSourceFiles, projectDataManager, __parsedSourceFile);
 		});
 		result = symbolData;
-		const [monikerIdentifer, external] = this.getMonikerIdentifier(sourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
+		const [monikerIdentifer, external] = this.getMonikerIdentifier(declarationSourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
 
 		if (monikerIdentifer === undefined) {
 			result.addMoniker(id, MonikerKind.local);
