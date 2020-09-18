@@ -199,7 +199,7 @@ export class GraphStore extends Store {
 		}
 	}
 
-	private handleEvent(event: Event): void {
+	private handleEvent(_event: Event): void {
 	}
 
 	private insertMetaData(vertex: MetaData): void {

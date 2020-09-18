@@ -271,7 +271,7 @@ class DocumentData {
 		this.addReferencedData(id, resultSet);
 	}
 
-	private addReferencedData(id: Id, item: RangeData | ResultSetData): void {
+	private addReferencedData(_id: Id, item: RangeData | ResultSetData): void {
 		let moniker: MonikerData | undefined;
 		if (item.moniker !== undefined) {
 			moniker = assertDefined(this.provider.getMonikerData(item.moniker));

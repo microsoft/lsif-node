@@ -730,15 +730,15 @@ const documentLinkResultCompressor = new GenericCompressor<DocumentLinkResult>(v
 ]);
 Compressor.registerVertexCompressor(VertexLabels.documentLinkResult, documentLinkResultCompressor);
 
-const declarationResultCompressor = new GenericCompressor<DeclarationResult>(vertexCompressor, Compressor.nextId(), (next) => [
+const declarationResultCompressor = new GenericCompressor<DeclarationResult>(vertexCompressor, Compressor.nextId(), () => [
 ]);
 Compressor.registerVertexCompressor(VertexLabels.declarationResult, declarationResultCompressor);
 
-const definitionResultCompressor = new GenericCompressor<DefinitionResult>(vertexCompressor, Compressor.nextId(), (next) => [
+const definitionResultCompressor = new GenericCompressor<DefinitionResult>(vertexCompressor, Compressor.nextId(), () => [
 ]);
 Compressor.registerVertexCompressor(VertexLabels.definitionResult, definitionResultCompressor);
 
-const typeDefinitionResultCompressor = new GenericCompressor<TypeDefinitionResult>(vertexCompressor, Compressor.nextId(), (next) => [
+const typeDefinitionResultCompressor = new GenericCompressor<TypeDefinitionResult>(vertexCompressor, Compressor.nextId(), () => [
 ]);
 Compressor.registerVertexCompressor(VertexLabels.typeDefinitionResult, typeDefinitionResultCompressor);
 
@@ -773,11 +773,11 @@ const hoverResultCompressor = new GenericCompressor<HoverResult>(vertexCompresso
 ]);
 Compressor.registerVertexCompressor(VertexLabels.hoverResult, hoverResultCompressor);
 
-const referenceResultCompressor = new GenericCompressor<ReferenceResult>(vertexCompressor, Compressor.nextId(), (next) => [
+const referenceResultCompressor = new GenericCompressor<ReferenceResult>(vertexCompressor, Compressor.nextId(), () => [
 ]);
 Compressor.registerVertexCompressor(VertexLabels.referenceResult, referenceResultCompressor);
 
-const implementationResultCompressor = new GenericCompressor<ImplementationResult>(vertexCompressor, Compressor.nextId(), (next) => [
+const implementationResultCompressor = new GenericCompressor<ImplementationResult>(vertexCompressor, Compressor.nextId(), () => [
 ]);
 Compressor.registerVertexCompressor(VertexLabels.implementationResult, implementationResultCompressor);
 
@@ -841,52 +841,52 @@ export const edge1nCompressor = new GenericCompressor<E1N<V, V, EdgeLabels>>(ele
 ]);
 Compressor.addCompressor(edge1nCompressor);
 
-export const containsCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const containsCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.contains, containsCompressor);
 
-export const nextCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const nextCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.next, nextCompressor);
 
-export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.moniker, monikerEdgeCompressor);
 
-export const belongsToCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const belongsToCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.belongsTo, belongsToCompressor);
 
-export const attachCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const attachCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.attach, attachCompressor);
 
-export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const packageInformationEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.packageInformation, packageInformationEdgeCompressor);
 
-export const textDocumentDocumentSymbolCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentDocumentSymbolCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_documentSymbol, textDocumentDocumentSymbolCompressor);
 
-export const textDocumentFoldingRangeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentFoldingRangeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_foldingRange, textDocumentFoldingRangeCompressor);
 
-export const textDocumentDocumentLinkCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentDocumentLinkCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_documentLink, textDocumentDocumentLinkCompressor);
 
-export const textDocumentDiagnosticCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentDiagnosticCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_diagnostic, textDocumentDiagnosticCompressor);
 
-export const textDocumentDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_definition, textDocumentDefinitionCompressor);
 
-export const textDocumentDeclarationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentDeclarationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_declaration, textDocumentDeclarationCompressor);
 
-export const textDocumentTypeDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentTypeDefinitionCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_typeDefinition, textDocumentTypeDefinitionCompressor);
 
-export const textDocumentHoverCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentHoverCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_hover, textDocumentHoverCompressor);
 
-export const textDocumentReferencesCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentReferencesCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_references, textDocumentReferencesCompressor);
 
-export const textDocumentImplementationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), (next) => []);
+export const textDocumentImplementationCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.textDocument_implementation, textDocumentImplementationCompressor);
 
 export const itemPropertyShortForms = function() {

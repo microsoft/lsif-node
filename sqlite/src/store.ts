@@ -23,7 +23,7 @@ export abstract class Store {
 	}
 
 	async run(): Promise<void> {
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, _reject) => {
 			const rd = readline.createInterface(this.input);
 			rd.on('line', (line) => {
 				if (!line) {
