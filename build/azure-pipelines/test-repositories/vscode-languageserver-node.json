@@ -7,23 +7,7 @@
 	],
 	"tests": [
 		{
-			"cwd": "types",
-			"tsconfig": "./tsconfig.json"
-		},
-		{
-			"cwd": "jsonrpc",
-			"tsconfig": "./tsconfig.json"
-		},
-		{
-			"cwd": "protocol",
-			"tsconfig": "./tsconfig.json"
-		},
-		{
-			"cwd": "server",
-			"tsconfig": "./tsconfig.json"
-		},
-		{
-			"cwd": "client",
+			"cwd": ".",
 			"tsconfig": "./tsconfig.json"
 		}
 	]

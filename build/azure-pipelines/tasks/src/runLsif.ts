@@ -31,7 +31,7 @@ interface TestStatistics {
 	failed: string[];
 }
 
-async function runCommand(command: string, args?: ReadonlyArray<string>, cwd?: string): Promise<number | undefined> {
+async function runCommand(command: string, args: ReadonlyArray<string>, cwd?: string): Promise<number | undefined> {
 	return new Promise((resolve, reject) => {
 		const process = cp.spawn(command, args, {
 			cwd,
@@ -86,7 +86,7 @@ async function runTest(filename: string): Promise<number | undefined> {
 	}
 	if (data.init) {
 		for (let init of data.init) {
-			await runCommand(init.command, init.args, directory);
+			await runCommand(init.command, init.args ?? [], directory);
 		}
 	}
 	if (data.tests) {
@@ -165,6 +165,6 @@ main(process.argv[2]).then((error) => {
 	if (error !== undefined) {
 		process.exitCode = error;
 	}
-}, (error) => {
+}, (_error) => {
 	process.exitCode = 1;
 });
