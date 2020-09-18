@@ -1,6 +1,8 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
 		"composite": true,
         "sourceMap": true,
 		"declaration": true,

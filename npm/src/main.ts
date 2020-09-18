@@ -283,7 +283,7 @@ class ExportLinker {
 		}
 	}
 
-	private isPackaged(uri: string): boolean {
+	private isPackaged(_uri: string): boolean {
 		// This needs to consult the .npmignore file and checks if the
 		// document is actually published via npm. For now we return
 		// true for all documents.
