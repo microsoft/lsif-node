@@ -6,17 +6,17 @@ import * as path from 'path';
 import * as uuid from 'uuid';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import * as os from 'os';
 
-import { URI } from 'vscode-uri';
 import * as yargs from 'yargs';
-
+import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
 import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-protocol';
 
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager, DataMode } from './lsif';
+import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager, DataMode, Reporter } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
 import { Builder } from './graph';
 import * as tss from './typescripts';
@@ -30,6 +30,7 @@ interface CommonOptions {
 	typeAcquisition: boolean;
 	moniker: 'strict' | 'lenient'
 	out: string | undefined;
+	log: string | boolean;
 	stdout: boolean;
 }
 
@@ -62,6 +63,7 @@ namespace Options {
 		typeAcquisition: false,
 		moniker: 'lenient',
 		out: undefined,
+		log: '',
 		stdout: false
 	};
 }
@@ -224,6 +226,120 @@ function makeKey(config: ts.ParsedCommandLine): string {
 	return  hash.digest('base64');
 }
 
+interface InternalReporter extends Reporter {
+	begin(): void;
+	end(): void;
+}
+
+class StreamReporter implements InternalReporter {
+
+	private reported: Set<string>;
+
+	constructor(private stream: NodeJS.WritableStream) {
+		this.reported = new Set();
+	}
+
+	public begin(): void {
+	}
+
+	public end(): void {
+	}
+
+	public reportProgress(scannedFiles: number): void {
+		this.stream.write('.'.repeat(scannedFiles));
+	}
+
+	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
+		this.stream.write(os.EOL);
+		this.stream.write(`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`);
+		if (time !== undefined) {
+			this.stream.write(` in ${time}ms.`)
+		} else {
+			this.stream.write('.');
+		}
+		this.stream.write(os.EOL);
+		this.stream.write(os.EOL);
+	}
+
+	public reportInternalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
+		if (this.reported.has(symbolId)) {
+			return;
+		}
+		this.reported.add(symbolId);
+		this.stream.write(os.EOL);
+		this.stream.write(`The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
+		this.stream.write(os.EOL);
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			this.stream.write(`  The symbol has no visible declarations.`);
+			this.stream.write(os.EOL);
+		} else {
+			this.stream.write(`  The symbol is declared in the following files:`);
+			this.stream.write(os.EOL);
+			for (const declaration of declarations) {
+				const sourceFile = declaration.getSourceFile();
+				const lc = ts.getLineAndCharacterOfPosition(sourceFile, declaration.getStart());
+				this.stream.write(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+				this.stream.write(os.EOL);
+			}
+		}
+		if (location !== undefined) {
+			const sourceFile = location.getSourceFile();
+			const lc = ts.getLineAndCharacterOfPosition(sourceFile, location.getStart());
+			this.stream.write(`  Problem got detected while parsing the following file:`);
+			this.stream.write(os.EOL);
+			this.stream.write(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+			this.stream.write(os.EOL);
+		}
+	}
+}
+
+class NullReporter implements InternalReporter {
+	constructor() {
+	}
+
+	public begin(): void {
+	}
+
+	public end(): void {
+	}
+
+	public reportProgress(scannedFiles: number): void {
+	}
+
+	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number): void {
+	}
+
+	public reportInternalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
+	}
+}
+
+class FileReporter extends StreamReporter {
+
+	private fileStream: fs.WriteStream;
+	private reportProgressOnStdout: boolean;
+
+	constructor(file: string, reportProgressOnStdout: boolean) {
+		const stream = fs.createWriteStream(file, { encoding: 'utf8' });
+		super(stream);
+		this.fileStream = stream;
+		this.reportProgressOnStdout = reportProgressOnStdout;
+	}
+
+	public end(): void {
+		this.fileStream.close();
+		if (this.reportProgressOnStdout) {
+			process.stdout.write(os.EOL);
+		}
+	}
+
+	public reportProgress(scannedFiles: number): void {
+		if (this.reportProgressOnStdout) {
+			process.stdout.write('.'.repeat(scannedFiles));
+		}
+	}
+}
+
 interface ProcessProjectOptions {
 	group: Group;
 	projectRoot: string;
@@ -231,7 +347,7 @@ interface ProcessProjectOptions {
 	typeAcquisition: boolean;
 	stdout: boolean;
 	dataMode: DataMode;
-	monikerErrorHandler: (symbol: ts.Symbol, symbolId: string, location: ts.Node | undefined) => void;
+	reporter: Reporter;
 	processed: Map<String, ProjectInfo>;
 }
 
@@ -367,7 +483,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		projectName: projectName,
 		tsConfigFile: configFilePath,
 		stdout: options.stdout,
-		monikerErrorHandler: options.monikerErrorHandler,
+		reporter: options.reporter,
 		dataMode: options.dataMode,
 	};
 
@@ -380,6 +496,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 async function run(this: void, args: string[]): Promise<void> {
 
+	yargs.parserConfiguration({ "camel-case-expansion": false });
 	const options: Options = Object.assign(Options.defaults,
 		yargs.
 			exitProcess(false).
@@ -434,6 +551,10 @@ async function run(this: void, args: string[]): Promise<void> {
 			option('stdout', {
 				description: 'Writes the dump to stdout.',
 				boolean: true
+			}).
+			option('log', {
+				description: 'If provided witout a file name then the name of the output file is used with an additonal \'.log\' extension.',
+				skipValidation: true
 			}).
 			argv
 	);
@@ -518,7 +639,26 @@ async function run(this: void, args: string[]): Promise<void> {
 	group.repository = resolvedGroupConfig.repository;
 	emitter.emit(group);
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.begin, group));
-	const reported: Set<string> = new Set();
+	let reporter: InternalReporter;
+	if (options.log === '') { // --log not provided
+		// The trace is written to stdout so we can't log anything.
+		if (options.stdout) {
+			reporter = new NullReporter();
+		} else {
+			reporter = new StreamReporter(process.stdout);
+		}
+	} else if (options.log === true) { // --log without a file name
+		if (options.out !== undefined) {
+			reporter = new FileReporter(`${options.out}.log`, true);
+		} else {
+			reporter = new StreamReporter(process.stdout);
+		}
+	} else if ((typeof options.log === 'string') && options.log.length > 0) { // --log filename
+		reporter = new FileReporter(options.log, !options.stdout);
+	} else {
+		reporter = new NullReporter();
+	}
+	reporter.begin();
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
 		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
@@ -526,38 +666,16 @@ async function run(this: void, args: string[]): Promise<void> {
 		typeAcquisition: options.typeAcquisition,
 		stdout: options.stdout,
 		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
-		monikerErrorHandler: (symbol, symbolId, location) => {
-			if (reported.has(symbolId)) {
-				return;
-			}
-			reported.add(symbolId);
-			console.error(`\nThe symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
-			const declarations = symbol.getDeclarations();
-			if (declarations === undefined) {
-				console.error(`  The symbol has no visible declarations.`);
-			} else {
-				console.error(`  The symbol is declared in the following files:`);
-				for (const declaration of declarations) {
-					const sourceFile = declaration.getSourceFile();
-					const lc = ts.getLineAndCharacterOfPosition(sourceFile, declaration.getStart());
-					console.error(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
-				}
-			}
-			if (location !== undefined) {
-				const sourceFile = location.getSourceFile();
-				const lc = ts.getLineAndCharacterOfPosition(sourceFile, location.getStart());
-				console.error(`  Problem got detected while parsing the following file:`);
-				console.error(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
-			}
-		},
+		reporter: reporter,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, !options.stdout, processProjectOptions.dataMode);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	dataManager.end();
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
+	reporter.end();
 }
 
 export async function main(): Promise<void> {

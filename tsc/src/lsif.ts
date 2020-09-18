@@ -200,7 +200,7 @@ class ProjectData extends LSIFData<EmitterContext> {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(emitter: EmitterContext, private group: Group | undefined, public project: Project) {
+	public constructor(emitter: EmitterContext, public readonly group: Group | undefined, public readonly project: Project) {
 		super(emitter);
 		this.documents = [];
 		this.diagnostics = [];
@@ -2069,6 +2069,12 @@ class TypeAliasFactory extends StandardSymbolDataFactory {
 	}
 }
 
+export interface Reporter {
+	reportProgress(scannedFiles: number): void;
+	reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void;
+	reportInternalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node | undefined): void;
+}
+
 export interface Options {
 	group: Group;
 	projectRoot: string;
@@ -2076,7 +2082,7 @@ export interface Options {
 	tsConfigFile: string | undefined;
 	stdout: boolean;
 	dataMode: DataMode;
-	monikerErrorHandler?: (symbol: ts.Symbol, symbolId: string, location: ts.Node | undefined) => void;
+	reporter: Reporter;
 }
 
 enum ParseMode {
@@ -2086,9 +2092,11 @@ enum ParseMode {
 
 abstract class ProjectDataManager {
 
+	private startTime: number | undefined;
+
 	protected readonly emitter: EmitterContext;
 	private readonly projectData: ProjectData;
-	private readonly emitStats: boolean;
+	private readonly reporter: Reporter;
 
 	private documentStats: number;
 	private readonly documentDatas: DocumentData[];
@@ -2097,10 +2105,10 @@ abstract class ProjectDataManager {
 	// corresponding node is processed.
 	private readonly managedSymbolDatas: SymbolData[];
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
+	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		this.emitter = emitter;
 		this.projectData = new ProjectData(emitter, group, project);
-		this.emitStats = emitStats;
+		this.reporter = reporter;
 		this.documentStats = 0;
 		this.documentDatas = [];
 		this.symbolStats = 0;
@@ -2116,6 +2124,7 @@ abstract class ProjectDataManager {
 	}
 
 	public begin(): void {
+		this.startTime = Date.now()
 		this.projectData.begin();
 	}
 
@@ -2158,10 +2167,19 @@ abstract class ProjectDataManager {
 			}
 		}
 		this.projectData.end();
-		if (this.emitStats) {
-			console.log('');
-			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files for project ${this.getName()}`);
+		let name: string;
+		if (this.projectData.project.resource !== undefined && this.projectData.group !== undefined) {
+			const uri = this.projectData.project.resource;
+			const root = this.projectData.group.rootUri;
+			if (uri.startsWith(root)) {
+				name = uri.substr(root.length + 1);
+			} else {
+				name = `${this.getName()} (${uri})`
+			}
+		} else {
+			name = this.getName();
 		}
+		this.reporter.reportStatus(name, this.symbolStats, this.documentStats, this.startTime !== undefined ? Date.now() - this.startTime : undefined);
 	}
 
 	protected getName(): string {
@@ -2180,8 +2198,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	private state: LazyProectDataManagerState;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
-		super(emitter, group, project, emitStats);
+	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(emitter, group, project, reporter);
 		this.state = LazyProectDataManagerState.start;
 	}
 
@@ -2238,8 +2256,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 class GlobalProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
-		super(emitter, group, project, emitStats);
+	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(emitter, group, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2250,8 +2268,8 @@ class GlobalProjectDataManager extends LazyProjectDataManager {
 
 class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, emitStats: boolean = false) {
-		super(emitter, group, project, emitStats);
+	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(emitter, group, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2264,8 +2282,8 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 	private readonly groupName: string;
 	private readonly groupRoot: string;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, groupRoot: string, emitStats: boolean = false) {
-		super(emitter, group, project, emitStats);
+	public constructor(emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
+		super(emitter, group, project, reporter);
 		this.groupName = group.name;
 		this.groupRoot = groupRoot;
 	}
@@ -2286,8 +2304,8 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	private readonly rootFiles: Set<string>;
 	private readonly managedFiles: Set<string>;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, projectRoot: string, rootFiles: ReadonlyArray<string> | undefined, emitStats: boolean = false) {
-		super(emitter, group, project, emitStats);
+	public constructor(emitter: EmitterContext, group: Group, project: Project, projectRoot: string, rootFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
+		super(emitter, group, project, reporter);
 		this.projectRoot = projectRoot;
 		this.rootFiles = new Set(rootFiles);
 		this.managedFiles = new Set();
@@ -2330,7 +2348,7 @@ export class DataManager implements SymbolDataContext {
 
 	private readonly context: EmitterContext;
 	private readonly group: Group;
-	private readonly reportStats: boolean;
+	private readonly reporter: Reporter;
 	private readonly dataMode: DataMode;
 
 	private readonly globalPDM: GlobalProjectDataManager;
@@ -2346,10 +2364,10 @@ export class DataManager implements SymbolDataContext {
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
 
-	public constructor(context: EmitterContext, group: Group, groupRoot: string, reportStats: boolean, dataMode: DataMode) {
+	public constructor(context: EmitterContext, group: Group, groupRoot: string, reporter: Reporter, dataMode: DataMode) {
 		this.context = context;
 		this.group = group;
-		this.reportStats = reportStats;
+		this.reporter = reporter;
 		this.dataMode = dataMode;
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
@@ -2358,9 +2376,9 @@ export class DataManager implements SymbolDataContext {
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
 
-		this.globalPDM = new GlobalProjectDataManager(this, this.group, this.context.vertex.project(DataManager.GlobalId), reportStats);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reportStats);
-		this.groupPDM = new GroupProjectDataManager(this, this.group, this.context.vertex.project(group.name), groupRoot, reportStats);
+		this.globalPDM = new GlobalProjectDataManager(this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
+		this.groupPDM = new GroupProjectDataManager(this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
 	}
 
 	public get vertex(): VertexBuilder {
@@ -2386,7 +2404,7 @@ export class DataManager implements SymbolDataContext {
 			throw new Error(`There is already a current program data manager set`);
 		}
 		this.currentProgram = program;
-		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, program.getRootFileNames(), this.reportStats);
+		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, program.getRootFileNames(), this.reporter);
 		this.currentPDM.begin();
 	}
 
@@ -2649,6 +2667,7 @@ class Visitor implements FactoryContext {
 		});
 		this.projectRoot = options.projectRoot;
 		this.project = this.vertex.project(options.projectName);
+		this.project.resource = options.tsConfigFile !== undefined ? URI.file(options.tsConfigFile).toString(true) : undefined;
 		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
 		if (compilerOptions.rootDir !== undefined) {
@@ -2787,9 +2806,7 @@ class Visitor implements FactoryContext {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		if (!this.options.stdout) {
-			process.stdout.write('.');
-		}
+		this.options.reporter.reportProgress(1);
 
 		this.currentSourceFile = sourceFile;
 		let documentData = this.getOrCreateDocumentData(sourceFile);
@@ -3348,7 +3365,7 @@ class Visitor implements FactoryContext {
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
 			if (result.getVisibility() === SymbolDataVisibility.forceKeep) {
-				this.options.monikerErrorHandler && this.options.monikerErrorHandler(symbol, id, __location);
+				this.options.reporter.reportInternalSymbol(symbol, id, __location);
 			}
 			return result;
 		}

@@ -11,7 +11,7 @@ import * as ts from 'typescript';
 
 import { Vertex, Edge, Id, Element } from 'lsif-protocol';
 
-import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode } from '../lsif';
+import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode, Reporter } from '../lsif';
 import { Emitter } from '../emitters/emitter';
 import { Builder } from '../graph';
 import { URI } from 'vscode-uri';
@@ -164,10 +164,15 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 			emitter.emit(element);
 		}
 	};
+	const reporter: Reporter = {
+		reportProgress: () => {},
+		reportStatus: () => {},
+		reportInternalSymbol: () => {}
+	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
 	emitterContext.emit(group);
-	const lsifOptions: LSIFOptions = { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, dataMode: DataMode.free };
-	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, false, lsifOptions.dataMode);
+	const lsifOptions: LSIFOptions = { stdout: true, projectRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, reporter, dataMode: DataMode.free };
+	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();
 		_lsif(emitterContext, languageService, dataManager, [], lsifOptions);
