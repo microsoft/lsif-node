@@ -2125,7 +2125,7 @@ abstract class ProjectDataManager {
 	}
 
 	public begin(): void {
-		this.startTime = Date.now()
+		this.startTime = Date.now();
 		this.projectData.begin();
 	}
 
@@ -2175,7 +2175,7 @@ abstract class ProjectDataManager {
 			if (uri.startsWith(root)) {
 				name = uri.substr(root.length + 1);
 			} else {
-				name = `${this.getName()} (${uri})`
+				name = `${this.getName()} (${uri})`;
 			}
 		} else {
 			name = this.getName();

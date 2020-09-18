@@ -253,7 +253,7 @@ class StreamReporter implements InternalReporter {
 		this.stream.write(os.EOL);
 		this.stream.write(`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`);
 		if (time !== undefined) {
-			this.stream.write(` in ${time}ms.`)
+			this.stream.write(` in ${time}ms.`);
 		} else {
 			this.stream.write('.');
 		}
@@ -496,7 +496,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 async function run(this: void, args: string[]): Promise<void> {
 
-	yargs.parserConfiguration({ "camel-case-expansion": false });
+	yargs.parserConfiguration({ 'camel-case-expansion': false });
 	const options: Options = Object.assign(Options.defaults,
 		yargs.
 			exitProcess(false).
