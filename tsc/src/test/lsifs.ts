@@ -37,7 +37,7 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 		return this.options;
 	}
 
-	public getScriptVersion(fileName: string): string {
+	public getScriptVersion(_fileName: string): string {
 		return '0';
 	}
 

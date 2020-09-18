@@ -304,13 +304,13 @@ class NullReporter implements InternalReporter {
 	public end(): void {
 	}
 
-	public reportProgress(scannedFiles: number): void {
+	public reportProgress(_scannedFiles: number): void {
 	}
 
-	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number): void {
+	public reportStatus(_projectName: string, _numberOfSymbols: number, _numberOfDocuments: number, _time: number): void {
 	}
 
-	public reportInternalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
+	public reportInternalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
 	}
 }
 
@@ -388,7 +388,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		getProjectReferences: () => {
 			return config.projectReferences;
 		},
-		getScriptVersion: (fileName: string): string => {
+		getScriptVersion: (_fileName: string): string => {
 			// The files are immutable.
 			return '0';
 		},

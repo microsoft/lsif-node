@@ -35,7 +35,7 @@ interface PackageJson {
 function stripComments(content: string): string {
 	const regexp = /("(?:[^\\"]*(?:\\.)?)*")|('(?:[^\\']*(?:\\.)?)*')|(\/\*(?:\r?\n|.)*?\*\/)|(\/{2,}.*?(?:(?:\r?\n)|$))/g;
 
-	return content.replace(regexp, function (match, m1, m2, m3, m4) {
+	return content.replace(regexp, function (match, _m1, _m2, m3, m4) {
 		// Only one of m1, m2, m3, m4 matches
 		if (m3) {
 			// A block comment. Replace with nothing
@@ -227,8 +227,8 @@ export class TypingsInstaller {
 		let npm = await import('npm');
 		for (let typing of typings) {
 			try {
-				promises.push(new Promise<string | undefined>((resolve, reject) => {
-					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
+				promises.push(new Promise<string | undefined>((resolve, _reject) => {
+					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, _result: object) => {
 						if (error) {
 							resolve(undefined);
 						}

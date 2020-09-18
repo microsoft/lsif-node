@@ -132,7 +132,7 @@ namespace Converter {
 		return result;
 	}
 
-	export function asHover(this: void, file: ts.SourceFile, value: ts.QuickInfo): lsp.Hover {
+	export function asHover(this: void, _file: ts.SourceFile, value: ts.QuickInfo): lsp.Hover {
 		let content: lsp.MarkedString[] = [];
 		if (value.displayParts !== undefined) {
 			content.push({ language: 'typescript', value: displayPartsToString(value.displayParts)});
@@ -826,10 +826,10 @@ class SymbolDataWithRoots extends StandardSymbolData {
 		this.sourceFiles = undefined;
 	}
 
-	public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
 	}
 
-	public addDefinition(sourceFile: string, definition: DefinitionRange): void {
+	public addDefinition(_sourceFile: string, _definition: DefinitionRange): void {
 		// We don't do anoything for definitions since they a transient anyways.
 	}
 
@@ -860,10 +860,10 @@ class TransientSymbolData extends StandardSymbolData {
 		super.begin();
 	}
 
-	public recordDefinitionInfo(info: tss.DefinitionInfo): void {
+	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
 	}
 
-	public addDefinition(sourceFile: string, definition: DefinitionRange): void {
+	public addDefinition(_sourceFile: string, _definition: DefinitionRange): void {
 		// We don't do anoything for definitions since they a transient anyways.
 	}
 
@@ -1793,7 +1793,7 @@ abstract class SymbolDataFactory {
 		return Array.from(sourceFiles.values());
 	}
 
-	public useGlobalProjectDataManager(symbol: ts.Symbol): boolean {
+	public useGlobalProjectDataManager(_symbol: ts.Symbol): boolean {
 		return false;
 	}
 
@@ -1854,7 +1854,7 @@ abstract class SymbolDataFactory {
 		}
 	}
 
-	private getVisibilityAndDisposeNode(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, exportPath: string | undefined, moduleSystem: ModuleSystemKind | undefined, parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
+	private getVisibilityAndDisposeNode(sourceFiles: ts.SourceFile[] | undefined, symbol: ts.Symbol, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
 		// The symbol is exported.
 		if (exportPath !== undefined) {
 			return [SymbolDataVisibility.exported, undefined];
@@ -1988,6 +1988,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 		const fileNames = Symbols.isTransient(symbol)
 			? undefined
 			: sourceFiles !== undefined ? sourceFiles.map(sf => sf.fileName) : undefined;
+
 		const roots = this.typeChecker.getRootSymbols(symbol);
 		if (roots.length === 0) {
 			throw new Error(`Root symbol data factory called with symbol without roots.`);
@@ -2132,7 +2133,7 @@ abstract class ProjectDataManager {
 		return this.projectData;
 	}
 
-	public createDocumentData(fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
+	public createDocumentData(_fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
 		const result = new DocumentData(this.emitter, document, moduleSystem, monikerPath, external);
 		result.begin();
 		this.projectData.addDocument(document);
@@ -2141,7 +2142,7 @@ abstract class ProjectDataManager {
 		return result;
 	}
 
-	public createSymbolData(symbolId: SymbolId, create: (projectDataManager: ProjectDataManager) => FactoryResult): FactoryResult {
+	public createSymbolData(_symbolId: SymbolId, create: (projectDataManager: ProjectDataManager) => FactoryResult): FactoryResult {
 		const result = create(this);
 		if (result.disposeOn === undefined && result.symbolData.getVisibility() !== SymbolDataVisibility.unknown) {
 			this.managedSymbolDatas.push(result.symbolData);
@@ -2591,7 +2592,7 @@ export class SimpleSymbolChainCache implements ts.SymbolChainCache {
 	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
 		return [key.symbol];
 	}
-	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
+	public cache(_key: ts.SymbolChainCacheKey, _value: ts.Symbol[]): void {
 		// do nothing;
 	}
 }
@@ -2943,7 +2944,7 @@ class Visitor implements FactoryContext {
 		this.handlePropertyType(node);
 		this.endVisitDeclaration(node);
 	}
-	private visitVariableStatement(node: ts.VariableStatement): boolean {
+	private visitVariableStatement(_node: ts.VariableStatement): boolean {
 		return true;
 	}
 
@@ -3044,14 +3045,14 @@ class Visitor implements FactoryContext {
 		this.endVisitDeclaration(node);
 	}
 
-	private visitClassExpression(node: ts.ClassExpression): boolean {
+	private visitClassExpression(_node: ts.ClassExpression): boolean {
 		return true;
 	}
 
-	private endVisitClassExpression(node: ts.ClassExpression): void {
+	private endVisitClassExpression(_node: ts.ClassExpression): void {
 	}
 
-	private visitTypeAliasDeclaration(node: ts.TypeAliasDeclaration): boolean {
+	private visitTypeAliasDeclaration(_node: ts.TypeAliasDeclaration): boolean {
 		return true;
 	}
 
@@ -3077,7 +3078,7 @@ class Visitor implements FactoryContext {
 		return;
 	}
 
-	private endVisitDeclaration(node: tss.Node.Declaration): void {
+	private endVisitDeclaration(_node: tss.Node.Declaration): void {
 		let didRecord = this.recordDocumentSymbol.pop();
 		if (didRecord) {
 			this.symbolContainer.pop();
@@ -3115,7 +3116,7 @@ class Visitor implements FactoryContext {
 		return false;
 	}
 
-	private endVisitExportAssignment(node: ts.ExportAssignment): void {
+	private endVisitExportAssignment(_node: ts.ExportAssignment): void {
 		// Do nothing;
 	}
 
@@ -3159,7 +3160,7 @@ class Visitor implements FactoryContext {
 		return false;
 	}
 
-	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
+	private endVisitExportDeclaration(_node: ts.ExportDeclaration): void {
 	}
 
 	private endVisitSetAccessor(node: ts.SetAccessorDeclaration): void {
@@ -3178,7 +3179,7 @@ class Visitor implements FactoryContext {
 		}
 	}
 
-	private visitArrayType(node: ts.ArrayTypeNode): boolean {
+	private visitArrayType(_node: ts.ArrayTypeNode): boolean {
 		return true;
 	}
 
@@ -3195,7 +3196,7 @@ class Visitor implements FactoryContext {
 		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
 	}
 
-	private visitGeneric(node: ts.Node): boolean {
+	private visitGeneric(_node: ts.Node): boolean {
 		return true;
 	}
 
