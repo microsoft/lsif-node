@@ -138,7 +138,7 @@ function checkVertexBeforeEdge(edge: LSIF.Edge): void {
 
 	if (vertices[outV] === undefined ||
 		// The following will be true if any id in the inV array is not yet defined in the vertices dictionary
-		inVs.map((inV) => vertices[inV] === undefined).reduce((total, curr) => total || curr)) {
+		inVs.map((inV) => vertices[inV] === undefined).reduce((total, curr) => total || curr, false)) {
 		errors.push(new Error(edge, `was emitted before a vertex it refers to`));
 		edges[edge.id.toString()].invalidate();
 		checks[Check.vertexBeforeEdge] = false;
