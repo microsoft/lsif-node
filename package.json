@@ -41,6 +41,6 @@
 		"lsif-ts": "cd samples/typescript && node ../../tsc/lib/main.js -p ./tsconfig.json  --outputFormat=line --stdout",
 		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc/lib/main.js -p ./client/tsconfig.json --projectRoot . --outputFormat=line",
 		"lsif-js": "cd samples/javascript && node ../../tsc/lib/main.js -p ./jsconfig.json --outputFormat=line",
-		"test": "cd util && npm run test:ci && cd .."
+		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."
 	}
 }
