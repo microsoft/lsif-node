@@ -143,5 +143,25 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Ambient module', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'declare const ApplicationInsights: number;',
+					'declare module \'applicationinsights\' {',
+    				'    export = ApplicationInsights;',
+					'}'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 52);
+		const validate: Element[] = [
+			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":applicationinsights.ApplicationInsights","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
