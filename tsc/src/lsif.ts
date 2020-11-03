@@ -1256,7 +1256,6 @@ class Symbols {
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly exportPathCache: LRUCache<ts.Symbol, string | null>;
 
-	private readonly symbolAliases: Map<string, SymbolAlias>;
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
@@ -1265,7 +1264,6 @@ class Symbols {
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportPathCache = new LRUCache(2048);
 
-		this.symbolAliases = new Map();
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
@@ -1503,21 +1501,6 @@ class Symbols {
 		return result;
 	}
 
-	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		this.symbolAliases.set(key, typeAlias);
-	}
-
-	public hasSymbolAlias(symbol: ts.Symbol): boolean {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		return this.symbolAliases.has(key);
-	}
-
-	public deleteSymbolAlias(symbol: ts.Symbol): void {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		this.symbolAliases.delete(key);
-	}
-
 	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
 		return parent.exports !== undefined && parent.exports.has(symbol.getName() as ts.__String);
 	}
@@ -1663,11 +1646,6 @@ class Symbols {
 						}
 					}
 				}
-			}
-			const typeAlias = this.symbolAliases.get(symbolKey);
-			if (typeAlias !== undefined && this.getExportPath(typeAlias.alias, kind) !== undefined) {
-				this.exportPathCache.set(symbol, typeAlias.name);
-				return typeAlias.name;
 			}
 			this.exportPathCache.set(symbol, null);
 			return undefined;
