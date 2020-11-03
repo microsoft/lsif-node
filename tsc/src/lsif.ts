@@ -612,9 +612,6 @@ class StandardSymbolData extends SymbolData {
 			throw new Error (`Partition for file ${sourceFile} has already been cleared.`);
 		}
 		if (result === undefined) {
-			if (this.getId() === '+S31KxV+LC84j167oEVrxw==') {
-				debugger;
-			}
 			let documentData = this.context.getDocumentData(sourceFile);
 			if (documentData === undefined) {
 				throw new Error(`No document data for ${sourceFile}`);
@@ -3281,9 +3278,6 @@ class Visitor implements FactoryContext {
 				this.options.reporter.reportInternalSymbol(symbol, id, __location);
 			}
 			return result;
-		}
-		if (id === '+S31KxV+LC84j167oEVrxw==') {
-			debugger;
 		}
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
