@@ -2076,10 +2076,8 @@ abstract class ProjectDataManager {
 
 	public abstract getParseMode(): ParseMode;
 
-	public updateSymbolDataManagement(symbolData: SymbolData): void {
-		if (symbolData.keep()) {
-			this.managedSymbolDatas.push(symbolData);
-		}
+	public manageSymbolData(symbolData: SymbolData): void {
+		this.managedSymbolDatas.push(symbolData);
 	}
 
 	public begin(): void {
@@ -2432,7 +2430,7 @@ export class DataManager implements SymbolDataContext {
 				// If the counter is already gone then the visibility already changed.
 				if (counter !== undefined) {
 					if (symbolData.keep()) {
-						counter.projectDataManager.updateSymbolDataManagement(symbolData);
+						counter.projectDataManager.manageSymbolData(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
 						if (symbolData.release()) {
@@ -2441,6 +2439,8 @@ export class DataManager implements SymbolDataContext {
 								handledSymbolData.add(symbolId);
 								symbolData.end();
 								this.symbolDatas.set(symbolId, null);
+							} else {
+								counter.projectDataManager.manageSymbolData(symbolData);
 							}
 						}
 						this.validateVisibilityCounter.delete(symbolId);
