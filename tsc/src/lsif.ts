@@ -331,10 +331,9 @@ class DocumentData extends LSIFData<EmitterContext> {
 enum SymbolDataVisibility {
 	internal = 1,
 	unknown = 2,
-	forceKeep = 3,
-	transient = 4,
-	indirectExported = 5,
-	exported = 6,
+	transient = 3,
+	indirectExported = 4,
+	exported = 5,
 }
 
 abstract class SymbolData extends LSIFData<SymbolDataContext> {
@@ -357,19 +356,9 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		return this.visibility;
 	}
 
-	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.forceKeep | SymbolDataVisibility.internal): void {
+	public changeVisibility(value: SymbolDataVisibility.indirectExported | SymbolDataVisibility.internal): void {
 		if (value === SymbolDataVisibility.indirectExported) {
 			if (this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported) {
-				return;
-			}
-			if (this.visibility === SymbolDataVisibility.internal) {
-				throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
-			}
-			this.visibility = value;
-			return;
-		}
-		if (value === SymbolDataVisibility.forceKeep) {
-			if (this.visibility === SymbolDataVisibility.forceKeep) {
 				return;
 			}
 			if (this.visibility === SymbolDataVisibility.internal) {
@@ -382,7 +371,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 			if (this.visibility === SymbolDataVisibility.internal) {
 				return;
 			}
-			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.forceKeep) {
+			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported) {
 				throw new Error(`Can't downgrade symbol data visibility from ${this.visibility} to ${value}`);
 			}
 			this.visibility = value;
@@ -404,7 +393,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	}
 
 	public keep(): boolean {
-		return this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.transient || this.visibility === SymbolDataVisibility.forceKeep;
+		return this.visibility === SymbolDataVisibility.exported || this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.transient;
 	}
 
 	public isInternal(): boolean {
@@ -531,7 +520,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public abstract endPartition(fileName: string): void;
 
-	public abstract endPartitions(sourceFiles: Set<string>): void;
+	public abstract resetPartitions(sourceFiles: Set<string>): void;
 
 	public abstract end(forceSingle?: boolean): void;
 }
@@ -623,16 +612,15 @@ class StandardSymbolData extends SymbolData {
 			throw new Error (`Partition for file ${sourceFile} has already been cleared.`);
 		}
 		if (result === undefined) {
+			if (this.getId() === '+S31KxV+LC84j167oEVrxw==') {
+				debugger;
+			}
 			let documentData = this.context.getDocumentData(sourceFile);
 			if (documentData === undefined) {
 				throw new Error(`No document data for ${sourceFile}`);
 			}
 			result = new SymbolDataPartition(this.context, this, documentData.document);
-			// If we have a scope the symbol data will be removed when node processed
-			// is called. So we don't need to manage partitions.
-			if (this.getVisibility() !== SymbolDataVisibility.internal) {
-				this.context.managePartitionLifeCycle(sourceFile, this);
-			}
+			this.context.managePartitionLifeCycle(sourceFile, this);
 			result.begin();
 			this.partitions.set(sourceFile, result);
 		}
@@ -657,19 +645,21 @@ class StandardSymbolData extends SymbolData {
 		this.partitions.set(fileName, null);
 	}
 
-	public endPartitions(fileNames: Set<string>): void {
+	public resetPartitions(fileNames: Set<string>): void {
 		if (this.partitions === null || this.partitions === undefined) {
 			return;
 		}
-		const toClear: string[] = [];
+		const toDelete: string[] = [];
 		for (const entry of this.partitions) {
-			if (entry[1] !== null && fileNames.has(entry[0])) {
-				entry[1].end();
-				toClear.push(entry[0]);
+			if (fileNames.has(entry[0])) {
+				toDelete.push(entry[0]);
+				if (entry[1] !== null) {
+					entry[1].end();
+				}
 			}
 		}
-		for (const fileName of toClear) {
-			this.partitions.set(fileName, null);
+		for (const fileName of toDelete) {
+			this.partitions.delete(fileName);
 		}
 	}
 
@@ -1266,7 +1256,6 @@ class Symbols {
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly exportPathCache: LRUCache<ts.Symbol, string | null>;
 
-	private readonly symbolAliases: Map<string, SymbolAlias>;
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
@@ -1275,7 +1264,6 @@ class Symbols {
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportPathCache = new LRUCache(2048);
 
-		this.symbolAliases = new Map();
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
@@ -1513,21 +1501,6 @@ class Symbols {
 		return result;
 	}
 
-	public storeSymbolAlias(symbol: ts.Symbol, typeAlias: SymbolAlias): void {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		this.symbolAliases.set(key, typeAlias);
-	}
-
-	public hasSymbolAlias(symbol: ts.Symbol): boolean {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		return this.symbolAliases.has(key);
-	}
-
-	public deleteSymbolAlias(symbol: ts.Symbol): void {
-		const key = tss.Symbol.createKey(this.typeChecker, symbol);
-		this.symbolAliases.delete(key);
-	}
-
 	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
 		return parent.exports !== undefined && parent.exports.has(symbol.getName() as ts.__String);
 	}
@@ -1674,11 +1647,6 @@ class Symbols {
 					}
 				}
 			}
-			const typeAlias = this.symbolAliases.get(symbolKey);
-			if (typeAlias !== undefined && this.getExportPath(typeAlias.alias, kind) !== undefined) {
-				this.exportPathCache.set(symbol, typeAlias.name);
-				return typeAlias.name;
-			}
 			this.exportPathCache.set(symbol, null);
 			return undefined;
 		} else {
@@ -1762,7 +1730,6 @@ interface FactoryResult {
 	readonly exportPath?: string;
 	readonly moduleSystem?: ModuleSystemKind;
 	readonly validateVisibilityOn?: ts.SourceFile[];
-	readonly disposeOn?: ts.Node;
 }
 
 interface FactoryContext {
@@ -1837,53 +1804,23 @@ abstract class SymbolDataFactory {
 		return ModuleSystemKind.unknown;
 	}
 
-	private getDisposeOnNode(declaration: ts.Node, isFunctionScopedVariable: boolean = false): ts.Node {
-		if (isFunctionScopedVariable) {
-			let result = declaration;
-			while (result.kind !== ts.SyntaxKind.FunctionDeclaration && result.kind !== ts.SyntaxKind.FunctionExpression && result.kind !== ts.SyntaxKind.ArrowFunction && result.kind !== ts.SyntaxKind.SourceFile) {
-				result = result.parent;
-			}
-			return result;
-		} else {
-			let result = declaration.parent;
-			while (result !== undefined && !StandardSymbolDataFactory.EmitBoundaries.has(result.kind)) {
-				result = result.parent;
-			}
-			return result;
-		}
-	}
-
-	private getVisibilityAndDisposeNode(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): [SymbolDataVisibility, ts.Node | undefined] {
+	private getVisibility(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): SymbolDataVisibility {
 		// The symbol is exported.
 		if (exportPath !== undefined) {
-			return [SymbolDataVisibility.exported, undefined];
+			return SymbolDataVisibility.exported;
 		}
 		if (Symbols.isTransient(symbol)) {
-			return [SymbolDataVisibility.transient, undefined];
+			return SymbolDataVisibility.transient;
 		}
 
-		const hasOneSourceFile = declarationSourceFiles !== undefined && declarationSourceFiles.length === 1;
-		// If the symbol comes from more than one source file we can't dispose it on a node since
-		// we need to see it in more than one file.
-		if (!hasOneSourceFile) {
-			return [SymbolDataVisibility.unknown, undefined];
-		}
-
-		// We have a function scoped variable. Those are always internal.
-		if (Symbols.isFunctionScopedVariableAndNotParameter(symbol)) {
-			return [SymbolDataVisibility.internal, this.getDisposeOnNode(symbol.declarations[0], true)];
-		}
-
-		// @todo think about getting smarter here by checking more symbol kind. For
-		// now we trieat it as unknown and check when the file is done
-		return [SymbolDataVisibility.unknown, undefined];
+		return SymbolDataVisibility.unknown;
 	}
 
-	protected getExportData(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility, ts.Node | undefined] {
+	protected getExportData(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility] {
 		const moduleSystem = this.getModuleSystemKind(declarationSourceFiles);
 		const exportPath = this.symbols.getExportPath(symbol, moduleSystem);
-		const [visibility, disposeOn] = this.getVisibilityAndDisposeNode(symbol, declarationSourceFiles, exportPath, moduleSystem, parseMode);
-		return [moduleSystem, exportPath, visibility, disposeOn];
+		const visibility = this.getVisibility(symbol, declarationSourceFiles, exportPath, moduleSystem, parseMode);
+		return [moduleSystem, exportPath, visibility];
 	}
 
 	public abstract create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult;
@@ -1896,10 +1833,10 @@ class StandardSymbolDataFactory extends SymbolDataFactory {
 	}
 
 	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, projectDataManager.getParseMode());
+		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, projectDataManager.getParseMode());
 		return {
 			symbolData: new StandardSymbolData(this.symbolDataContext, id, visibility),
-			exportPath, moduleSystem, disposeOn,
+			exportPath, moduleSystem,
 			validateVisibilityOn: declarationSourceFiles
 		};
 	}
@@ -1913,7 +1850,7 @@ class AliasFactory extends SymbolDataFactory {
 
 	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, parseMode);
+		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const aliased = this.typeChecker.getAliasedSymbol(symbol);
 		let symbolData: SymbolData | undefined;
 		if (aliased !== undefined) {
@@ -1929,7 +1866,6 @@ class AliasFactory extends SymbolDataFactory {
 		return {
 			symbolData,
 			moduleSystem, exportPath,
-			disposeOn,
 			validateVisibilityOn: declarationSourceFiles,
 		};
 	}
@@ -1947,23 +1883,23 @@ class MethodFactory extends SymbolDataFactory {
 		}
 
 		const parseMode = projectDataManager.getParseMode();
-		const [moduleSystem, exportPath, visibility, disposeOn] = this.getExportData(symbol, declarationSourceFiles, parseMode);
+		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const container = tss.Symbol.getParent(symbol);
 		const fileNames = declarationSourceFiles.map(sf => sf.fileName);
 		if (container === undefined) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractMembers = this.symbols.findRootMembers(container, symbol.getName());
 		// No abstract membes found
 		if (mostAbstractMembers === undefined || mostAbstractMembers.length === 0) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		// It is the symbol itself
 		if (mostAbstractMembers.length === 1 && mostAbstractMembers[0] === symbol) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractSymbolData = mostAbstractMembers.map(member => this.factoryContext.getOrCreateSymbolData(member));
-		return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, mostAbstractSymbolData, visibility), exportPath, moduleSystem, disposeOn, validateVisibilityOn: declarationSourceFiles };
+		return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, mostAbstractSymbolData, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 	}
 }
 
@@ -2060,7 +1996,7 @@ class TransientFactory extends SymbolDataFactory {
 	public create(symbol: ts.Symbol, id: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
 		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
-		return { symbolData: new TransientSymbolData(this.symbolDataContext, id, visibility), moduleSystem, exportPath, disposeOn: undefined, validateVisibilityOn: undefined };
+		return { symbolData: new TransientSymbolData(this.symbolDataContext, id, visibility), moduleSystem, exportPath, validateVisibilityOn: undefined };
 	}
 }
 
@@ -2118,10 +2054,8 @@ abstract class ProjectDataManager {
 
 	public abstract getParseMode(): ParseMode;
 
-	public updateSymbolDataManagement(symbolData: SymbolData): void {
-		if (symbolData.keep()) {
-			this.managedSymbolDatas.push(symbolData);
-		}
+	public manageSymbolData(symbolData: SymbolData): void {
+		this.managedSymbolDatas.push(symbolData);
 	}
 
 	public begin(): void {
@@ -2144,7 +2078,7 @@ abstract class ProjectDataManager {
 
 	public createSymbolData(_symbolId: SymbolId, create: (projectDataManager: ProjectDataManager) => FactoryResult): FactoryResult {
 		const result = create(this);
-		if (result.disposeOn === undefined && result.symbolData.getVisibility() !== SymbolDataVisibility.unknown) {
+		if (result.symbolData.getVisibility() !== SymbolDataVisibility.unknown) {
 			this.managedSymbolDatas.push(result.symbolData);
 		}
 		this.symbolStats++;
@@ -2158,7 +2092,7 @@ abstract class ProjectDataManager {
 			if (fileNames === undefined) {
 				symbolData.end();
 			} else {
-				symbolData.endPartitions(fileNames);
+				symbolData.resetPartitions(fileNames);
 			}
 		}
 		for (const data of this.documentDatas) {
@@ -2361,7 +2295,6 @@ export class DataManager implements SymbolDataContext {
 	private readonly documentDatas: Map<string, DocumentData>;
 	private readonly symbolDatas: Map<string, SymbolData | null>;
 	private readonly partitionLifeCycle: Map<string, SymbolData[]>;
-	private readonly disposeOnNode: Map<ts.Node, SymbolData[]>;
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
 
@@ -2372,7 +2305,6 @@ export class DataManager implements SymbolDataContext {
 		this.dataMode = dataMode;
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
-		this.disposeOnNode = new Map();
 		this.partitionLifeCycle = new Map();
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
@@ -2476,16 +2408,17 @@ export class DataManager implements SymbolDataContext {
 				// If the counter is already gone then the visibility already changed.
 				if (counter !== undefined) {
 					if (symbolData.keep()) {
-						counter.projectDataManager.updateSymbolDataManagement(symbolData);
+						counter.projectDataManager.manageSymbolData(symbolData);
 						this.validateVisibilityCounter.delete(symbolId);
 					} else if (counter.counter === 1) {
 						if (symbolData.release()) {
+							symbolData.changeVisibility(SymbolDataVisibility.internal);
 							if (this.dataMode === DataMode.free) {
 								handledSymbolData.add(symbolId);
 								symbolData.end();
 								this.symbolDatas.set(symbolId, null);
 							} else {
-								symbolData.changeVisibility(SymbolDataVisibility.forceKeep);
+								counter.projectDataManager.manageSymbolData(symbolData);
 							}
 						}
 						this.validateVisibilityCounter.delete(symbolId);
@@ -2535,14 +2468,6 @@ export class DataManager implements SymbolDataContext {
 
 		const result = manager.createSymbolData(symbolId, create);
 		symbolData = result.symbolData;
-		if (result.disposeOn !== undefined) {
-			let datas = this.disposeOnNode.get(result.disposeOn);
-			if (datas === undefined) {
-				datas = [];
-				this.disposeOnNode.set(result.disposeOn, datas);
-			}
-			datas.push(symbolData);
-		}
 		if (manager.getParseMode() === ParseMode.full && symbolData.getVisibility() === SymbolDataVisibility.unknown && result.validateVisibilityOn !== undefined && result.validateVisibilityOn.length > 0) {
 			const counter = result.validateVisibilityOn.length;
 			this.validateVisibilityCounter.set(symbolData.getId(), { counter, projectDataManager: manager });
@@ -2568,17 +2493,6 @@ export class DataManager implements SymbolDataContext {
 			this.partitionLifeCycle.set(fileName, datas);
 		}
 		datas.push(symbolData);
-	}
-
-	public nodeProcessed(node: ts.Node): void {
-		let datas = this.disposeOnNode.get(node);
-		if (datas !== undefined) {
-			for (let symbolData of datas) {
-				symbolData.end(true);
-				this.symbolDatas.set(symbolData.getId(), null);
-			}
-			this.disposeOnNode.delete(node);
-		}
 	}
 }
 
@@ -2799,7 +2713,6 @@ class Visitor implements FactoryContext {
 			node.forEachChild(child => this.visit(child));
 		}
 		endVisit.call(this, node);
-		this.dataManager.nodeProcessed(node);
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
@@ -3064,7 +2977,7 @@ class Visitor implements FactoryContext {
 
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), node.name.getText())
+			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3148,11 +3061,10 @@ class Visitor implements FactoryContext {
 					this.handleSymbol(aliasedSymbol, element.propertyName);
 				}
 				if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
-					const name = element.propertyName?.getText() || element.name.getText();
 					const sourceFile = node.getSourceFile();
 					this.emitAttachedMonikers(
 						monikerParts.path,
-						this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name)
+						this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, monikerParts.name)
 					);
 				}
 			}
@@ -3365,10 +3277,13 @@ class Visitor implements FactoryContext {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
 		let result = this.dataManager.getSymbolData(id);
 		if (result !== undefined) {
-			if (result.getVisibility() === SymbolDataVisibility.forceKeep) {
+			if (result.getVisibility() === SymbolDataVisibility.internal) {
 				this.options.reporter.reportInternalSymbol(symbol, id, __location);
 			}
 			return result;
+		}
+		if (id === '+S31KxV+LC84j167oEVrxw==') {
+			debugger;
 		}
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);

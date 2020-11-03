@@ -163,5 +163,39 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Bug 76', () => {
+		const emitter = lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'declare module chrome {',
+					'	namespace _debugger {',
+					'		export var onDetach: number;',
+					'	}',
+					'	export { _debugger as debugger }',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'chrome.debugger.onDetach;'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 85);
+		const validate: Element[] = [
+			JSON.parse('{"id":24,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":25,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"fJm3sB0iM5Tk8y8RD36nyQ==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":26,"type":"edge","label":"moniker","outV":24,"inV":25}'),
+			JSON.parse('{"id":27,"type":"vertex","label":"range","start":{"line":2,"character":13},"end":{"line":2,"character":21},"tag":{"type":"definition","text":"onDetach","kind":7,"fullRange":{"start":{"line":2,"character":13},"end":{"line":2,"character":29}}}}'),
+			JSON.parse('{"id":28,"type":"edge","label":"next","outV":27,"inV":24}'),
+			JSON.parse('{"id":41,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":chrome.debugger.onDetach","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":42,"type":"edge","label":"attach","outV":41,"inV":25}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
