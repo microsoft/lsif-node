@@ -344,6 +344,20 @@ export interface MetaData extends V {
 		version?: string;
 		args?: string[];
 	}
+
+	/**
+	 * Additional information a tool can store to identify some
+	 * state with the created dump
+	 */
+	 toolState?: {
+		 /**
+		  * A data field that can be used to store a key identifying the dump.
+		  * The length of the string is limited to 512 characters. So usually
+		  * tools should use some sort of hashing algorithm to compute that
+		  * value.
+		  */
+		 data?: string;
+	 }
 }
 
 export interface Group extends V {
