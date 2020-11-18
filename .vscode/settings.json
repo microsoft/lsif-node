@@ -21,6 +21,7 @@
 	},
 	"eslint.trace.server": "off",
 	"cSpell.words": [
-		"LSIF"
+		"LSIF",
+		"extendz"
 	]
 }

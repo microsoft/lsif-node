@@ -512,7 +512,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	public abstract addReference(sourceFile: string, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
 	public abstract addReference(sourceFile: string, reference: ReferenceResult): void;
 
-	public abstract getOrCreateTypeDefintionResult(): TypeDefinitionResult;
+	public abstract getOrCreateTypeDefinitionResult(): TypeDefinitionResult;
 
 	public abstract addTypeDefinition(sourceFile: string, definition: DefinitionRange): void;
 
@@ -591,7 +591,7 @@ class StandardSymbolData extends SymbolData {
 		return this.referenceResult;
 	}
 
-	public getOrCreateTypeDefintionResult(): TypeDefinitionResult {
+	public getOrCreateTypeDefinitionResult(): TypeDefinitionResult {
 		if (this.typeDefinitionResult === undefined) {
 			this.typeDefinitionResult = this.vertex.typeDefinitionResult();
 			this.emit(this.typeDefinitionResult);
@@ -816,7 +816,7 @@ class SymbolDataWithRoots extends StandardSymbolData {
 	}
 
 	public addDefinition(_sourceFile: string, _definition: DefinitionRange): void {
-		// We don't do anoything for definitions since they a transient anyways.
+		// We don't do anything for definitions since they a transient anyways.
 	}
 
 	public addReference(sourceFile: string, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
@@ -850,7 +850,7 @@ class TransientSymbolData extends StandardSymbolData {
 	}
 
 	public addDefinition(_sourceFile: string, _definition: DefinitionRange): void {
-		// We don't do anoything for definitions since they a transient anyways.
+		// We don't do anything for definitions since they a transient anyways.
 	}
 
 	public addReference(sourceFile: string, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
@@ -947,7 +947,7 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 			this.emit(this.edge.item(definitionResult, this.definitionRanges, this.shard));
 		}
 		if (this.typeDefinitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
-			const typeDefinitionResult = this.symbolData.getOrCreateTypeDefintionResult();
+			const typeDefinitionResult = this.symbolData.getOrCreateTypeDefinitionResult();
 			this.emit(this.edge.item(typeDefinitionResult, this.typeDefinitionRanges, this.shard));
 		}
 		if (this.referenceRanges !== SymbolDataPartition.EMPTY_MAP) {
@@ -978,7 +978,7 @@ interface SymbolAlias {
 	/**
 	 * The alias symbol. For example the symbol representing `default` in
 	 * a statement like `export default product` or the symbol representing
-	 * `MyTypeName` in a type declarartion statement like `type MyTypeName = { x: number }`
+	 * `MyTypeName` in a type declaration statement like `type MyTypeName = { x: number }`
 	 */
 	alias: ts.Symbol;
 	name: string;
@@ -1264,11 +1264,11 @@ class Symbols {
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
-		for (let module of ambientModules) {
+		for (const module of ambientModules) {
 			const declarations = module.getDeclarations();
 			if (declarations !== undefined) {
-				for (let declarartion of declarations) {
-					const sourceFile = declarartion.getSourceFile();
+				for (const declaration of declarations) {
+					const sourceFile = declaration.getSourceFile();
 					this.sourceFilesContainingAmbientDeclarations.add(sourceFile.fileName);
 				}
 			}
@@ -1887,7 +1887,7 @@ class MethodFactory extends SymbolDataFactory {
 			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractMembers = this.symbols.findRootMembers(container, symbol.getName());
-		// No abstract membes found
+		// No abstract members found
 		if (mostAbstractMembers === undefined || mostAbstractMembers.length === 0) {
 			return { symbolData: new MethodSymbolData(this.symbolDataContext, id, fileNames, undefined, visibility), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
@@ -1926,7 +1926,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 		if (roots.length === 0) {
 			throw new Error(`Root symbol data factory called with symbol without roots.`);
 		}
-		const datas: SymbolData[] = [];
+		const symbolDataItems: SymbolData[] = [];
 		// The root symbols are not unique. So skipped the once we have already seen
 		const seen: Set<SymbolId> = new Set();
 		seen.add(tss.Symbol.createKey(this.typeChecker, symbol));
@@ -1934,13 +1934,13 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 			const symbolData = this.factoryContext.getOrCreateSymbolData(symbol);
 			if (!seen.has(symbolData.getId())) {
 				seen.add(symbolData.getId());
-				datas.push(symbolData);
+				symbolDataItems.push(symbolData);
 			}
 		}
 		if (Symbols.isTransient(symbol)) {
 			// For the moniker we need to find out the ands and ors. Not sure how to do this.
 			let monikerIds: Set<string> = new Set();
-			for (const symbolData of datas) {
+			for (const symbolData of symbolDataItems) {
 				const moniker = symbolData.getMostUniqueMoniker();
 				if (moniker === undefined) {
 					monikerIds.clear();
@@ -1954,19 +1954,19 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 					? monikerIds.values().next().value
 					: `[${Array.from(monikerIds).sort().join(',')}]`;
 				return {
-					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, symbolDataItems, shard, visibility),
 					moduleSystem: ModuleSystemKind.global,
 					exportPath: exportPath
 				};
 			} else {
 				return {
-					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
+					symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, symbolDataItems, shard, visibility),
 				};
 			}
 		} else {
 			const [moduleSystem, exportPath] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 			return {
-				symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, datas, shard, visibility),
+				symbolData: new SymbolDataWithRoots(this.symbolDataContext, id, currentParsedSourceFileName, symbolDataItems, shard, visibility),
 				moduleSystem, exportPath
 			};
 		}
@@ -2033,26 +2033,26 @@ abstract class ProjectDataManager {
 	private readonly reporter: Reporter;
 
 	private documentStats: number;
-	private readonly documentDatas: DocumentData[];
+	private readonly documentDataItems: DocumentData[];
 	private symbolStats: number;
-	// We only need to keep public symbol datas. Private symbol datas are cleared when the
+	// We only need to keep public symbol data. Private symbol data are cleared when the
 	// corresponding node is processed.
-	private readonly managedSymbolDatas: SymbolData[];
+	private readonly managedSymbolDataItems: SymbolData[];
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		this.emitter = emitter;
 		this.projectData = new ProjectData(emitter, group, project);
 		this.reporter = reporter;
 		this.documentStats = 0;
-		this.documentDatas = [];
+		this.documentDataItems = [];
 		this.symbolStats = 0;
-		this.managedSymbolDatas = [];
+		this.managedSymbolDataItems = [];
 	}
 
 	public abstract getParseMode(): ParseMode;
 
 	public manageSymbolData(symbolData: SymbolData): void {
-		this.managedSymbolDatas.push(symbolData);
+		this.managedSymbolDataItems.push(symbolData);
 	}
 
 	public begin(): void {
@@ -2069,14 +2069,14 @@ abstract class ProjectDataManager {
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
-		this.documentDatas.push(result);
+		this.documentDataItems.push(result);
 		return result;
 	}
 
 	public createSymbolData(_symbolId: SymbolId, create: (projectDataManager: ProjectDataManager) => FactoryResult): FactoryResult {
 		const result = create(this);
 		if (result.symbolData.getVisibility() !== SymbolDataVisibility.unknown) {
-			this.managedSymbolDatas.push(result.symbolData);
+			this.managedSymbolDataItems.push(result.symbolData);
 		}
 		this.symbolStats++;
 		return result;
@@ -2085,14 +2085,14 @@ abstract class ProjectDataManager {
 	public abstract end(): void;
 
 	protected doEnd(fileNames: Set<string> | undefined): void {
-		for (const symbolData of this.managedSymbolDatas) {
+		for (const symbolData of this.managedSymbolDataItems) {
 			if (fileNames === undefined) {
 				symbolData.end();
 			} else {
 				symbolData.resetPartitions(fileNames);
 			}
 		}
-		for (const data of this.documentDatas) {
+		for (const data of this.documentDataItems) {
 			if (!data.isClosed) {
 				data.end();
 				data.close();
@@ -2119,7 +2119,7 @@ abstract class ProjectDataManager {
 	}
 }
 
-enum LazyProectDataManagerState {
+enum LazyProjectDataManagerState {
 	start = 1,
 	beginCalled = 2,
 	beginExecuted = 3,
@@ -2128,11 +2128,11 @@ enum LazyProectDataManagerState {
 
 class LazyProjectDataManager extends ProjectDataManager {
 
-	private state: LazyProectDataManagerState;
+	private state: LazyProjectDataManagerState;
 
 	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		super(emitter, group, project, reporter);
-		this.state = LazyProectDataManagerState.start;
+		this.state = LazyProjectDataManagerState.start;
 	}
 
 	public getParseMode(): ParseMode {
@@ -2140,29 +2140,29 @@ class LazyProjectDataManager extends ProjectDataManager {
 	}
 
 	public begin(): void {
-		this.state = LazyProectDataManagerState.beginCalled;
+		this.state = LazyProjectDataManagerState.beginCalled;
 	}
 
 	private executeBegin(): void {
 		super.begin();
-		this.state = LazyProectDataManagerState.beginExecuted;
+		this.state = LazyProjectDataManagerState.beginExecuted;
 	}
 
 	private checkState(): void {
-		if (this.state !== LazyProectDataManagerState.beginExecuted) {
+		if (this.state !== LazyProjectDataManagerState.beginExecuted) {
 			throw new Error(`Project data manager has wrong state ${this.state}`);
 		}
 	}
 
 	public end(): void {
-		if (this.state === LazyProectDataManagerState.beginExecuted) {
+		if (this.state === LazyProjectDataManagerState.beginExecuted) {
 			super.doEnd(undefined);
 		}
-		this.state = LazyProectDataManagerState.endCalled;
+		this.state = LazyProjectDataManagerState.endCalled;
 	}
 
 	public getProjectData(): ProjectData {
-		if (this.state === LazyProectDataManagerState.beginCalled) {
+		if (this.state === LazyProjectDataManagerState.beginCalled) {
 			this.executeBegin();
 		}
 		this.checkState();
@@ -2170,7 +2170,7 @@ class LazyProjectDataManager extends ProjectDataManager {
 	}
 
 	public createDocumentData(fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
-		if (this.state === LazyProectDataManagerState.beginCalled) {
+		if (this.state === LazyProjectDataManagerState.beginCalled) {
 			this.executeBegin();
 		}
 		this.checkState();
@@ -2178,7 +2178,7 @@ class LazyProjectDataManager extends ProjectDataManager {
 	}
 
 	public createSymbolData(symbolId: SymbolId, create: (projectDataManager: ProjectDataManager) => FactoryResult): FactoryResult {
-		if (this.state === LazyProectDataManagerState.beginCalled) {
+		if (this.state === LazyProjectDataManagerState.beginCalled) {
 			this.executeBegin();
 		}
 		this.checkState();
@@ -2289,8 +2289,8 @@ export class DataManager implements SymbolDataContext {
 	private currentPDM: TSConfigProjectDataManager | undefined;
 	private currentProgram: ts.Program | undefined;
 
-	private readonly documentDatas: Map<string, DocumentData>;
-	private readonly symbolDatas: Map<string, SymbolData | null>;
+	private readonly documentDataItems: Map<string, DocumentData>;
+	private readonly symbolDataItems: Map<string, SymbolData | null>;
 	private readonly partitionLifeCycle: Map<string, SymbolData[]>;
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
@@ -2300,8 +2300,8 @@ export class DataManager implements SymbolDataContext {
 		this.group = group;
 		this.reporter = reporter;
 		this.dataMode = dataMode;
-		this.documentDatas = new Map();
-		this.symbolDatas = new Map();
+		this.documentDataItems = new Map();
+		this.symbolDataItems = new Map();
 		this.partitionLifeCycle = new Map();
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
@@ -2361,7 +2361,7 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {
-		return this.documentDatas.get(fileName);
+		return this.documentDataItems.get(fileName);
 	}
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
@@ -2374,7 +2374,7 @@ export class DataManager implements SymbolDataContext {
 		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
 		result = manager.createDocumentData(fileName, document, moduleSystem, monikerPath, external);
 		(result as any).sf = sourceFile;
-		this.documentDatas.set(fileName, result);
+		this.documentDataItems.set(fileName, result);
 		return result;
 	}
 
@@ -2390,7 +2390,7 @@ export class DataManager implements SymbolDataContext {
 		}
 	}
 
-	public documemntProcessed(fileName: string): void {
+	public documentProcessed(fileName: string): void {
 		let data = this.getDocumentData(fileName);
 		if (data === undefined) {
 			throw new Error(`No document data for file ${fileName}`);
@@ -2413,7 +2413,7 @@ export class DataManager implements SymbolDataContext {
 							if (this.dataMode === DataMode.free) {
 								handledSymbolData.add(symbolId);
 								symbolData.end();
-								this.symbolDatas.set(symbolId, null);
+								this.symbolDataItems.set(symbolId, null);
 							} else {
 								counter.projectDataManager.manageSymbolData(symbolData);
 							}
@@ -2425,9 +2425,9 @@ export class DataManager implements SymbolDataContext {
 				}
 			}
 		}
-		const datas = this.partitionLifeCycle.get(fileName);
-		if (datas !== undefined) {
-			for (const symbolData of datas) {
+		const items = this.partitionLifeCycle.get(fileName);
+		if (items !== undefined) {
+			for (const symbolData of items) {
 				if (!handledSymbolData.has(symbolData.getId())) {
 					symbolData.endPartition(fileName);
 				}
@@ -2438,7 +2438,7 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	public getSymbolData(symbolId: SymbolId): SymbolData | undefined {
-		let result = this.symbolDatas.get(symbolId);
+		let result = this.symbolDataItems.get(symbolId);
 		if (result === null) {
 			throw new Error(`There was already a managed symbol data for id: ${symbolId}`);
 		}
@@ -2469,27 +2469,27 @@ export class DataManager implements SymbolDataContext {
 			const counter = result.validateVisibilityOn.length;
 			this.validateVisibilityCounter.set(symbolData.getId(), { counter, projectDataManager: manager });
 			for (const sourceFile of result.validateVisibilityOn) {
-				let datas = this.validateVisibilityOn.get(sourceFile.fileName);
-				if (datas === undefined) {
-					datas = [];
-					this.validateVisibilityOn.set(sourceFile.fileName, datas);
+				let items = this.validateVisibilityOn.get(sourceFile.fileName);
+				if (items === undefined) {
+					items = [];
+					this.validateVisibilityOn.set(sourceFile.fileName, items);
 				}
-				datas.push(symbolData);
+				items.push(symbolData);
 			}
 		}
 
-		this.symbolDatas.set(symbolData.getId(), symbolData);
+		this.symbolDataItems.set(symbolData.getId(), symbolData);
 		symbolData.begin();
 		return result;
 	}
 
 	public managePartitionLifeCycle(fileName: string, symbolData: SymbolData): void {
-		let datas = this.partitionLifeCycle.get(fileName);
-		if (datas === undefined) {
-			datas = [];
-			this.partitionLifeCycle.set(fileName, datas);
+		let items = this.partitionLifeCycle.get(fileName);
+		if (items === undefined) {
+			items = [];
+			this.partitionLifeCycle.set(fileName, items);
 		}
-		datas.push(symbolData);
+		items.push(symbolData);
 	}
 }
 
@@ -2771,7 +2771,7 @@ class Visitor implements FactoryContext {
 
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
-		this.dataManager.documemntProcessed(sourceFile.fileName);
+		this.dataManager.documentProcessed(sourceFile.fileName);
 		for (let disposable of this.disposables.get(sourceFile.fileName)!) {
 			disposable();
 		}
@@ -3093,7 +3093,7 @@ class Visitor implements FactoryContext {
 	}
 
 	private endVisitArrayType(node: ts.ArrayTypeNode): void {
-		// mnake sure we emit informaiton for the Array symbol from standard libs
+		// make sure we emit information for the Array symbol from standard libs
 		this.handleSymbol(this.typeChecker.getTypeAtLocation(node).getSymbol(), node);
 	}
 
@@ -3138,12 +3138,12 @@ class Visitor implements FactoryContext {
 	private emitAttachedMonikers(path: string | undefined, exports: [SymbolData, string][]): void {
 		for (const item of exports) {
 			const originalMoniker = item[0].getPrimaryMoniker();
-			const indentifier = tss.createMonikerIdentifier(path, item[1]);
+			const identifier = tss.createMonikerIdentifier(path, item[1]);
 			// We don't have a moniker yet
 			if (originalMoniker === undefined) {
-				item[0].addMoniker(indentifier, MonikerKind.export);
+				item[0].addMoniker(identifier, MonikerKind.export);
 			} else {
-				item[0].attachMoniker(indentifier, UniquenessLevel.group, MonikerKind.export);
+				item[0].attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
 			}
 		}
 	}
@@ -3365,15 +3365,15 @@ class Visitor implements FactoryContext {
 	}
 
 	private getMonikerIdentifier(sourceFiles: ts.SourceFile[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined, exportPath: string | undefined): [string | undefined, boolean | undefined] {
-		const documentDatas: DocumentData[] | undefined = sourceFiles !== undefined
+		const documentDataItems: DocumentData[] | undefined = sourceFiles !== undefined
 			? sourceFiles.map((sourceFile) => this.getOrCreateDocumentData(sourceFile))
 			: undefined;
 
 		let monikerIdentifer: string | undefined;
 		const monikerFilePaths: Set<string> = new Set();
 		let external: boolean | undefined;
-		if (documentDatas !== undefined) {
-			for (const data of documentDatas) {
+		if (documentDataItems !== undefined) {
+			for (const data of documentDataItems) {
 				if (data.monikerFilePath !== undefined) {
 					monikerFilePaths.add(data.monikerFilePath);
 				}
