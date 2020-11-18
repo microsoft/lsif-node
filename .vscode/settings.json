@@ -19,5 +19,8 @@
 	"editor.codeActionsOnSave": {
 		"source.fixAll.eslint": true
 	},
-	"eslint.trace.server": "off"
+	"eslint.trace.server": "off",
+	"cSpell.words": [
+		"LSIF"
+	]
 }
