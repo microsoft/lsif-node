@@ -1255,7 +1255,7 @@ class Symbols {
 
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
-	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
+	constructor(private typeChecker: ts.TypeChecker) {
 		this.types = new Types(typeChecker);
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
@@ -1273,8 +1273,6 @@ class Symbols {
 				}
 			}
 		}
-		// Reference program
-		this.program;
 	}
 
 	public getType(symbol: ts.Symbol, location: ts.Node): ts.Type {
@@ -1735,11 +1733,6 @@ interface FactoryContext {
 
 
 abstract class SymbolDataFactory {
-
-	private static readonly EmitBoundaries: Set<number> = new Set<number>([
-		ts.SyntaxKind.FunctionDeclaration,
-		ts.SyntaxKind.SourceFile
-	]);
 
 	constructor(protected typeChecker: ts.TypeChecker, protected symbols: Symbols, protected factoryContext: FactoryContext, protected symbolDataContext: SymbolDataContext) {
 	}
@@ -2259,6 +2252,59 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	}
 }
 
+class ProgramSpecificData {
+
+	private typeChecker: ts.TypeChecker;
+	private symbols: Symbols;
+	private symbolDataFactories: {
+		standard: StandardSymbolDataFactory;
+		alias: AliasFactory;
+		method: MethodFactory;
+		withRoots: SymbolDataWithRootsFactory;
+		transient: TransientFactory;
+		typeAlias: TypeAliasFactory;
+	};
+
+	constructor(program: ts.Program, factoryContext: FactoryContext, symbolDataContext: SymbolDataContext) {
+		const typeChecker = program.getTypeChecker();
+		this.typeChecker = typeChecker;
+		this.symbols = new Symbols(typeChecker);
+		this.symbolDataFactories = {
+			standard: new StandardSymbolDataFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
+			alias: new AliasFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
+			method: new MethodFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
+			withRoots: new SymbolDataWithRootsFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
+			transient: new TransientFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
+			typeAlias: new TypeAliasFactory(typeChecker, this.symbols, factoryContext, symbolDataContext)
+		};
+	}
+
+	public getFactory(symbol: ts.Symbol): SymbolDataFactory {
+		const rootSymbols = this.typeChecker.getRootSymbols(symbol);
+		if (rootSymbols.length > 0 && rootSymbols[0] !== symbol) {
+			return this.symbolDataFactories.withRoots;
+		}
+
+		if (Symbols.isTransient(symbol)) {
+			return this.symbolDataFactories.transient;
+		}
+		if (Symbols.isTypeAlias(symbol)) {
+			return this.symbolDataFactories.typeAlias;
+		}
+		if (Symbols.isAliasSymbol(symbol)) {
+			return this.symbolDataFactories.alias;
+		}
+		if (Symbols.isMethodSymbol(symbol)) {
+			return this.symbolDataFactories.method;
+		}
+		return this.symbolDataFactories.standard;
+	}
+
+	public getOrCreateSymbolData(): void {
+
+	}
+}
+
 interface DataManagerResult {
 	readonly symbolData: SymbolData;
 	readonly exportPath?: string;
@@ -2591,7 +2637,7 @@ class Visitor implements FactoryContext {
 			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = dataManager;
-		this.symbols = new Symbols(this.program, this.typeChecker);
+		this.symbols = new Symbols(this.typeChecker);
 		this.dataManager.beginProject(this.program, this.project, configLocation || process.cwd());
 		this.disposables = new Map();
 		this.symbolDataFactories = {
