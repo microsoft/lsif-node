@@ -1917,9 +1917,6 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 		const parseMode = projectDataManager.getParseMode();
 		const [,,visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const shard = projectDataManager.getProjectData().project;
-		// const currentParsedSourceFileName = Symbols.isTransient(symbol)
-		// 	? undefined
-		// 	: currentParsedSourceFile !== undefined ? currentParsedSourceFile.fileName : undefined;
 		const currentParsedSourceFileName = currentParsedSourceFile !== undefined ? currentParsedSourceFile.fileName : undefined;
 
 		const roots = this.typeChecker.getRootSymbols(symbol);
@@ -2373,7 +2370,6 @@ export class DataManager implements SymbolDataContext {
 
 		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
 		result = manager.createDocumentData(fileName, document, moduleSystem, monikerPath, external);
-		(result as any).sf = sourceFile;
 		this.documentDataItems.set(fileName, result);
 		return result;
 	}
@@ -3345,22 +3341,6 @@ class Visitor implements FactoryContext {
 				}
 			}
 		}
-		// if (tss.isBlockScopedVariable(symbol)) {
-		// 	let type = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
-		// 	if (type.symbol) {
-		// 		let typeSymbolData = this.getOrCreateSymbolData(type.symbol);
-		// 		let result: TypeDefinitionResult | undefined;
-		// 		if (Array.isArray(typeSymbolData.declarations)) {
-		// 			result = this.context.vertex.typeDefinitionResult(typeSymbolData.declarations.map(declaration => declaration.id));
-		// 		} else if (typeSymbolData.declarations !== undefined) {
-		// 			result = this.context.vertex.typeDefinitionResult([typeSymbolData.declarations.id]);
-		// 		}
-		// 		if (result !== undefined) {
-		// 			this.context.emit(result);
-		// 			this.context.emit(this.context.edge.typeDefinition(this.resultSet, result));
-		// 		}
-		// 	}
-		// }
 		return result;
 	}
 
