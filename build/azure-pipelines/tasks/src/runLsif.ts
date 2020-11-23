@@ -48,7 +48,7 @@ async function runCommand(command: string, args: ReadonlyArray<string>, cwd?: st
 				reject(1);
 			}
 			if (code === null || code === 0) {
-				resolve();
+				resolve(undefined);
 			} else {
 				reject(code);
 			}
