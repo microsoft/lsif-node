@@ -23,6 +23,7 @@ import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
+import { Emitter } from 'emitters/emitter';
 
 interface Disposable {
 	(): void;
@@ -2252,9 +2253,27 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	}
 }
 
-class ProgramSpecificData {
+interface TSProjectConfig {
+	projectRoot: string;
+	sourceRoot: string;
+	outDir: string;
+	dependentOutDirs: string[];
+}
 
+interface TSProjectContext extends EmitterContext {
+	getDocumentData(sourceFile: ts.SourceFile): DocumentData | undefined;
+	getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData;
+	getSymbolData(symbol: ts.Symbol): SymbolData | undefined;
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+}
+
+class TSProject {
+
+	private context: TSProjectContext;
+	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
+	private config: TSProjectConfig;
+
 	private symbols: Symbols;
 	private symbolDataFactories: {
 		standard: StandardSymbolDataFactory;
@@ -2265,18 +2284,46 @@ class ProgramSpecificData {
 		typeAlias: TypeAliasFactory;
 	};
 
-	constructor(program: ts.Program, factoryContext: FactoryContext, symbolDataContext: SymbolDataContext) {
-		const typeChecker = program.getTypeChecker();
+	constructor(context: TSProjectContext, languageService: ts.LanguageService, config: TSProjectConfig, symbolDataContext: SymbolDataContext) {
+		this.context = context;
+		this.languageService = languageService;
+		const typeChecker = languageService.getProgram()!.getTypeChecker();
 		this.typeChecker = typeChecker;
+		this.config = config;
+
 		this.symbols = new Symbols(typeChecker);
 		this.symbolDataFactories = {
-			standard: new StandardSymbolDataFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
-			alias: new AliasFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
-			method: new MethodFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
-			withRoots: new SymbolDataWithRootsFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
-			transient: new TransientFactory(typeChecker, this.symbols, factoryContext, symbolDataContext),
-			typeAlias: new TypeAliasFactory(typeChecker, this.symbols, factoryContext, symbolDataContext)
+			standard: new StandardSymbolDataFactory(typeChecker, this.symbols, context, symbolDataContext),
+			alias: new AliasFactory(typeChecker, this.symbols, context, symbolDataContext),
+			method: new MethodFactory(typeChecker, this.symbols, context, symbolDataContext),
+			withRoots: new SymbolDataWithRootsFactory(typeChecker, this.symbols, context, symbolDataContext),
+			transient: new TransientFactory(typeChecker, this.symbols, context, symbolDataContext),
+			typeAlias: new TypeAliasFactory(typeChecker, this.symbols, context, symbolDataContext)
 		};
+	}
+
+	private get vertex(): VertexBuilder {
+		return this.context.vertex;
+	}
+
+	private get edge(): EdgeBuilder {
+		return this.context.edge;
+	}
+
+	private emit(element: Vertex | Edge): void {
+		this.context.emit(element);
+	}
+
+	public getProgram(): ts.Program {
+		return this.languageService.getProgram()!;
+	}
+
+	public getSymbolId(symbol: ts.Symbol): SymbolId {
+		return tss.Symbol.createKey(this.typeChecker, symbol);
+	}
+
+	public getRootFileNames(): ReadonlyArray<string> {
+		return this.languageService.getProgram()!.getRootFileNames();
 	}
 
 	public getFactory(symbol: ts.Symbol): SymbolDataFactory {
@@ -2300,8 +2347,197 @@ class ProgramSpecificData {
 		return this.symbolDataFactories.standard;
 	}
 
-	public getOrCreateSymbolData(): void {
+	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile): DocumentData {
+		const projectRoot = this.config.projectRoot;
+		const sourceRoot = this.config.sourceRoot;
+		const outDir = this.config.outDir;
+		const dependentOutDirs = this.config.dependentOutDirs;
 
+		const isFromExternalLibrary = (sourceFile: ts.SourceFile): boolean => {
+			return tss.Program.isSourceFileFromExternalLibrary(this.languageService.getProgram()!, sourceFile);
+		};
+
+		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
+			const fileName = sourceFile.fileName;
+			return !sourceFile.isDeclarationFile || paths.isParent(sourceRoot, fileName);
+		};
+
+		const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
+			if (!sourceFile.isDeclarationFile) {
+				return false;
+			}
+			const fileName = sourceFile.fileName;
+			for (let outDir of dependentOutDirs) {
+				if (fileName.startsWith(outDir)) {
+					return true;
+				}
+			}
+			return false;
+		};
+
+		const isFromProjectRoot = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(projectRoot, sourceFile.fileName);
+		};
+
+		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
+		const fileName = sourceFile.fileName;
+
+		let monikerPath: string | undefined;
+		let external: boolean = false;
+		if (isFromExternalLibrary(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
+		} else if (isFromProjectSources(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(projectRoot, tss.toOutLocation(fileName, sourceRoot, outDir));
+		} else if (isFromDependentProject(sourceFile)) {
+			external = true;
+			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
+		} else if (isFromProjectRoot(sourceFile)) {
+			external = sourceFile.isDeclarationFile;
+			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
+		}
+
+		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
+		return manager.createDocumentData(fileName, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external);
+	}
+
+	public createSymbolData(manager: ProjectDataManager, symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): { symbolData: SymbolData; validateVisibilityOn?: ts.SourceFile[] } {
+		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
+		const factory = this.getFactory(symbol);
+		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
+		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
+		// Don't do this for symbols that are source files to avoid recursive initialization (e.g. moniker assignment)
+		if (!Symbols.mayBeSourceFile(symbol) && declarationSourceFiles !== undefined) {
+			for (const sourceFile of declarationSourceFiles) {
+				this.context.getOrCreateDocumentData(sourceFile);
+			}
+		}
+
+		const result = manager.createSymbolData(id, (projectDataManager) => {
+			return factory.create(symbol, id, declarationSourceFiles, projectDataManager, __parsedSourceFile);
+		});
+		const { symbolData, moduleSystem, exportPath, validateVisibilityOn } = result;
+
+		const [monikerIdentifer, external] = this.getMonikerIdentifier(declarationSourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
+
+		if (monikerIdentifer === undefined) {
+			symbolData.addMoniker(id, MonikerKind.local);
+		} else {
+			if (external === true) {
+				symbolData.addMoniker(monikerIdentifer, MonikerKind.import);
+			} else {
+				symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
+			}
+		}
+
+		if (declarations === undefined || declarations.length === 0 || Symbols.isTransient(symbol)) {
+			return result;
+		}
+
+		let hover: lsp.Hover | undefined;
+		for (let declaration of declarations) {
+			const sourceFile = declaration.getSourceFile();
+			const [identifierNode, identifierText] = factory.getIdentifierInformation(symbol, declaration);
+			if (identifierNode !== undefined && identifierText !== undefined) {
+				const documentData = this.context.getDocumentData(sourceFile);
+				if (documentData === undefined) {
+					throw new Error(`No document data for ${sourceFile.fileName} found`);
+				}
+				const range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);
+				const definition = this.vertex.range(range, {
+					type: RangeTagTypes.definition,
+					text: identifierText,
+					kind: Converter.asSymbolKind(declaration),
+					fullRange: Converter.rangeFromNode(sourceFile, declaration),
+				});
+				documentData.addRange(definition);
+				symbolData.addDefinition(sourceFile.fileName, definition);
+				symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
+				if (hover === undefined && tss.Node.isNamedDeclaration(declaration)) {
+					// let start = Date.now();
+					hover = this.getHover(declaration.name, sourceFile);
+					// this.hoverCalls++;
+					// let diff = Date.now() - start;
+					// this.hoverTotal += diff;
+					// if (diff > 100) {
+					// 	console.log(`Computing hover took ${diff} ms for symbol ${id} | ${symbol.getName()} | ${this.hoverCalls} | ${this.hoverTotal}`)
+					// }
+					if (hover) {
+						symbolData.addHover(hover);
+					} else {
+						// console.log(`Hover returned undefined for $symbol ${id} | ${symbol.getName()}`);
+					}
+				}
+			}
+		}
+		return { symbolData, validateVisibilityOn };
+	}
+
+	private getMonikerIdentifier(sourceFiles: ts.SourceFile[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined, exportPath: string | undefined): [string | undefined, boolean | undefined] {
+		const documentDataItems: DocumentData[] | undefined = sourceFiles !== undefined
+			? sourceFiles.map((sourceFile) => this.context.getOrCreateDocumentData(sourceFile))
+			: undefined;
+
+		let monikerIdentifer: string | undefined;
+		const monikerFilePaths: Set<string> = new Set();
+		let external: boolean | undefined;
+		if (documentDataItems !== undefined) {
+			for (const data of documentDataItems) {
+				if (data.monikerFilePath !== undefined) {
+					monikerFilePaths.add(data.monikerFilePath);
+				}
+				if (external === undefined) {
+					external = data.external;
+				} else {
+					external = external && data.external;
+				}
+			}
+		}
+		const monikerFilePath: string | undefined = monikerFilePaths.size === 0
+			? undefined
+			: monikerFilePaths.size === 1
+				? monikerFilePaths.values().next().value
+				: `[${Array.from(monikerFilePaths.values()).join(',')}]`;
+
+		if (isSourceFile && monikerFilePath !== undefined) {
+			monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, undefined);
+		}
+		if (monikerIdentifer === undefined && exportPath !== undefined) {
+			if (moduleSystem === undefined || moduleSystem === ModuleSystemKind.global) {
+				monikerIdentifer = tss.createMonikerIdentifier(undefined, exportPath);
+			}
+			if (monikerIdentifer === undefined && monikerFilePath !== undefined) {
+				monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, exportPath);
+			}
+		}
+		return [monikerIdentifer, external];
+	}
+
+	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
+		if (sourceFile === undefined) {
+			sourceFile = node.getSourceFile();
+		}
+		// ToDo@dbaeumer Crashes sometimes with.
+		// TypeError: Cannot read property 'kind' of undefined
+		// 	at pipelineEmitWithHint (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84783:39)
+		// 	at print (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84683:13)
+		// 	at Object.writeNode (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84543:13)
+		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109134:50
+		// 	at Object.mapToDisplayParts (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:97873:13)
+		// 	at Object.getSymbolDisplayPartsDocumentationAndSymbolKind (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109132:61)
+		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122472:41
+		// 	at Object.runWithCancellationToken (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:31637:28)
+		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
+		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
+		try {
+			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
+			if (quickInfo === undefined) {
+				return undefined;
+			}
+			return Converter.asHover(sourceFile, quickInfo);
+		} catch (err) {
+			return undefined;
+		}
 	}
 }
 
@@ -2329,8 +2565,9 @@ export class DataManager implements SymbolDataContext {
 	private readonly globalPDM: GlobalProjectDataManager;
 	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
 	private readonly groupPDM: GroupProjectDataManager;
+
+	private currentTSProject: TSProject | undefined;
 	private currentPDM: TSConfigProjectDataManager | undefined;
-	private currentProgram: ts.Program | undefined;
 
 	private readonly documentDataItems: Map<string, DocumentData>;
 	private readonly symbolDataItems: Map<string, SymbolData | null>;
@@ -2372,13 +2609,19 @@ export class DataManager implements SymbolDataContext {
 		this.groupPDM.begin();
 	}
 
-	public beginProject(program: ts.Program, project: Project, projectRoot: string): void {
+	public beginProject(tsProject: TSProject, project: Project, projectRoot: string): void {
 		if (this.currentPDM !== undefined) {
 			throw new Error(`There is already a current program data manager set`);
 		}
-		this.currentProgram = program;
-		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, program.getRootFileNames(), this.reporter);
+		this.currentTSProject = tsProject;
+		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, tsProject.getRootFileNames(), this.reporter);
 		this.currentPDM.begin();
+	}
+
+	private assertTSProject(value: TSProject | undefined): asserts value is TSProject {
+		if (value === undefined) {
+			throw new Error(`No current TS project set.`);
+		}
 	}
 
 	public getProjectData(): ProjectData {
@@ -2388,13 +2631,13 @@ export class DataManager implements SymbolDataContext {
 		return this.currentPDM.getProjectData();
 	}
 
-	public endProject(program: ts.Program): void {
-		if (this.currentProgram !== program || this.currentPDM === undefined) {
-			throw new Error(`Current project is not the one to end`);
+	public endProject(tsProject: TSProject): void {
+		if (this.currentTSProject !== tsProject || this.currentPDM === undefined) {
+			throw new Error(`Current project is not the one passed to end.`);
 		}
 		this.currentPDM.end();
 		this.currentPDM = undefined;
-		this.currentProgram = undefined;
+		this.currentTSProject = undefined;
 	}
 
 	public end(): void {
@@ -2403,25 +2646,26 @@ export class DataManager implements SymbolDataContext {
 		this.groupPDM.end();
 	}
 
-	public getDocumentData(fileName: string): DocumentData | undefined {
+	public getDocumentData(sourceFile: ts.SourceFile | string): DocumentData | undefined {
+		const fileName = typeof sourceFile === 'string' ? sourceFile : sourceFile.fileName;
 		return this.documentDataItems.get(fileName);
 	}
 
-	public getOrCreateDocumentData(sourceFile: ts.SourceFile, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
+	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
+		this.assertTSProject(this.currentTSProject);
 		const fileName = sourceFile.fileName;
-		let result = this.getDocumentData(fileName);
+		let result = this.documentDataItems.get(fileName);
 		if (result !== undefined) {
 			return result;
 		}
-
 		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
-		result = manager.createDocumentData(fileName, document, moduleSystem, monikerPath, external);
+		result = this.currentTSProject.createDocumentData(manager, sourceFile);
 		this.documentDataItems.set(fileName, result);
 		return result;
 	}
 
 	private getProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager {
-		if (this.currentProgram !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentProgram, sourceFile)) {
+		if (this.currentTSProject !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentTSProject.getProgram(), sourceFile)) {
 			return this.defaultLibsPDM;
 		} else if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
 			return this.currentPDM;
@@ -2479,19 +2723,30 @@ export class DataManager implements SymbolDataContext {
 		data.close();
 	}
 
-	public getSymbolData(symbolId: SymbolId): SymbolData | undefined {
-		let result = this.symbolDataItems.get(symbolId);
+	public getSymbolData(symbol: SymbolId | ts.Symbol): SymbolData | undefined {
+		let symbolId: string;
+		if (typeof symbol === 'string') {
+			symbolId = symbol;
+		} else {
+			this.assertTSProject(this.currentTSProject);
+			symbolId = this.currentTSProject.getSymbolId(symbol);
+		}
+		const result = this.symbolDataItems.get(symbolId);
 		if (result === null) {
 			throw new Error(`There was already a managed symbol data for id: ${symbolId}`);
 		}
 		return result;
 	}
 
-	public getOrCreateSymbolData(symbolId: SymbolId, sourceFiles: ts.SourceFile[] | undefined, useGlobalProjectDataManager: boolean, create: (projectDataManager: ProjectDataManager) => FactoryResult): DataManagerResult {
-		let symbolData = this.getSymbolData(symbolId);
+	public getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): SymbolData {
+		let symbolData = this.getSymbolData(symbol);
 		if (symbolData !== undefined) {
-			return { symbolData };
+			return symbolData;
 		}
+		this.assertTSProject(this.currentTSProject);
+		const factory = this.currentTSProject.getFactory(symbol);
+		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
+		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
 		let manager: ProjectDataManager;
 		if (useGlobalProjectDataManager || sourceFiles === undefined || sourceFiles.length === 0) {
 			manager = this.globalPDM;
@@ -2504,8 +2759,7 @@ export class DataManager implements SymbolDataContext {
 				}
 			}
 		}
-
-		const result = manager.createSymbolData(symbolId, create);
+		const result = this.currentTSProject.createSymbolData(manager, symbol, __location, __parsedSourceFile);
 		symbolData = result.symbolData;
 		if (manager.getParseMode() === ParseMode.full && symbolData.getVisibility() === SymbolDataVisibility.unknown && result.validateVisibilityOn !== undefined && result.validateVisibilityOn.length > 0) {
 			const counter = result.validateVisibilityOn.length;
@@ -2522,7 +2776,7 @@ export class DataManager implements SymbolDataContext {
 
 		this.symbolDataItems.set(symbolData.getId(), symbolData);
 		symbolData.begin();
-		return result;
+		return symbolData;
 	}
 
 	public managePartitionLifeCycle(fileName: string, symbolData: SymbolData): void {
@@ -2581,8 +2835,9 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 	}
 }
 
-class Visitor implements FactoryContext {
+class Visitor {
 
+	private tsProject: TSProject;
 	private program: ts.Program;
 	private typeChecker: ts.TypeChecker;
 
@@ -2598,14 +2853,6 @@ class Visitor implements FactoryContext {
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
-	private symbolDataFactories: {
-		standard: StandardSymbolDataFactory;
-		alias: AliasFactory;
-		method: MethodFactory;
-		withRoots: SymbolDataWithRootsFactory;
-		transient: TransientFactory;
-		typeAlias: TypeAliasFactory;
-	};
 
 	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
 		this.program = languageService.getProgram()!;
@@ -2637,17 +2884,16 @@ class Visitor implements FactoryContext {
 			this.outDir = this.sourceRoot;
 		}
 		this.dataManager = dataManager;
+		this.tsProject = new TSProject(this.dataManager, languageService, {
+			projectRoot: options.projectRoot,
+			sourceRoot: this.sourceRoot,
+			outDir: this.outDir,
+			dependentOutDirs: this.dependentOutDirs
+		}, this.dataManager);
+
 		this.symbols = new Symbols(this.typeChecker);
-		this.dataManager.beginProject(this.program, this.project, configLocation || process.cwd());
+		this.dataManager.beginProject(this.tsProject, this.project, configLocation || process.cwd());
 		this.disposables = new Map();
-		this.symbolDataFactories = {
-			standard: new StandardSymbolDataFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			alias: new AliasFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			method: new MethodFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			withRoots: new SymbolDataWithRootsFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			transient: new TransientFactory(this.typeChecker, this.symbols, this, this.dataManager),
-			typeAlias: new TypeAliasFactory(this.typeChecker, this.symbols, this, this.dataManager)
-		};
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -2907,7 +3153,7 @@ class Visitor implements FactoryContext {
 				continue;
 			}
 			const type = this.symbols.getType(symbol, node);
-			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 		}
 	}
 
@@ -2943,7 +3189,7 @@ class Visitor implements FactoryContext {
 		const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name)
+			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name)
 		);
 	}
 
@@ -2954,7 +3200,7 @@ class Visitor implements FactoryContext {
 		}
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
+			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -2968,13 +3214,13 @@ class Visitor implements FactoryContext {
 		const bases = this.symbols.types.getBaseTypes(type);
 		if (bases !== undefined) {
 			for (const type of bases) {
-				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 			}
 		}
 		const extendz = this.symbols.types.getExtendsTypes(type);
 		if (extendz !== undefined) {
 			for (const type of extendz) {
-				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 			}
 		}
 	}
@@ -3016,7 +3262,7 @@ class Visitor implements FactoryContext {
 
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
+			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3062,7 +3308,7 @@ class Visitor implements FactoryContext {
 			const sourceFile = node.getSourceFile();
 			this.emitAttachedMonikers(
 				monikerParts.path,
-				this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, name)
+				this.symbols.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, name)
 			);
 		}
 		return false;
@@ -3103,7 +3349,7 @@ class Visitor implements FactoryContext {
 					const sourceFile = node.getSourceFile();
 					this.emitAttachedMonikers(
 						monikerParts.path,
-						this.symbols.computeAdditionalExportPaths(this, sourceFile, aliasedSymbol, monikerParts.name)
+						this.symbols.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, monikerParts.name)
 					);
 				}
 			}
@@ -3244,238 +3490,18 @@ class Visitor implements FactoryContext {
 	}
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
-		const isFromExternalLibrary = (sourceFile: ts.SourceFile): boolean => {
-			return tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile);
-		};
-
-		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
-			const fileName = sourceFile.fileName;
-			return !sourceFile.isDeclarationFile || paths.isParent(this.sourceRoot, fileName);
-		};
-
-		const isFromDependentProject = (sourceFile: ts.SourceFile): boolean => {
-			if (!sourceFile.isDeclarationFile) {
-				return false;
-			}
-			const fileName = sourceFile.fileName;
-			for (let outDir of this.dependentOutDirs) {
-				if (fileName.startsWith(outDir)) {
-					return true;
-				}
-			}
-			return false;
-		};
-
-		const isFromProjectRoot = (sourceFile: ts.SourceFile): boolean => {
-			return paths.isParent(this.projectRoot, sourceFile.fileName);
-		};
-
-		let result = this.dataManager.getDocumentData(sourceFile.fileName);
-		if (result !== undefined) {
-			return result;
-		}
-
-		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
-		const fileName = sourceFile.fileName;
-
-		let monikerPath: string | undefined;
-		let external: boolean = false;
-		if (isFromExternalLibrary(sourceFile)) {
-			external = true;
-			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
-		} else if (isFromProjectSources(sourceFile)) {
-			monikerPath = tss.computeMonikerPath(this.projectRoot, tss.toOutLocation(fileName, this.sourceRoot, this.outDir));
-		} else if (isFromDependentProject(sourceFile)) {
-			external = true;
-			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
-		} else if (isFromProjectRoot(sourceFile)) {
-			external = sourceFile.isDeclarationFile;
-			monikerPath = tss.computeMonikerPath(this.projectRoot, fileName);
-		}
-
-		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
-		result = this.dataManager.getOrCreateDocumentData(sourceFile, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external);
-
-		// In TS source files have symbols and can be referenced in import statements with * imports.
-		// So even if we don't parse the source file we need to create a symbol data so that when
-		// referenced we have the data.
-		if (symbol !== undefined) {
-			this.getOrCreateSymbolData(symbol, sourceFile);
-		}
-		return result;
+		return this.dataManager.getOrCreateDocumentData(sourceFile);
 	}
 
 	// private hoverCalls: number = 0;
 	// private hoverTotal: number = 0;
 
-	public getSymbolData(symbolId: SymbolId): SymbolData | undefined {
+	private getSymbolData(symbolId: SymbolId): SymbolData | undefined {
 		return this.dataManager.getSymbolData(symbolId);
 	}
 
-	public getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): SymbolData {
-		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		let result = this.dataManager.getSymbolData(id);
-		if (result !== undefined) {
-			if (result.getVisibility() === SymbolDataVisibility.internal) {
-				this.options.reporter.reportInternalSymbol(symbol, id, __location);
-			}
-			return result;
-		}
-		const factory = this.getFactory(symbol);
-		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
-		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
-		// Don't do this for symbols that are source files to avoid recursive initialization (e.g. moniker assignment)
-		if (!Symbols.mayBeSourceFile(symbol) && declarationSourceFiles !== undefined) {
-			for (const sourceFile of declarationSourceFiles) {
-				this.getOrCreateDocumentData(sourceFile);
-			}
-		}
-
-		const { symbolData, exportPath, moduleSystem } = this.dataManager.getOrCreateSymbolData(id, declarationSourceFiles, factory.useGlobalProjectDataManager(symbol), (projectDataManager) => {
-			return factory.create(symbol, id, declarationSourceFiles, projectDataManager, __parsedSourceFile);
-		});
-		result = symbolData;
-		const [monikerIdentifer, external] = this.getMonikerIdentifier(declarationSourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
-
-		if (monikerIdentifer === undefined) {
-			result.addMoniker(id, MonikerKind.local);
-		} else {
-			if (external === true) {
-				result.addMoniker(monikerIdentifer, MonikerKind.import);
-			} else {
-				result.addMoniker(monikerIdentifer, MonikerKind.export);
-			}
-		}
-
-		if (declarations === undefined || declarations.length === 0 || Symbols.isTransient(symbol)) {
-			return result;
-		}
-
-		let hover: lsp.Hover | undefined;
-		for (let declaration of declarations) {
-			const sourceFile = declaration.getSourceFile();
-			const [identifierNode, identifierText] = factory.getIdentifierInformation(symbol, declaration);
-			if (identifierNode !== undefined && identifierText !== undefined) {
-				const documentData = this.dataManager.getDocumentData(sourceFile.fileName);
-				if (documentData === undefined) {
-					throw new Error(`No document data for ${sourceFile.fileName} found`);
-				}
-				const range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);
-				const definition = this.vertex.range(range, {
-					type: RangeTagTypes.definition,
-					text: identifierText,
-					kind: Converter.asSymbolKind(declaration),
-					fullRange: Converter.rangeFromNode(sourceFile, declaration),
-				});
-				documentData.addRange(definition);
-				result.addDefinition(sourceFile.fileName, definition);
-				result.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
-				if (hover === undefined && tss.Node.isNamedDeclaration(declaration)) {
-					// let start = Date.now();
-					hover = this.getHover(declaration.name, sourceFile);
-					// this.hoverCalls++;
-					// let diff = Date.now() - start;
-					// this.hoverTotal += diff;
-					// if (diff > 100) {
-					// 	console.log(`Computing hover took ${diff} ms for symbol ${id} | ${symbol.getName()} | ${this.hoverCalls} | ${this.hoverTotal}`)
-					// }
-					if (hover) {
-						result.addHover(hover);
-					} else {
-						// console.log(`Hover returned undefined for $symbol ${id} | ${symbol.getName()}`);
-					}
-				}
-			}
-		}
-		return result;
-	}
-
-	private getMonikerIdentifier(sourceFiles: ts.SourceFile[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined, exportPath: string | undefined): [string | undefined, boolean | undefined] {
-		const documentDataItems: DocumentData[] | undefined = sourceFiles !== undefined
-			? sourceFiles.map((sourceFile) => this.getOrCreateDocumentData(sourceFile))
-			: undefined;
-
-		let monikerIdentifer: string | undefined;
-		const monikerFilePaths: Set<string> = new Set();
-		let external: boolean | undefined;
-		if (documentDataItems !== undefined) {
-			for (const data of documentDataItems) {
-				if (data.monikerFilePath !== undefined) {
-					monikerFilePaths.add(data.monikerFilePath);
-				}
-				if (external === undefined) {
-					external = data.external;
-				} else {
-					external = external && data.external;
-				}
-			}
-		}
-		const monikerFilePath: string | undefined = monikerFilePaths.size === 0
-			? undefined
-			: monikerFilePaths.size === 1
-				? monikerFilePaths.values().next().value
-				: `[${Array.from(monikerFilePaths.values()).join(',')}]`;
-
-		if (isSourceFile && monikerFilePath !== undefined) {
-			monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, undefined);
-		}
-		if (monikerIdentifer === undefined && exportPath !== undefined) {
-			if (moduleSystem === undefined || moduleSystem === ModuleSystemKind.global) {
-				monikerIdentifer = tss.createMonikerIdentifier(undefined, exportPath);
-			}
-			if (monikerIdentifer === undefined && monikerFilePath !== undefined) {
-				monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, exportPath);
-			}
-		}
-		return [monikerIdentifer, external];
-	}
-
-	private getFactory(symbol: ts.Symbol): SymbolDataFactory {
-		const rootSymbols = this.typeChecker.getRootSymbols(symbol);
-		if (rootSymbols.length > 0 && rootSymbols[0] !== symbol) {
-			return this.symbolDataFactories.withRoots;
-		}
-
-		if (Symbols.isTransient(symbol)) {
-			return this.symbolDataFactories.transient;
-		}
-		if (Symbols.isTypeAlias(symbol)) {
-			return this.symbolDataFactories.typeAlias;
-		}
-		if (Symbols.isAliasSymbol(symbol)) {
-			return this.symbolDataFactories.alias;
-		}
-		if (Symbols.isMethodSymbol(symbol)) {
-			return this.symbolDataFactories.method;
-		}
-		return this.symbolDataFactories.standard;
-	}
-
-	public getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
-		if (sourceFile === undefined) {
-			sourceFile = node.getSourceFile();
-		}
-		// ToDo@dbaeumer Crashes sometimes with.
-		// TypeError: Cannot read property 'kind' of undefined
-		// 	at pipelineEmitWithHint (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84783:39)
-		// 	at print (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84683:13)
-		// 	at Object.writeNode (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:84543:13)
-		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109134:50
-		// 	at Object.mapToDisplayParts (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:97873:13)
-		// 	at Object.getSymbolDisplayPartsDocumentationAndSymbolKind (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:109132:61)
-		// 	at C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122472:41
-		// 	at Object.runWithCancellationToken (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:31637:28)
-		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
-		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
-		try {
-			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
-			if (quickInfo === undefined) {
-				return undefined;
-			}
-			return Converter.asHover(sourceFile, quickInfo);
-		} catch (err) {
-			return undefined;
-		}
+	private getOrCreateSymbolData(symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): SymbolData {
+		return this.dataManager.getOrCreateSymbolData(symbol, __location, __parsedSourceFile);
 	}
 
 	public get vertex(): VertexBuilder {
