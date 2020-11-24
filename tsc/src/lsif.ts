@@ -2002,7 +2002,7 @@ export interface Reporter {
 
 export interface Options {
 	group: Group;
-	projectRoot: string;
+	groupRoot: string;
 	projectName: string;
 	tsConfigFile: string | undefined;
 	stdout: boolean;
@@ -2254,7 +2254,8 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 }
 
 interface TSProjectConfig {
-	projectRoot: string;
+	groupRoot: string;
+	configLocation: string | undefined;
 	sourceRoot: string;
 	outDir: string;
 	dependentOutDirs: string[];
@@ -2263,7 +2264,7 @@ interface TSProjectConfig {
 interface TSProjectContext extends EmitterContext {
 	getDocumentData(sourceFile: ts.SourceFile): DocumentData | undefined;
 	getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData;
-	getSymbolData(symbol: ts.Symbol): SymbolData | undefined;
+	getSymbolData(symbol: ts.Symbol | string): SymbolData | undefined;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
 
@@ -2284,12 +2285,45 @@ class TSProject {
 		typeAlias: TypeAliasFactory;
 	};
 
-	constructor(context: TSProjectContext, languageService: ts.LanguageService, config: TSProjectConfig, symbolDataContext: SymbolDataContext) {
+	constructor(context: TSProjectContext, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
 		this.context = context;
 		this.languageService = languageService;
-		const typeChecker = languageService.getProgram()!.getTypeChecker();
+		const program = languageService.getProgram()!;
+		const typeChecker = program.getTypeChecker();
 		this.typeChecker = typeChecker;
-		this.config = config;
+
+		let dependentOutDirs = [];
+		for (const info of dependsOn) {
+			dependentOutDirs.push(info.outDir);
+		}
+		dependentOutDirs.sort((a, b) => {
+			return b.length - a.length;
+		});
+
+		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
+		const compilerOptions = program.getCompilerOptions();
+		let sourceRoot: string;
+		if (compilerOptions.rootDir !== undefined) {
+			sourceRoot = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
+		} else if (compilerOptions.baseUrl !== undefined) {
+			sourceRoot = tss.makeAbsolute(compilerOptions.baseUrl, configLocation);
+		} else {
+			sourceRoot = tss.normalizePath(tss.Program.getCommonSourceDirectory(program));
+		}
+		let outDir: string;
+		if (compilerOptions.outDir !== undefined) {
+			outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
+		} else {
+			outDir = sourceRoot;
+		}
+
+		this.config = {
+			groupRoot: options.groupRoot,
+			configLocation,
+			sourceRoot,
+			outDir,
+			dependentOutDirs
+		};
 
 		this.symbols = new Symbols(typeChecker);
 		this.symbolDataFactories = {
@@ -2314,8 +2348,20 @@ class TSProject {
 		this.context.emit(element);
 	}
 
+	public getConfig(): TSProjectConfig {
+		return this.config;
+	}
+
+	public setSymbolChainCache(cache: ts.SymbolChainCache): void {
+		this.typeChecker.setSymbolChainCache(cache);
+	}
+
 	public getProgram(): ts.Program {
 		return this.languageService.getProgram()!;
+	}
+
+	public getSymbols(): Symbols {
+		return this.symbols;
 	}
 
 	public getSymbolId(symbol: ts.Symbol): SymbolId {
@@ -2324,6 +2370,34 @@ class TSProject {
 
 	public getRootFileNames(): ReadonlyArray<string> {
 		return this.languageService.getProgram()!.getRootFileNames();
+	}
+
+	public getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
+		return this.typeChecker.getSymbolAtLocation(node);
+	}
+
+	public getTypeAtLocation(node: ts.Node): ts.Type {
+		return this.typeChecker.getTypeAtLocation(node);
+	}
+
+	public getTypeOfSymbolAtLocation(symbol: ts.Symbol, node: ts.Node): ts.Type {
+		return this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+	}
+
+	public getAliasedSymbol(symbol: ts.Symbol): ts.Symbol {
+		return this.typeChecker.getAliasedSymbol(symbol);
+	}
+
+	public isSourceFileDefaultLibrary(sourceFile: ts.SourceFile): boolean {
+		return tss.Program.isSourceFileDefaultLibrary(this.getProgram(), sourceFile);
+	}
+
+	public isSourceFileFromExternalLibrary(sourceFile: ts.SourceFile): boolean {
+		return tss.Program.isSourceFileFromExternalLibrary(this.getProgram(), sourceFile);
+	}
+
+	public getCommonSourceDirectory(): string {
+		return tss.Program.getCommonSourceDirectory(this.getProgram());
 	}
 
 	public getFactory(symbol: ts.Symbol): SymbolDataFactory {
@@ -2348,7 +2422,7 @@ class TSProject {
 	}
 
 	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile): DocumentData {
-		const projectRoot = this.config.projectRoot;
+		const projectRoot = this.config.groupRoot;
 		const sourceRoot = this.config.sourceRoot;
 		const outDir = this.config.outDir;
 		const dependentOutDirs = this.config.dependentOutDirs;
@@ -2539,6 +2613,10 @@ class TSProject {
 			return undefined;
 		}
 	}
+
+	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, traverseMode?: TraverseMode): [SymbolData, string][] {
+		return this.symbols.computeAdditionalExportPaths(this.context, sourceFile, start, exportName, traverseMode);
+	}
 }
 
 interface DataManagerResult {
@@ -2609,10 +2687,11 @@ export class DataManager implements SymbolDataContext {
 		this.groupPDM.begin();
 	}
 
-	public beginProject(tsProject: TSProject, project: Project, projectRoot: string): void {
+	public beginProject(tsProject: TSProject, project: Project): void {
 		if (this.currentPDM !== undefined) {
 			throw new Error(`There is already a current program data manager set`);
 		}
+		const projectRoot = tsProject.getConfig().configLocation ?? process.cwd();
 		this.currentTSProject = tsProject;
 		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, tsProject.getRootFileNames(), this.reporter);
 		this.currentPDM.begin();
@@ -2629,6 +2708,11 @@ export class DataManager implements SymbolDataContext {
 			throw new Error(`No current project`);
 		}
 		return this.currentPDM.getProjectData();
+	}
+
+	public getTSProject(): TSProject {
+		this.assertTSProject(this.currentTSProject);
+		return this.currentTSProject;
 	}
 
 	public endProject(tsProject: TSProject): void {
@@ -2838,83 +2922,57 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 class Visitor {
 
 	private tsProject: TSProject;
-	private program: ts.Program;
-	private typeChecker: ts.TypeChecker;
+	// private typeChecker: ts.TypeChecker;
 
 	private project: Project;
-	private projectRoot: string;
-	private sourceRoot: string;
-	private outDir: string;
-	private dependentOutDirs: string[];
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
-	private symbols: Symbols;
 	private disposables: Map<string, Disposable[]>;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
 
 	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
-		this.program = languageService.getProgram()!;
-		this.typeChecker = this.program.getTypeChecker();
+		const program = languageService.getProgram()!;
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
-		this.dependentOutDirs = [];
-		for (let info of dependsOn) {
-			this.dependentOutDirs.push(info.outDir);
+		let dependentOutDirs = [];
+		for (const info of dependsOn) {
+			dependentOutDirs.push(info.outDir);
 		}
-		this.dependentOutDirs.sort((a, b) => {
+		dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
 		});
-		this.projectRoot = options.projectRoot;
 		this.project = this.vertex.project(options.projectName);
 		this.project.resource = options.tsConfigFile !== undefined ? URI.file(options.tsConfigFile).toString(true) : undefined;
-		const configLocation = options.tsConfigFile !== undefined ? path.dirname(options.tsConfigFile) : undefined;
-		let compilerOptions = this.program.getCompilerOptions();
-		if (compilerOptions.rootDir !== undefined) {
-			this.sourceRoot = tss.makeAbsolute(compilerOptions.rootDir, configLocation);
-		} else if (compilerOptions.baseUrl !== undefined) {
-			this.sourceRoot = tss.makeAbsolute(compilerOptions.baseUrl, configLocation);
-		} else {
-			this.sourceRoot = tss.normalizePath(tss.Program.getCommonSourceDirectory(this.program));
-		}
-		if (compilerOptions.outDir !== undefined) {
-			this.outDir = tss.makeAbsolute(compilerOptions.outDir, configLocation);
-		} else {
-			this.outDir = this.sourceRoot;
-		}
 		this.dataManager = dataManager;
-		this.tsProject = new TSProject(this.dataManager, languageService, {
-			projectRoot: options.projectRoot,
-			sourceRoot: this.sourceRoot,
-			outDir: this.outDir,
-			dependentOutDirs: this.dependentOutDirs
-		}, this.dataManager);
+		this.tsProject = new TSProject(this.dataManager, languageService, dependsOn, options, this.dataManager);
 
-		this.symbols = new Symbols(this.typeChecker);
-		this.dataManager.beginProject(this.tsProject, this.project, configLocation || process.cwd());
+		this.dataManager.beginProject(this.tsProject, this.project);
 		this.disposables = new Map();
 	}
 
 	public visitProgram(): ProjectInfo {
-		let sourceFiles = this.program.getSourceFiles();
+		const program = this.tsProject.getProgram();
+		let sourceFiles = program.getSourceFiles();
 		if (sourceFiles.length > 256) {
-			this.typeChecker.setSymbolChainCache(new SimpleSymbolChainCache());
+			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
-		for (let rootFile of this.program.getRootFileNames()) {
-			const sourceFile = this.program.getSourceFile(rootFile);
+		for (const rootFile of program.getRootFileNames()) {
+			const sourceFile = program.getSourceFile(rootFile);
 			if (sourceFile !== undefined) {
 				this.visit(sourceFile);
 			}
 		}
+		const config = this.tsProject.getConfig();
 		return {
-			rootDir: this.sourceRoot,
-			outDir: this.outDir
+			rootDir: config.sourceRoot,
+			outDir: config.outDir
 		};
 	}
 
 	public endVisitProgram(): void {
-		this.dataManager.endProject(this.program);
+		this.dataManager.endProject(this.tsProject);
 	}
 
 	protected visit(node: ts.Node): void {
@@ -3001,14 +3059,14 @@ class Visitor {
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
-		let disposables: Disposable[] = [];
+		const disposables: Disposable[] = [];
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
 		this.options.reporter.reportProgress(1);
 
 		this.currentSourceFile = sourceFile;
-		let documentData = this.getOrCreateDocumentData(sourceFile);
+		const documentData = this.getOrCreateDocumentData(sourceFile);
 		this._currentDocumentData = documentData;
 		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
@@ -3020,16 +3078,16 @@ class Visitor {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return;
 		}
-
-		let documentData = this.currentDocumentData;
+		const program = this.tsProject.getProgram();
+		const documentData = this.currentDocumentData;
 		// Diagnostics
-		let diagnostics: lsp.Diagnostic[] = [];
-		let syntactic = this.program.getSyntacticDiagnostics(sourceFile);
-		for (let element of syntactic) {
+		const diagnostics: lsp.Diagnostic[] = [];
+		const syntactic = program.getSyntacticDiagnostics(sourceFile);
+		for (const element of syntactic) {
 			diagnostics.push(Converter.asDiagnostic(element));
 		}
-		let semantic = this.program.getSemanticDiagnostics(sourceFile);
-		for (let element of semantic) {
+		const semantic = program.getSemanticDiagnostics(sourceFile);
+		for (const element of semantic) {
 			if (element.file !== undefined && element.start !== undefined && element.length !== undefined) {
 				diagnostics.push(Converter.asDiagnostic(element as ts.DiagnosticWithLocation));
 			}
@@ -3039,10 +3097,10 @@ class Visitor {
 		}
 
 		// Folding ranges
-		let spans = this.languageService.getOutliningSpans(sourceFile as any);
+		const spans = this.languageService.getOutliningSpans(sourceFile as any);
 		if (ts.textSpanEnd.length > 0) {
-			let foldingRanges: lsp.FoldingRange[] = [];
-			for (let span of spans) {
+			const foldingRanges: lsp.FoldingRange[] = [];
+			for (const span of spans) {
 				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
 			}
 			if (foldingRanges.length > 0) {
@@ -3051,7 +3109,7 @@ class Visitor {
 		}
 
 		// Document symbols.
-		let values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
+		const values = (this.symbolContainer.pop() as RangeBasedDocumentSymbol).children;
 		if (values !== undefined && values.length > 0) {
 			documentData.addDocumentSymbols(values);
 		}
@@ -3060,7 +3118,7 @@ class Visitor {
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
 		this.dataManager.documentProcessed(sourceFile.fileName);
-		for (let disposable of this.disposables.get(sourceFile.fileName)!) {
+		for (const disposable of this.disposables.get(sourceFile.fileName)!) {
 			disposable();
 		}
 		this.disposables.delete(sourceFile.fileName);
@@ -3070,8 +3128,8 @@ class Visitor {
 	}
 
 	public isFullContentIgnored(sourceFile: ts.SourceFile): boolean {
-		return tss.Program.isSourceFileDefaultLibrary(this.program, sourceFile) ||
-			tss.Program.isSourceFileFromExternalLibrary(this.program, sourceFile);
+		return this.tsProject.isSourceFileDefaultLibrary(sourceFile) ||
+			this.tsProject.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
 	private visitModuleDeclaration(node: ts.ModuleDeclaration): boolean {
@@ -3152,18 +3210,18 @@ class Visitor {
 			if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 				continue;
 			}
-			const type = this.symbols.getType(symbol, node);
-			this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+			const type = this.tsProject.getSymbols().getType(symbol, node);
+			this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 		}
 	}
 
 	private getSymbolAndMonikerPartsIfExported(node: ts.Node & { name?: ts.Identifier | ts.PropertyName | ts.BindingName } ): [ts.Symbol | undefined, SymbolData | undefined, TscMoniker | undefined] {
 		const emptyResult: [ts.Symbol | undefined, SymbolData | undefined, TscMoniker | undefined] = [undefined, undefined, undefined];
-		const symbol = this.typeChecker.getSymbolAtLocation(node.name !== undefined ? node.name : node);
+		const symbol = this.tsProject.getSymbolAtLocation(node.name !== undefined ? node.name : node);
 		if (symbol === undefined) {
 			return emptyResult;
 		}
-		const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
+		const symbolData = this.getSymbolData(this.tsProject.getSymbolId(symbol));
 		if (symbolData === undefined) {
 			return emptyResult;
 		}
@@ -3186,10 +3244,10 @@ class Visitor {
 			return;
 		}
 
-		const type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+		const type = this.tsProject.getTypeOfSymbolAtLocation(symbol, node);
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name)
 		);
 	}
 
@@ -3198,9 +3256,10 @@ class Visitor {
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 			return;
 		}
+		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3209,18 +3268,19 @@ class Visitor {
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 			return;
 		}
-		const type = this.symbols.getType(symbol, node);
+		const symbols = this.tsProject.getSymbols();
+		const type = symbols.getType(symbol, node);
 		// We don't need t traverse the class or interface itself. Only the parents.
-		const bases = this.symbols.types.getBaseTypes(type);
+		const bases = symbols.types.getBaseTypes(type);
 		if (bases !== undefined) {
 			for (const type of bases) {
-				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 			}
 		}
-		const extendz = this.symbols.types.getExtendsTypes(type);
+		const extendz = symbols.types.getExtendsTypes(type);
 		if (extendz !== undefined) {
 			for (const type of extendz) {
-				this.emitAttachedMonikers(monikerParts.path, this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
 			}
 		}
 	}
@@ -3259,10 +3319,10 @@ class Visitor {
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined || !Symbols.isTypeAlias(symbol)) {
 			return;
 		}
-
+		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.symbols.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), this.symbols.getType(symbol, node), monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3285,13 +3345,13 @@ class Visitor {
 
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
 		// Todo@dbaeumer TS compiler doesn't return symbol for export assignment.
-		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
+		const symbol = this.tsProject.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
 		if (symbol === undefined) {
 			return false;
 		}
 		// Handle the export assignment.
 		this.handleSymbol(symbol, node);
-		const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
+		const symbolData = this.getSymbolData(this.tsProject.getSymbolId(symbol));
 		if (symbolData === undefined) {
 			return false;
 		}
@@ -3301,14 +3361,14 @@ class Visitor {
 		}
 
 		const monikerParts = TscMoniker.parse(moniker.identifier);
-		const aliasedSymbol = this.typeChecker.getSymbolAtLocation(node.expression) || tss.Node.getSymbol(node.expression);
+		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression) || tss.Node.getSymbol(node.expression);
 		this.handleSymbol(aliasedSymbol, node.expression);
 		if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
 			const name = node.expression.getText();
 			const sourceFile = node.getSourceFile();
 			this.emitAttachedMonikers(
 				monikerParts.path,
-				this.symbols.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, name)
+				this.tsProject.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, name)
 			);
 		}
 		return false;
@@ -3323,12 +3383,12 @@ class Visitor {
 		// `export { _foo as foo }` ==> ExportDeclaration
 		if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
 			for (const element of node.exportClause.elements) {
-				const symbol = this.typeChecker.getSymbolAtLocation(element.name);
+				const symbol = this.tsProject.getSymbolAtLocation(element.name);
 				if (symbol === undefined) {
 					continue;
 				}
 				this.handleSymbol(symbol, element.name);
-				const symbolData = this.getSymbolData(tss.Symbol.createKey(this.typeChecker, symbol));
+				const symbolData = this.getSymbolData(this.tsProject.getSymbolId(symbol));
 				if (symbolData === undefined) {
 					return false;
 				}
@@ -3338,9 +3398,9 @@ class Visitor {
 				}
 				const monikerParts = TscMoniker.parse(moniker.identifier);
 				const aliasedSymbol = Symbols.isAliasSymbol(symbol)
-					? this.typeChecker.getAliasedSymbol(symbol)
+					? this.tsProject.getAliasedSymbol(symbol)
 					: element.propertyName !== undefined
-						? this.typeChecker.getSymbolAtLocation(element.propertyName)
+						? this.tsProject.getSymbolAtLocation(element.propertyName)
 						: undefined;
 				if (element.propertyName !== undefined) {
 					this.handleSymbol(aliasedSymbol, element.propertyName);
@@ -3349,7 +3409,7 @@ class Visitor {
 					const sourceFile = node.getSourceFile();
 					this.emitAttachedMonikers(
 						monikerParts.path,
-						this.symbols.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, monikerParts.name)
+						this.tsProject.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, monikerParts.name)
 					);
 				}
 			}
@@ -3382,15 +3442,15 @@ class Visitor {
 
 	private endVisitArrayType(node: ts.ArrayTypeNode): void {
 		// make sure we emit information for the Array symbol from standard libs
-		this.handleSymbol(this.typeChecker.getTypeAtLocation(node).getSymbol(), node);
+		this.handleSymbol(this.tsProject.getTypeAtLocation(node).getSymbol(), node);
 	}
 
 	private visitIdentifier(node: ts.Identifier): void {
-		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
+		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
 	}
 
 	private visitStringLiteral(node: ts.StringLiteral): void {
-		this.handleSymbol(this.typeChecker.getSymbolAtLocation(node), node);
+		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
 	}
 
 	private visitGeneric(_node: ts.Node): boolean {
@@ -3398,11 +3458,11 @@ class Visitor {
 	}
 
 	private endVisitGeneric(node: ts.Node): void {
-		const symbol = this.typeChecker.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
+		const symbol = this.tsProject.getSymbolAtLocation(node) || tss.Node.getSymbol(node);
 		if (symbol === undefined) {
 			return;
 		}
-		const id = tss.Symbol.createKey(this.typeChecker, symbol);
+		const id = this.tsProject.getSymbolId(symbol);
 		let symbolData = this.dataManager.getSymbolData(id);
 		if (symbolData !== undefined) {
 			// Todo@dbaeumer thinks about whether we should add a reference here.
@@ -3438,7 +3498,7 @@ class Visitor {
 
 	private addDocumentSymbol(node: tss.Node.Declaration): boolean {
 		const rangeNode = node.name !== undefined ? node.name : node;
-		const symbol = this.program.getTypeChecker().getSymbolAtLocation(rangeNode);
+		const symbol = this.tsProject.getSymbolAtLocation(rangeNode);
 		const declarations = symbol !== undefined ? symbol.getDeclarations() : undefined;
 		if (symbol === undefined || declarations === undefined || declarations.length === 0) {
 			return false;

@@ -148,7 +148,7 @@ async function readGroupConfig(options: Options): Promise<GroupConfig | undefine
 	const group = options.group;
 	if (group === 'stdin') {
 		try {
-			const result: GroupConfig = await new Promise((resolve, reject) => {
+			const result: GroupConfig | undefined = await new Promise((resolve, reject) => {
 				const stdin = process.stdin;
 				let buffer: Buffer | undefined;
 				stdin.on('data', (data) => {
@@ -342,7 +342,7 @@ class FileReporter extends StreamReporter {
 
 interface ProcessProjectOptions {
 	group: Group;
-	projectRoot: string;
+	groupRoot: string;
 	projectName?:string;
 	typeAcquisition: boolean;
 	stdout: boolean;
@@ -367,7 +367,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 	}
 
 	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
-		const projectRoot = options.projectRoot;
+		const projectRoot = options.groupRoot;
 		if (config.options.types !== undefined) {
 			const start = configFilePath !== undefined ? configFilePath : process.cwd();
 			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
@@ -469,7 +469,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		if (options.projectName !== undefined) {
 			projectName = `${options.projectName}/${level + 1}`;
 		} else {
-			projectName =`${path.basename(options.projectRoot)}/${level + 1}`;
+			projectName =`${path.basename(options.groupRoot)}/${level + 1}`;
 		}
 	}
 	if (projectName === undefined) {
@@ -479,7 +479,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 	const lsifOptions: LSIFOptions = {
 		group: options.group,
-		projectRoot: options.projectRoot,
+		groupRoot: options.groupRoot,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
 		stdout: options.stdout,
@@ -500,7 +500,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	const options: Options = Object.assign(Options.defaults,
 		yargs.
 			exitProcess(false).
-			usage(`Languag Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
+			usage(`Language Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
 			example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
 			version(false).
 			option('v', {
@@ -528,7 +528,7 @@ async function run(this: void, args: string[]): Promise<void> {
 				string: true
 			}).
 			option('projectName', {
-				description: 'Specifies the project name. Defaults to the last directory segement of the tsconfig.json file.',
+				description: 'Specifies the project name. Defaults to the last directory segment of the tsconfig.json file.',
 				string: true
 			}).
 			option('noContents', {
@@ -553,7 +553,7 @@ async function run(this: void, args: string[]): Promise<void> {
 				boolean: true
 			}).
 			option('log', {
-				description: 'If provided witout a file name then the name of the output file is used with an additonal \'.log\' extension.',
+				description: 'If provided without a file name then the name of the output file is used with an additional \'.log\' extension.',
 				skipValidation: true
 			}).
 			argv
@@ -607,7 +607,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
 	}
 	if (resolvedGroupConfig === undefined) {
-		console.error(`Couldn't resolve group configration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
+		console.error(`Couldn't resolve group configuration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
 		process.exitCode = 1;
 		return;
 	}
@@ -661,7 +661,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	reporter.begin();
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
-		projectRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
+		groupRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
 		stdout: options.stdout,
@@ -669,7 +669,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		reporter: reporter,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.projectRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.groupRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
 	dataManager.end();
