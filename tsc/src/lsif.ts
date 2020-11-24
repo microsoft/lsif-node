@@ -2421,7 +2421,7 @@ class TSProject {
 		return this.symbolDataFactories.standard;
 	}
 
-	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile): DocumentData {
+	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile): [DocumentData, ts.Symbol | undefined] {
 		const projectRoot = this.config.groupRoot;
 		const sourceRoot = this.config.sourceRoot;
 		const outDir = this.config.outDir;
@@ -2472,10 +2472,10 @@ class TSProject {
 		}
 
 		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
-		return manager.createDocumentData(fileName, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external);
+		return [manager.createDocumentData(fileName, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external), symbol];
 	}
 
-	public createSymbolData(manager: ProjectDataManager, symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): { symbolData: SymbolData; validateVisibilityOn?: ts.SourceFile[] } {
+	public createSymbolData(manager: ProjectDataManager, created: (data: SymbolData) => void, symbol: ts.Symbol, __location?: ts.Node, __parsedSourceFile?: ts.SourceFile): { symbolData: SymbolData; validateVisibilityOn?: ts.SourceFile[] } {
 		const id: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
@@ -2488,7 +2488,9 @@ class TSProject {
 		}
 
 		const result = manager.createSymbolData(id, (projectDataManager) => {
-			return factory.create(symbol, id, declarationSourceFiles, projectDataManager, __parsedSourceFile);
+			const result = factory.create(symbol, id, declarationSourceFiles, projectDataManager, __parsedSourceFile);
+			created(result.symbolData);
+			return result;
 		});
 		const { symbolData, moduleSystem, exportPath, validateVisibilityOn } = result;
 
@@ -2743,8 +2745,12 @@ export class DataManager implements SymbolDataContext {
 			return result;
 		}
 		const manager: ProjectDataManager = this.getProjectDataManager(sourceFile);
-		result = this.currentTSProject.createDocumentData(manager, sourceFile);
+		let symbol: ts.Symbol | undefined;
+		[result, symbol] = this.currentTSProject.createDocumentData(manager, sourceFile);
 		this.documentDataItems.set(fileName, result);
+		if (symbol !== undefined) {
+			this.getOrCreateSymbolData(symbol, sourceFile);
+		}
 		return result;
 	}
 
@@ -2843,7 +2849,11 @@ export class DataManager implements SymbolDataContext {
 				}
 			}
 		}
-		const result = this.currentTSProject.createSymbolData(manager, symbol, __location, __parsedSourceFile);
+		const result = this.currentTSProject.createSymbolData(manager, (symbolData) => {
+			this.symbolDataItems.set(symbolData.getId(), symbolData);
+			symbolData.begin();
+		}, symbol, __location, __parsedSourceFile);
+		
 		symbolData = result.symbolData;
 		if (manager.getParseMode() === ParseMode.full && symbolData.getVisibility() === SymbolDataVisibility.unknown && result.validateVisibilityOn !== undefined && result.validateVisibilityOn.length > 0) {
 			const counter = result.validateVisibilityOn.length;
@@ -2858,8 +2868,6 @@ export class DataManager implements SymbolDataContext {
 			}
 		}
 
-		this.symbolDataItems.set(symbolData.getId(), symbolData);
-		symbolData.begin();
 		return symbolData;
 	}
 
