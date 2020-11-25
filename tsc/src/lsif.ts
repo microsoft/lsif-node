@@ -6,6 +6,7 @@ import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
 
+import * as uuid from 'uuid';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
@@ -245,14 +246,16 @@ class DocumentData extends LSIFData<EmitterContext> {
 
 	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
 
+	public readonly id: string;
 	private _isClosed: boolean;
 	private ranges: Range[];
 	private diagnostics: lsp.Diagnostic[];
 	private foldingRanges: lsp.FoldingRange[];
 	private documentSymbols: RangeBasedDocumentSymbol[];
 
-	public constructor(emitter: EmitterContext, public document: Document, public moduleSystem: ModuleSystemKind, public monikerFilePath: string | undefined, public external: boolean) {
+	public constructor(id: string, emitter: EmitterContext, public document: Document, public moduleSystem: ModuleSystemKind, public monikerFilePath: string | undefined, public external: boolean) {
 		super(emitter);
+		this.id = id;
 		this._isClosed = false;
 		this.ranges = [];
 		this.diagnostics = DocumentData.EMPTY_ARRAY;
@@ -2017,6 +2020,7 @@ enum ParseMode {
 
 abstract class ProjectDataManager {
 
+	public readonly id: string;
 	private startTime: number | undefined;
 
 	protected readonly emitter: EmitterContext;
@@ -2030,7 +2034,8 @@ abstract class ProjectDataManager {
 	// corresponding node is processed.
 	private readonly managedSymbolDataItems: SymbolData[];
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		this.id = id;
 		this.emitter = emitter;
 		this.projectData = new ProjectData(emitter, group, project);
 		this.reporter = reporter;
@@ -2056,7 +2061,7 @@ abstract class ProjectDataManager {
 	}
 
 	public createDocumentData(_fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
-		const result = new DocumentData(this.emitter, document, moduleSystem, monikerPath, external);
+		const result = new DocumentData(this.id, this.emitter, document, moduleSystem, monikerPath, external);
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
@@ -2121,8 +2126,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	private state: LazyProjectDataManagerState;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(emitter, group, project, reporter);
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(id, emitter, group, project, reporter);
 		this.state = LazyProjectDataManagerState.start;
 	}
 
@@ -2179,8 +2184,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 class GlobalProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(emitter, group, project, reporter);
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(id, emitter, group, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2191,8 +2196,8 @@ class GlobalProjectDataManager extends LazyProjectDataManager {
 
 class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(emitter, group, project, reporter);
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+		super(id, emitter, group, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2205,8 +2210,8 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 	private readonly groupName: string;
 	private readonly groupRoot: string;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
-		super(emitter, group, project, reporter);
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
+		super(id, emitter, group, project, reporter);
 		this.groupName = group.name;
 		this.groupRoot = groupRoot;
 	}
@@ -2223,14 +2228,14 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 
 class TSConfigProjectDataManager extends ProjectDataManager {
 
-	private readonly projectRoot: string;
-	private readonly rootFiles: Set<string>;
+	private readonly sourceRoot: string;
+	private readonly projectFiles: Set<string>;
 	private readonly managedFiles: Set<string>;
 
-	public constructor(emitter: EmitterContext, group: Group, project: Project, projectRoot: string, rootFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
-		super(emitter, group, project, reporter);
-		this.projectRoot = projectRoot;
-		this.rootFiles = new Set(rootFiles);
+	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
+		super(id, emitter, group, project, reporter);
+		this.sourceRoot = sourceRoot;
+		this.projectFiles = new Set(projectFiles);
 		this.managedFiles = new Set();
 	}
 
@@ -2240,7 +2245,7 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
-		return this.rootFiles.has(fileName) || paths.isParent(this.projectRoot, fileName);
+		return this.projectFiles.has(fileName) || paths.isParent(this.sourceRoot, fileName);
 	}
 
 	public createDocumentData(fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean): DocumentData {
@@ -2270,11 +2275,14 @@ interface TSProjectContext extends EmitterContext {
 
 class TSProject {
 
+	public readonly id: string;
 	private context: TSProjectContext;
 	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
+	public readonly references: ProjectInfo[];
 	private config: TSProjectConfig;
 
+	private projectSourceFiles: ts.SourceFile[];
 	private symbols: Symbols;
 	private symbolDataFactories: {
 		standard: StandardSymbolDataFactory;
@@ -2285,15 +2293,17 @@ class TSProject {
 		typeAlias: TypeAliasFactory;
 	};
 
-	constructor(context: TSProjectContext, languageService: ts.LanguageService, dependsOn: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
+	constructor(context: TSProjectContext, languageService: ts.LanguageService, references: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
+		this.id = uuid.v4();
 		this.context = context;
 		this.languageService = languageService;
+		this.references = references;
 		const program = languageService.getProgram()!;
 		const typeChecker = program.getTypeChecker();
 		this.typeChecker = typeChecker;
 
 		let dependentOutDirs = [];
-		for (const info of dependsOn) {
+		for (const info of references) {
 			dependentOutDirs.push(info.outDir);
 		}
 		dependentOutDirs.sort((a, b) => {
@@ -2324,6 +2334,14 @@ class TSProject {
 			outDir,
 			dependentOutDirs
 		};
+
+		this.projectSourceFiles = [];
+		for (const sourceFile of program.getSourceFiles()) {
+			if (tss.Program.isSourceFileFromExternalLibrary(program, sourceFile) || tss.Program.isSourceFileDefaultLibrary(program, sourceFile)) {
+				continue;
+			}
+			this.projectSourceFiles.push(sourceFile);
+		}
 
 		this.symbols = new Symbols(typeChecker);
 		this.symbolDataFactories = {
@@ -2369,7 +2387,15 @@ class TSProject {
 	}
 
 	public getRootFileNames(): ReadonlyArray<string> {
-		return this.languageService.getProgram()!.getRootFileNames();
+		return this.getProgram().getRootFileNames();
+	}
+
+	public getProjectSourceFiles(): ReadonlyArray<ts.SourceFile> {
+		return this.projectSourceFiles;
+	}
+
+	public getProjectSourceFileNames(): ReadonlyArray<string> {
+		return this.projectSourceFiles.map(sourceFile => sourceFile.fileName);
 	}
 
 	public getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
@@ -2422,7 +2448,7 @@ class TSProject {
 	}
 
 	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile): [DocumentData, ts.Symbol | undefined] {
-		const projectRoot = this.config.groupRoot;
+		const groupRoot = this.config.groupRoot;
 		const sourceRoot = this.config.sourceRoot;
 		const outDir = this.config.outDir;
 		const dependentOutDirs = this.config.dependentOutDirs;
@@ -2449,8 +2475,8 @@ class TSProject {
 			return false;
 		};
 
-		const isFromProjectRoot = (sourceFile: ts.SourceFile): boolean => {
-			return paths.isParent(projectRoot, sourceFile.fileName);
+		const isFromGroupRoot = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(groupRoot, sourceFile.fileName);
 		};
 
 		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
@@ -2460,15 +2486,15 @@ class TSProject {
 		let external: boolean = false;
 		if (isFromExternalLibrary(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
+			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
 		} else if (isFromProjectSources(sourceFile)) {
-			monikerPath = tss.computeMonikerPath(projectRoot, tss.toOutLocation(fileName, sourceRoot, outDir));
+			monikerPath = tss.computeMonikerPath(groupRoot, tss.toOutLocation(fileName, sourceRoot, outDir));
 		} else if (isFromDependentProject(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
-		} else if (isFromProjectRoot(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
+		} else if (isFromGroupRoot(sourceFile)) {
 			external = sourceFile.isDeclarationFile;
-			monikerPath = tss.computeMonikerPath(projectRoot, fileName);
+			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
 		}
 
 		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
@@ -2666,9 +2692,9 @@ export class DataManager implements SymbolDataContext {
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
 
-		this.globalPDM = new GlobalProjectDataManager(this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
-		this.groupPDM = new GroupProjectDataManager(this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
+		this.globalPDM = new GlobalProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
+		this.groupPDM = new GroupProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
 	}
 
 	public get vertex(): VertexBuilder {
@@ -2693,15 +2719,20 @@ export class DataManager implements SymbolDataContext {
 		if (this.currentPDM !== undefined) {
 			throw new Error(`There is already a current program data manager set`);
 		}
-		const projectRoot = tsProject.getConfig().configLocation ?? process.cwd();
 		this.currentTSProject = tsProject;
-		this.currentPDM = new TSConfigProjectDataManager(this, this.group, project, projectRoot, tsProject.getRootFileNames(), this.reporter);
+		this.currentPDM = new TSConfigProjectDataManager(tsProject.id, this, this.group, project, tsProject.getConfig().sourceRoot, tsProject.getProjectSourceFileNames(), this.reporter);
 		this.currentPDM.begin();
 	}
 
 	private assertTSProject(value: TSProject | undefined): asserts value is TSProject {
 		if (value === undefined) {
 			throw new Error(`No current TS project set.`);
+		}
+	}
+
+	private assertPDM(value: TSConfigProjectDataManager | undefined): asserts value is TSConfigProjectDataManager {
+		if (value === undefined) {
+			throw new Error(`No current TS project data manager set.`);
 		}
 	}
 
@@ -2732,12 +2763,28 @@ export class DataManager implements SymbolDataContext {
 		this.groupPDM.end();
 	}
 
-	public getDocumentData(sourceFile: ts.SourceFile | string): DocumentData | undefined {
-		const fileName = typeof sourceFile === 'string' ? sourceFile : sourceFile.fileName;
-		return this.documentDataItems.get(fileName);
+	public getDocumentData(stringOrSourceFile: ts.SourceFile | string): DocumentData | undefined {
+		const fileName: string = typeof stringOrSourceFile === 'string' ? stringOrSourceFile : stringOrSourceFile.fileName;
+		const candidate = this.documentDataItems.get(fileName);
+		if (candidate === undefined) {
+			return candidate;
+		}
+		const id = candidate.id;
+		if (id === this.globalPDM.id || id === this.defaultLibsPDM.id || id === this.groupPDM.id) {
+			return candidate;
+		}
+		this.assertPDM(this.currentPDM);
+		if (id === this.currentPDM.id) {
+			return candidate;
+		}
+		return undefined;
 	}
 
 	public getOrCreateDocumentData(sourceFile: ts.SourceFile): DocumentData {
+		let result = this.getDocumentData(sourceFile);
+		if (result !== undefined) {
+
+		}
 		this.assertTSProject(this.currentTSProject);
 		const fileName = sourceFile.fileName;
 		let result = this.documentDataItems.get(fileName);
@@ -2766,8 +2813,9 @@ export class DataManager implements SymbolDataContext {
 		}
 	}
 
-	public documentProcessed(fileName: string): void {
-		let data = this.getDocumentData(fileName);
+	public documentProcessed(sourceFile: ts.SourceFile): void {
+		const fileName = sourceFile.fileName;
+		const data = this.getDocumentData(sourceFile);
 		if (data === undefined) {
 			throw new Error(`No document data for file ${fileName}`);
 		}
@@ -2853,7 +2901,7 @@ export class DataManager implements SymbolDataContext {
 			this.symbolDataItems.set(symbolData.getId(), symbolData);
 			symbolData.begin();
 		}, symbol, __location, __parsedSourceFile);
-		
+
 		symbolData = result.symbolData;
 		if (manager.getParseMode() === ParseMode.full && symbolData.getVisibility() === SymbolDataVisibility.unknown && result.validateVisibilityOn !== undefined && result.validateVisibilityOn.length > 0) {
 			const counter = result.validateVisibilityOn.length;
@@ -2882,8 +2930,10 @@ export class DataManager implements SymbolDataContext {
 }
 
 export interface ProjectInfo {
-	rootDir: string;
+	id: string;
+	sourceRoot: string;
 	outDir: string;
+	references: ProjectInfo[];
 }
 
 export class SimpleSymbolChainCache implements ts.SymbolChainCache {
@@ -2930,7 +2980,6 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 class Visitor {
 
 	private tsProject: TSProject;
-	// private typeChecker: ts.TypeChecker;
 
 	private project: Project;
 	private currentSourceFile: ts.SourceFile | undefined;
@@ -2941,16 +2990,8 @@ class Visitor {
 	private dataManager: DataManager;
 
 	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
-		const program = languageService.getProgram()!;
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
-		let dependentOutDirs = [];
-		for (const info of dependsOn) {
-			dependentOutDirs.push(info.outDir);
-		}
-		dependentOutDirs.sort((a, b) => {
-			return b.length - a.length;
-		});
 		this.project = this.vertex.project(options.projectName);
 		this.project.resource = options.tsConfigFile !== undefined ? URI.file(options.tsConfigFile).toString(true) : undefined;
 		this.dataManager = dataManager;
@@ -2966,16 +3007,15 @@ class Visitor {
 		if (sourceFiles.length > 256) {
 			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
-		for (const rootFile of program.getRootFileNames()) {
-			const sourceFile = program.getSourceFile(rootFile);
-			if (sourceFile !== undefined) {
-				this.visit(sourceFile);
-			}
+		for (const sourceFile of this.tsProject.getProjectSourceFiles()) {
+			this.visit(sourceFile);
 		}
 		const config = this.tsProject.getConfig();
 		return {
-			rootDir: config.sourceRoot,
-			outDir: config.outDir
+			id: this.tsProject.id,
+			sourceRoot: config.sourceRoot,
+			outDir: config.outDir,
+			references: this.tsProject.references
 		};
 	}
 
@@ -3125,7 +3165,7 @@ class Visitor {
 
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
-		this.dataManager.documentProcessed(sourceFile.fileName);
+		this.dataManager.documentProcessed(sourceFile);
 		for (const disposable of this.disposables.get(sourceFile.fileName)!) {
 			disposable();
 		}

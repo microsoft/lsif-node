@@ -49,7 +49,6 @@
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				"-v",
 				"-p", "tsconfig.json",
 				"--outputFormat", "line",
 				"--stdout"
