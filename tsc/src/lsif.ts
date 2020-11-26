@@ -162,7 +162,14 @@ namespace Converter {
 }
 
 type SymbolId = string;
-type ProjectId = string;
+type ProjectId = number;
+namespace ProjectId {
+	let counter = 1;
+	export function next(): ProjectId {
+		return counter++;
+	}
+}
+
 
 export interface EmitterContext {
 	vertex: VertexBuilder;
@@ -668,7 +675,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public abstract endPartition(projectId: ProjectId, fileName: string): void;
 
-	public abstract resetPartitions(projectId: ProjectId, sourceFiles: Set<string>): void;
+	public abstract endPartitions(projectId: ProjectId, sourceFiles: Set<string>): void;
 
 	public abstract end(forceSingle?: boolean): void;
 }
@@ -679,7 +686,7 @@ class StandardSymbolData extends SymbolData {
 	private referenceResult: ReferenceResult | undefined;
 	private typeDefinitionResult: TypeDefinitionResult | undefined;
 
-	private clearedPartitions: Map<string, Set<string>> | undefined;
+	private clearedPartitions: Map<string, Set<ProjectId>> | undefined;
 	private partitions: Map<string /* sourceFile */, SymbolDataPartition> | null | undefined;
 
 	public constructor(projectId: ProjectId, symbolId: SymbolId, visibility: SymbolDataVisibility, context: SymbolDataContext, next: SymbolData | undefined) {
@@ -785,9 +792,22 @@ class StandardSymbolData extends SymbolData {
 	}
 
 	public endPartition(projectId: ProjectId, fileName: string): void {
-		const [partition, current] = this.getPartition(projectId, fileName);
+		if (this.partitions === null) {
+			throw new Error (`The partitions for symbol ${this.symbolId} have already been cleared.`);
+		}
+		if (this.partitions === undefined) {
+			return;
+		}
+		const current = this.partitions.get(fileName);
+		let partition = current;
+		while(partition !== undefined) {
+			if (partition.projectId === projectId) {
+				break;
+			}
+			partition = partition.next;
+		}
 		if (partition === undefined) {
-			throw new Error(`Symbol data ${this.symbolId} doesn't manage a partition for ${fileName}.`);
+			return;
 		}
 		partition.end();
 		if (partition === current) {
@@ -820,21 +840,9 @@ class StandardSymbolData extends SymbolData {
 		}
 	}
 
-	public resetPartitions(projectId: ProjectId, fileNames: Set<string>): void {
-		if (this.partitions === null || this.partitions === undefined) {
-			return;
-		}
-		const toDelete: string[] = [];
-		for (const entry of this.partitions) {
-			if (fileNames.has(entry[0])) {
-				toDelete.push(entry[0]);
-				if (entry[1] !== null) {
-					entry[1].end();
-				}
-			}
-		}
-		for (const fileName of toDelete) {
-			this.partitions.delete(fileName);
+	public endPartitions(projectId: ProjectId, fileNames: Set<string>): void {
+		for (const fileName of fileNames) {
+			this.endPartition(projectId, fileName);
 		}
 	}
 
@@ -849,10 +857,9 @@ class StandardSymbolData extends SymbolData {
 			throw new Error(`Symbol data has more than one partition.`);
 		}
 		for (let entry of this.partitions.entries()) {
-			if (entry[1] !== null) {
-				entry[1].end();
-			}
+			entry[1].end();
 		}
+		this.clearedPartitions = undefined;
 		this.partitions = null;
 	}
 }
@@ -1037,7 +1044,7 @@ class TransientSymbolData extends StandardSymbolData {
 	}
 
 	public addReference(projectId: ProjectId, sourceFile: string, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		super.addReference(sourceFile, reference as any, property as any);
+		super.addReference(projectId, sourceFile, reference, property);
 	}
 }
 
@@ -2100,7 +2107,7 @@ enum ParseMode {
 
 abstract class ProjectDataManager {
 
-	public readonly id: string;
+	public readonly id: ProjectId;
 	private startTime: number | undefined;
 
 	protected readonly emitter: EmitterContext;
@@ -2114,7 +2121,7 @@ abstract class ProjectDataManager {
 	// corresponding node is processed.
 	private readonly managedSymbolDataItems: SymbolData[];
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		this.id = id;
 		this.emitter = emitter;
 		this.projectData = new ProjectData(emitter, group, project);
@@ -2165,7 +2172,7 @@ abstract class ProjectDataManager {
 			if (fileNames === undefined) {
 				symbolData.end();
 			} else {
-				symbolData.resetPartitions(fileNames);
+				symbolData.endPartitions(this.id, fileNames);
 			}
 		}
 		for (const data of this.documentDataItems) {
@@ -2206,7 +2213,7 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	private state: LazyProjectDataManagerState;
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 		this.state = LazyProjectDataManagerState.start;
 	}
@@ -2264,7 +2271,7 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 class GlobalProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 	}
 
@@ -2276,7 +2283,7 @@ class GlobalProjectDataManager extends LazyProjectDataManager {
 
 class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 	}
 
@@ -2290,7 +2297,7 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 	private readonly groupName: string;
 	private readonly groupRoot: string;
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 		this.groupName = group.name;
 		this.groupRoot = groupRoot;
@@ -2312,7 +2319,7 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	private readonly projectFiles: Set<string>;
 	private readonly managedFiles: Set<string>;
 
-	public constructor(id: string, emitter: EmitterContext, group: Group, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 		this.sourceRoot = sourceRoot;
 		this.projectFiles = new Set(projectFiles);
@@ -2355,14 +2362,14 @@ interface TSProjectContext extends EmitterContext {
 
 class TSProject {
 
-	public readonly id: string;
+	public readonly id: ProjectId;
 	private context: TSProjectContext;
 	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
 	public readonly references: ProjectInfo[];
 
 	private config: TSProjectConfig;
-	private referencedProjectIds: Set<string>;
+	private referencedProjectIds: Set<ProjectId>;
 
 	private rootFileNames: Set<string>;
 	private sourceFilesToIndex: ts.SourceFile[] | undefined;
@@ -2377,7 +2384,7 @@ class TSProject {
 	};
 
 	constructor(context: TSProjectContext, languageService: ts.LanguageService, references: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
-		this.id = uuid.v4();
+		this.id = ProjectId.next();
 		this.context = context;
 		this.languageService = languageService;
 		this.references = references;
@@ -2792,7 +2799,7 @@ export class DataManager implements SymbolDataContext {
 
 	private readonly documentDataItems: Map<string, DocumentData>;
 	private readonly symbolDataItems: Map<string, SymbolData>;
-	private readonly clearedSymbolDataItems: Map<string, string[]>;
+	private readonly clearedSymbolDataItems: Map<string, ProjectId[]>;
 	private readonly partitionLifeCycle: Map<string, SymbolData[]>;
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
@@ -2809,9 +2816,9 @@ export class DataManager implements SymbolDataContext {
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
 
-		this.globalPDM = new GlobalProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
-		this.groupPDM = new GroupProjectDataManager(uuid.v4(), this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
+		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
+		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
 	}
 
 	public get vertex(): VertexBuilder {
@@ -3013,15 +3020,15 @@ export class DataManager implements SymbolDataContext {
 		symbolData.setNext(undefined);
 	}
 
-	public handleSymbol(symbol: ts.Symbol, location: ts.Node, sourceFile: ts.SourceFile): Range | undefined {
+	public handleSymbol(documentData: DocumentData, symbol: ts.Symbol, location: ts.Node, sourceFile: ts.SourceFile): void {
 		const symbolData = this.getOrCreateSymbolData(symbol, location, sourceFile);
 		if (symbolData.hasDefinitionInfo(tss.createDefinitionInfo(sourceFile, location))) {
-			return undefined;
+			return;
 		}
 
 		const reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
+		documentData.addRange(reference);
 		symbolData.addReference(this.getProjectId(sourceFile), sourceFile.fileName, reference, ItemEdgeProperties.references);
-		return reference;
 	}
 
 	public getSymbolData(symbol: SymbolId | ts.Symbol): SymbolData | undefined {
@@ -3057,9 +3064,6 @@ export class DataManager implements SymbolDataContext {
 			return symbolData;
 		}
 		this.assertTSProject(this.currentTSProject);
-		if ('b5OI9l0pLknxivfI9DRsWA==' === this.currentTSProject.getSymbolId(symbol)) {
-			debugger;
-		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
@@ -3107,13 +3111,13 @@ export class DataManager implements SymbolDataContext {
 		items.push(symbolData);
 	}
 
-	private isGlobalProjectId(id: string): boolean {
+	private isGlobalProjectId(id: ProjectId): boolean {
 		return id === this.globalPDM.id || id === this.defaultLibsPDM.id || id === this.groupPDM.id;
 	}
 }
 
 export interface ProjectInfo {
-	id: string;
+	id: ProjectId;
 	sourceRoot: string;
 	outDir: string;
 	references: ProjectInfo[];
@@ -3701,10 +3705,7 @@ class Visitor {
 			return;
 		}
 		const sourceFile = this.currentSourceFile!;
-		const reference = this.dataManager.handleSymbol(symbol, node, sourceFile);
-		if (reference !== undefined) {
-			this.currentDocumentData.addRange(reference);
-		}
+		const reference = this.dataManager.handleSymbol(this.currentDocumentData, symbol, node, sourceFile);
 		return;
 	}
 
@@ -3730,7 +3731,8 @@ class Visitor {
 		}
 		const sourceFile = this.currentSourceFile!;
 		const symbolData = this.dataManager.getOrCreateSymbolData(symbol, node, sourceFile);
-		const definition = symbolData.findDefinition(sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
+		const projectId = this.dataManager.getProjectId(sourceFile);
+		const definition = symbolData.findDefinition(projectId, sourceFile.fileName, Converter.rangeFromNode(sourceFile, rangeNode));
 		if (definition === undefined) {
 			return false;
 		}
@@ -3750,10 +3752,7 @@ class Visitor {
 			return;
 		}
 		const sourceFile = this.currentSourceFile!;
-		const reference = this.dataManager.handleSymbol(symbol, location, sourceFile);
-		if (reference !== undefined) {
-			this.currentDocumentData.addRange(reference);
-		}
+		this.dataManager.handleSymbol(this.currentDocumentData, symbol, location, sourceFile);
 	}
 
 	public getDefinitionAtPosition(sourceFile: ts.SourceFile, node: ts.Identifier): ReadonlyArray<ts.DefinitionInfo> | undefined {
