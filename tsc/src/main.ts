@@ -430,8 +430,16 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 			const result = ts.sys.readFile(path, encoding);
 			return result;
 		},
-		readDirectory: ts.sys.readDirectory
+		readDirectory: ts.sys.readDirectory,
 	};
+	tss.LanguageServiceHost.useSourceOfProjectReferenceRedirect(host, () => {
+		return !config.options.disableSourceOfProjectReferenceRedirect;
+	});
+
+	(host as any).useSourceOfProjectReferenceRedirect = () => {
+		return true;
+	};
+
 	const languageService = ts.createLanguageService(host);
 	const program = languageService.getProgram();
 	if (program === undefined) {

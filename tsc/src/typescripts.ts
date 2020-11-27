@@ -416,3 +416,13 @@ export namespace CompileOptions {
 		return (options as InternalCompilerOptions).configFilePath;
 	}
 }
+
+interface InternalLanguageServiceHost extends ts.LanguageServiceHost {
+	useSourceOfProjectReferenceRedirect?(): boolean;
+}
+
+export namespace LanguageServiceHost {
+	export function useSourceOfProjectReferenceRedirect(host: ts.LanguageServiceHost, value: () => boolean): void {
+		(host as InternalLanguageServiceHost).useSourceOfProjectReferenceRedirect = value;
+	}
+}
