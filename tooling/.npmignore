@@ -1,0 +1,10 @@
+.vscode/
+lib/test/
+lib/*.map
+lib/tsconfig.tsbuildInfo
+src/
+test/
+.eslintrc
+.gitignore
+tsconfig.json
+tsconfig.publish.json

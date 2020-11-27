@@ -256,7 +256,7 @@ export class TypingsInstaller {
 		let npm = await import('npm');
 		return new Promise((resolve, reject) => {
 			// NPM can't be made really silent. So we patch console.log while we are actually
-			// updating. Will not affect outputing LSIF to stdout since we wait until the installer
+			// updating. Will not affect outputting LSIF to stdout since we wait until the installer
 			// is finished.
 			const save = console.log;
 			console.log = () => {};

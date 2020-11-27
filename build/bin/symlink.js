@@ -29,6 +29,12 @@ try {
 	}
 	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
 
+	process.chdir(path.join(root, 'tooling', 'node_modules'));
+	if (fs.existsSync('lsif-protocol')) {
+		shell.rm('-rf', 'lsif-protocol');
+	}
+	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
+
 	process.chdir(path.join(root, 'util', 'node_modules'));
 	if (fs.existsSync('lsif-protocol')) {
 		shell.rm('-rf', 'lsif-protocol');

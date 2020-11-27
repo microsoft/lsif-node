@@ -25,22 +25,14 @@
 		"mocha": "^8.2.0"
 	},
 	"scripts": {
-		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
+		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../tooling && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
 		"compile": "tsc -b ./tsconfig.json",
 		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",
-		"watch": "tsc -b ./tsconfig.json -w",
+		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
-		"lint": "npm run lint:protocol && npm run lint:tsc && npm run lint:npm && npm run lint:sqlite",
-		"lint:protocol": "eslint --config ./protocol/.eslintrc.json ./protocol/src/*.ts",
-		"lint:tsc": "eslint --config ./tsc/.eslintrc.json ./tsc/src/*.ts",
-		"lint:npm": "eslint --config ./npm/.eslintrc.json ./npm/src/*.ts",
-		"lint:sqlite": "eslint --config ./sqlite/.eslintrc.json ./sqlite/src/*.ts",
-		"lint:util": "eslint --config ./util/.eslintrc.json ./util/src/*.ts",
-		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ..",
-		"lsif-ts": "cd samples/typescript && node ../../tsc/lib/main.js -p ./tsconfig.json  --outputFormat=line --stdout",
-		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc/lib/main.js -p ./client/tsconfig.json --projectRoot . --outputFormat=line",
-		"lsif-js": "cd samples/javascript && node ../../tsc/lib/main.js -p ./jsconfig.json --outputFormat=line",
+		"lint": "cd protocol && npm run lint && cd ../tsc && npm run lint && cd ../npm && npm run lint && cd ../sqlite && npm run lint && cd ../tooling && npm run lint && cd ../util && npm run lint && cd ..",
+		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ../sqlite && npm run clean && cd ../tooling && npm run clean && cd ..",
 		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."
 	}
 }

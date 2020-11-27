@@ -1,19 +1,14 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
-		"noUnusedLocals": false,
-		"noUnusedParameters": false,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
         "sourceMap": true,
 		"declaration": true,
 		"composite": true,
 		"rootDir": "./src",
 		"outDir": "./lib",
-		"tsBuildInfoFile":"./lib/tsconfig.tsbuildInfo",
-		"baseUrl": "./src",
-		"paths": {
-			"lsif-protocol": ["../../protocol/lib/main"],
-			"lsif-protocol/*": ["../../protocol/lib"]
-		}
+		"tsBuildInfoFile":"./lib/compile.tsbuildInfo",
 	},
 	"include": [
 		"src/**/*.ts"

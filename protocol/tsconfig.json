@@ -1,15 +1,15 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
-		"noUnusedLocals": false,
-		"noUnusedParameters": false,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
         "sourceMap": true,
 		"declaration": true,
 		"composite": true,
 		"sourceRoot": "../src",
 		"rootDir": "./src",
 		"outDir": "./lib",
-		"tsBuildInfoFile":"./lib/tsconfig.tsbuildInfo"
+		"tsBuildInfoFile":"./lib/compile.tsbuildInfo"
 	},
 	"include": [
 		"src/**/*.ts"

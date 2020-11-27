@@ -6,7 +6,6 @@ import * as os from 'os';
 // In typescript all paths are /. So use the posix layer only
 import * as path from 'path';
 
-import * as uuid from 'uuid';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
@@ -24,9 +23,6 @@ import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
-import { Emitter } from 'emitters/emitter';
-import { Http2ServerResponse } from 'http2';
-import { runInThisContext } from 'vm';
 
 interface Disposable {
 	(): void;
@@ -1039,7 +1035,7 @@ class TransientSymbolData extends StandardSymbolData {
 	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
 	}
 
-	public addDefinition(projectId: ProjectId, _sourceFile: string, _definition: DefinitionRange): void {
+	public addDefinition(_projectId: ProjectId, _sourceFile: string, _definition: DefinitionRange): void {
 		// We don't do anything for definitions since they a transient anyways.
 	}
 
@@ -1053,16 +1049,6 @@ enum ModuleSystemKind {
 	unknown = 1,
 	module = 2,
 	global = 3
-}
-
-interface SymbolAlias {
-	/**
-	 * The alias symbol. For example the symbol representing `default` in
-	 * a statement like `export default product` or the symbol representing
-	 * `MyTypeName` in a type declaration statement like `type MyTypeName = { x: number }`
-	 */
-	alias: ts.Symbol;
-	name: string;
 }
 
 interface ExportPathsContext {
@@ -1692,7 +1678,6 @@ class Symbols {
 		if (result !== undefined) {
 			return result === null ? undefined : result;
 		}
-		const symbolKey = tss.Symbol.createKey(this.typeChecker, symbol);
 		if (Symbols.isSourceFile(symbol) && (kind === ModuleSystemKind.module || kind === ModuleSystemKind.unknown)) {
 			this.exportPathCache.set(symbol, '');
 			return '';
@@ -1885,7 +1870,7 @@ abstract class SymbolDataFactory {
 		return ModuleSystemKind.unknown;
 	}
 
-	private getVisibility(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): SymbolDataVisibility {
+	private getVisibility(symbol: ts.Symbol, exportPath: string | undefined, _moduleSystem: ModuleSystemKind | undefined, _parseMode: ParseMode): SymbolDataVisibility {
 		// The symbol is exported.
 		if (exportPath !== undefined) {
 			return SymbolDataVisibility.exported;
@@ -1900,7 +1885,7 @@ abstract class SymbolDataFactory {
 	protected getExportData(symbol: ts.Symbol, declarationSourceFiles: ts.SourceFile[] | undefined, parseMode: ParseMode): [ModuleSystemKind | undefined, string | undefined, SymbolDataVisibility] {
 		const moduleSystem = this.getModuleSystemKind(declarationSourceFiles);
 		const exportPath = this.symbols.getExportPath(symbol, moduleSystem);
-		const visibility = this.getVisibility(symbol, declarationSourceFiles, exportPath, moduleSystem, parseMode);
+		const visibility = this.getVisibility(symbol, exportPath, moduleSystem, parseMode);
 		return [moduleSystem, exportPath, visibility];
 	}
 
@@ -1913,7 +1898,7 @@ class StandardSymbolDataFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
+	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, _currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
 		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, projectDataManager.getParseMode());
 		return {
 			symbolData: new StandardSymbolData(projectId, symbolId, visibility, this.symbolDataContext, next),
@@ -1929,7 +1914,7 @@ class AliasFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
+	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, _currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
 		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		const aliased = this.typeChecker.getAliasedSymbol(symbol);
@@ -1958,7 +1943,7 @@ class MethodFactory extends SymbolDataFactory {
 		super(typeChecker, symbols, resolverContext, symbolDataContext);
 	}
 
-	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
+	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, _currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
 		if (declarationSourceFiles === undefined) {
 			throw new Error(`Need to understand how a method symbol can exist without a source file`);
 		}
@@ -2071,7 +2056,7 @@ class TransientFactory extends SymbolDataFactory {
 		return true;
 	}
 
-	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
+	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, _currentParsedSourceFile: ts.SourceFile | undefined, next: SymbolData | undefined): FactoryResult {
 		const parseMode = projectDataManager.getParseMode();
 		const [moduleSystem, exportPath, visibility] = this.getExportData(symbol, declarationSourceFiles, parseMode);
 		return { symbolData: new TransientSymbolData(projectId, symbolId, visibility, this.symbolDataContext, next), moduleSystem, exportPath, validateVisibilityOn: undefined };
@@ -2444,15 +2429,15 @@ class TSProject {
 		};
 	}
 
-	private get vertex(): VertexBuilder {
+	protected get vertex(): VertexBuilder {
 		return this.context.vertex;
 	}
 
-	private get edge(): EdgeBuilder {
+	protected get edge(): EdgeBuilder {
 		return this.context.edge;
 	}
 
-	private emit(element: Vertex | Edge): void {
+	protected emit(element: Vertex | Edge): void {
 		this.context.emit(element);
 	}
 
@@ -2764,15 +2749,9 @@ class TSProject {
 		}
 	}
 
-	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, traverseMode?: TraverseMode): [SymbolData, string][] {
+	public computeAdditionalExportPaths(sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, traverseMode?: TraverseMode): [SymbolData, string][] {
 		return this.symbols.computeAdditionalExportPaths(this.context, sourceFile, start, exportName, traverseMode);
 	}
-}
-
-interface DataManagerResult {
-	readonly symbolData: SymbolData;
-	readonly exportPath?: string;
-	readonly moduleSystem?: ModuleSystemKind;
 }
 
 export enum DataMode {
@@ -2851,12 +2830,6 @@ export class DataManager implements SymbolDataContext {
 	private assertTSProject(value: TSProject | undefined): asserts value is TSProject {
 		if (value === undefined) {
 			throw new Error(`No current TS project set.`);
-		}
-	}
-
-	private assertPDM(value: TSConfigProjectDataManager | undefined): asserts value is TSConfigProjectDataManager {
-		if (value === undefined) {
-			throw new Error(`No current TS project data manager set.`);
 		}
 	}
 
@@ -3447,7 +3420,7 @@ class Visitor {
 				continue;
 			}
 			const type = this.tsProject.getSymbols().getType(symbol, node);
-			this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+			this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name));
 		}
 	}
 
@@ -3483,7 +3456,7 @@ class Visitor {
 		const type = this.tsProject.getTypeOfSymbolAtLocation(symbol, node);
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name)
 		);
 	}
 
@@ -3495,7 +3468,7 @@ class Visitor {
 		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3510,13 +3483,13 @@ class Visitor {
 		const bases = symbols.types.getBaseTypes(type);
 		if (bases !== undefined) {
 			for (const type of bases) {
-				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name));
 			}
 		}
 		const extendz = symbols.types.getExtendsTypes(type);
 		if (extendz !== undefined) {
 			for (const type of extendz) {
-				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), type, monikerParts.name));
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name));
 			}
 		}
 	}
@@ -3558,7 +3531,7 @@ class Visitor {
 		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.tsProject.computeAdditionalExportPaths(this.dataManager, node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
+			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name)
 		);
 	}
 
@@ -3604,7 +3577,7 @@ class Visitor {
 			const sourceFile = node.getSourceFile();
 			this.emitAttachedMonikers(
 				monikerParts.path,
-				this.tsProject.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, name)
+				this.tsProject.computeAdditionalExportPaths(sourceFile, aliasedSymbol, name)
 			);
 		}
 		return false;
@@ -3645,7 +3618,7 @@ class Visitor {
 					const sourceFile = node.getSourceFile();
 					this.emitAttachedMonikers(
 						monikerParts.path,
-						this.tsProject.computeAdditionalExportPaths(this.dataManager, sourceFile, aliasedSymbol, monikerParts.name)
+						this.tsProject.computeAdditionalExportPaths(sourceFile, aliasedSymbol, monikerParts.name)
 					);
 				}
 			}
@@ -3705,7 +3678,7 @@ class Visitor {
 			return;
 		}
 		const sourceFile = this.currentSourceFile!;
-		const reference = this.dataManager.handleSymbol(this.currentDocumentData, symbol, node, sourceFile);
+		this.dataManager.handleSymbol(this.currentDocumentData, symbol, node, sourceFile);
 		return;
 	}
 

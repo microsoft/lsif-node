@@ -22,6 +22,8 @@
 	"eslint.trace.server": "off",
 	"cSpell.words": [
 		"LSIF",
-		"extendz"
+		"extendz",
+		"loglevel",
+		"postpublish"
 	]
 }

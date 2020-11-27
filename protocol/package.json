@@ -19,9 +19,10 @@
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
 		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
-		"watch": "node ../build/bin/tsc -b ./tsconfig.json -w",
+		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
-		"prepublishOnly": "npm run clean && npm run compile:publish",
+		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
+		"prepublishOnly": "git clean -xfd . && npm run clean && npm run compile:publish && npm run lint",
 		"postpublish": "node ../build/bin/post-publish.js"
 	}
 }

@@ -132,7 +132,7 @@ interface InternalSymbol extends ts.Symbol {
 
 export namespace Symbol {
 
-	const Unknown = 'unkown';
+	const Unknown = 'unknown';
 	const Undefined = 'undefined';
 	const None = 'none';
 
@@ -375,27 +375,27 @@ interface InternalProgram extends ts.Program {
 
 export namespace Program {
 	export function getCommonSourceDirectory(program: ts.Program): string {
-		let interal: InternalProgram = program as InternalProgram;
-		if (typeof interal.getCommonSourceDirectory !== 'function') {
+		let internal: InternalProgram = program as InternalProgram;
+		if (typeof internal.getCommonSourceDirectory !== 'function') {
 			throw new Error(`Program is missing getCommonSourceDirectory`);
 		}
-		return interal.getCommonSourceDirectory();
+		return internal.getCommonSourceDirectory();
 	}
 
 	export function isSourceFileFromExternalLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
-		let interal: InternalProgram = program as InternalProgram;
-		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
+		let internal: InternalProgram = program as InternalProgram;
+		if (typeof internal.isSourceFileFromExternalLibrary !== 'function') {
 			throw new Error(`Program is missing isSourceFileFromExternalLibrary`);
 		}
-		return interal.isSourceFileFromExternalLibrary(sourceFile);
+		return internal.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
 	export function isSourceFileDefaultLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
-		let interal: InternalProgram = program as InternalProgram;
-		if (typeof interal.isSourceFileFromExternalLibrary !== 'function') {
+		let internal: InternalProgram = program as InternalProgram;
+		if (typeof internal.isSourceFileFromExternalLibrary !== 'function') {
 			throw new Error(`Program is missing isSourceFileDefaultLibrary`);
 		}
-		return interal.isSourceFileDefaultLibrary(sourceFile);
+		return internal.isSourceFileDefaultLibrary(sourceFile);
 	}
 }
 
