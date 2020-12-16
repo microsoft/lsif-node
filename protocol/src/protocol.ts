@@ -5,10 +5,71 @@
 
 import * as lsp from 'vscode-languageserver-protocol';
 
+import { element, property } from './protocolMeta';
+
+namespace Is {
+	export function boolean(value: any): value is boolean {
+		return value === true || value === false;
+	}
+
+	export function string(value: any): value is string {
+		return typeof value === 'string' || value instanceof String;
+	}
+
+	export function number(value: any): value is number {
+		return typeof value === 'number' || value instanceof Number;
+	}
+
+	export function symbolKind(value: any): value is lsp.SymbolKind {
+		return typeof value === 'number' || value instanceof Number;
+	}
+}
+
+/**
+ * Defines an unsigned integer in the range of 0 to 2^31 - 1.
+ */
+export type uinteger = number;
+
+export namespace uinteger {
+	export const MIN_VALUE = 0;
+	export const MAX_VALUE = 2147483647;
+	export function is(value: any): value is uinteger {
+		return value !== undefined && value !== null && Number.isInteger(value) && value >= 0 && value <= 2147483647;
+	}
+}
+
 /**
  * An `Id` to identify a vertex or an edge.
  */
-export type Id = number | string;
+export type Id = uinteger | string;
+
+export namespace Id {
+	export function is(value: any): value is Id {
+		return Is.string(value) || uinteger.is(value);
+	}
+}
+
+export enum ElementTypes {
+	vertex = 'vertex',
+	edge = 'edge'
+}
+
+export namespace ElementTypes {
+	export function is(value: any): value is ElementTypes {
+		return value === ElementTypes.vertex || value === ElementTypes.edge;
+	}
+}
+
+@element()
+class ElementDescription {
+	@property(Id.is)
+	id: Id;
+	@property(ElementTypes.is)
+	type: ElementTypes;
+	protected constructor() {
+		throw new Error(`Don't instantiate`);
+	}
+}
 
 /**
  * An element in the graph.
@@ -18,9 +79,11 @@ export interface Element {
 	type: ElementTypes;
 }
 
-export enum ElementTypes {
-	vertex = 'vertex',
-	edge = 'edge'
+export namespace Element {
+	export function is(value: any): value is Element {
+		const candidate = value as Element;
+		return candidate && Id.is(candidate.id) && ElementTypes.is(candidate.type);
+	}
 }
 
 /**
@@ -49,14 +112,41 @@ export enum VertexLabels {
 	implementationResult = 'implementationResult'
 }
 
+export namespace VertexLabels {
+	const values: Set<string> = function() {
+		const result = new Set<string>();
+		for (const item in VertexLabels) {
+			result.add((VertexLabels as any)[item]);
+		}
+		return result;
+	}();
+	export function is(value: any): value is VertexLabels {
+		return value && values.has(value);
+	}
+}
+
+
 /**
  * Uris are currently stored as strings.
  */
 export type Uri = string;
 
+namespace Uri {
+	export function is (value: any): value is Uri {
+		return Is.string(value);
+	}
+}
+
 export interface V extends Element {
 	type: ElementTypes.vertex;
 	label: VertexLabels;
+}
+
+export namespace V {
+	export function is(value: any): value is V {
+		const candidate = value as V;
+		return candidate && Element.is(value) && candidate.type === ElementTypes.vertex && VertexLabels.is(candidate.label);
+	}
 }
 
 /**
@@ -67,6 +157,19 @@ export enum EventKind {
 	end = 'end'
 }
 
+export namespace EventKind {
+	const values: Set<string> = function() {
+		const result = new Set<string>();
+		for (const item in EventKind) {
+			result.add((EventKind as any)[item]);
+		}
+		return result;
+	}();
+	export function is(value: any): value is EventKind {
+		return value && values.has(value);
+	}
+}
+
 /**
  * The event scopes
  */
@@ -75,6 +178,19 @@ export enum EventScope {
 	project = 'project',
 	document = 'document',
 	monikerAttach = 'monikerAttach'
+}
+
+export namespace EventScope {
+	const values: Set<string> = function() {
+		const result = new Set<string>();
+		for (const item in EventScope) {
+			result.add((EventScope as any)[item]);
+		}
+		return result;
+	}();
+	export function is(value: any): value is EventScope {
+		return value && values.has(value);
+	}
 }
 
 export interface Event extends V {
@@ -138,6 +254,19 @@ export enum RangeTagTypes {
 	unknown = 'unknown'
 }
 
+export namespace RangeTagTypes {
+	const values: Set<string> = function() {
+		const result = new Set<string>();
+		for (const item in RangeTagTypes) {
+			result.add((RangeTagTypes as any)[item]);
+		}
+		return result;
+	}();
+	export function is(value: any): value is RangeTagTypes {
+		return value && values.has(value);
+	}
+}
+
 /**
  * The range represents a declaration.
  */
@@ -173,6 +302,15 @@ export interface DeclarationTag {
 	 * Optional detail information for the declaration.
 	 */
 	detail?: string;
+}
+
+export namespace DeclarationTag {
+	export function is(value: any): value is DeclarationTag {
+		const candidate = value as DeclarationTag;
+		return candidate !== undefined && candidate !== null && candidate.type === RangeTagTypes.declaration && Is.symbolKind(candidate.kind) &&
+			Is.string(candidate.text) && (candidate.deprecated === undefined || Is.boolean(candidate.deprecated)) &&
+			lsp.Range.is(candidate.fullRange) && (candidate.detail === undefined || Is.string(candidate.detail));
+	}
 }
 
 /**
@@ -211,6 +349,15 @@ export interface DefinitionTag {
 	detail?: string;
 }
 
+export namespace DefinitionTag {
+	export function is(value: any): value is DefinitionTag {
+		const candidate = value as DefinitionTag;
+		return candidate !== undefined && candidate !== null && candidate.type === RangeTagTypes.definition && Is.symbolKind(candidate.kind) &&
+			Is.string(candidate.text) && (candidate.deprecated === undefined || Is.boolean(candidate.deprecated)) &&
+			lsp.Range.is(candidate.fullRange) && (candidate.detail === undefined || Is.string(candidate.detail));
+	}
+}
+
 /**
  * The range represents a reference.
  */
@@ -225,6 +372,13 @@ export interface ReferenceTag {
 	 * The text covered by the range.
 	 */
 	text: string;
+}
+
+export namespace ReferenceTag {
+	export function is(value: any): value is ReferenceTag {
+		const candidate = value as ReferenceTag;
+		return candidate !== undefined && candidate !== null && candidate.type === RangeTagTypes.reference && Is.string(candidate.text);
+	}
 }
 
 /**
@@ -243,11 +397,37 @@ export interface UnknownTag {
 	text: string;
 }
 
+export namespace UnknownTag {
+	export function is(value: any): value is UnknownTag {
+		const candidate = value as UnknownTag;
+		return candidate !== undefined && candidate !== null && candidate.type === RangeTagTypes.unknown && Is.string(candidate.text);
+	}
+}
+
 /**
  * All available range tag types.
  */
 export type RangeTag = DefinitionTag | DeclarationTag | ReferenceTag | UnknownTag;
 
+export namespace RangeTag {
+	export function is(value: any): value is RangeTag {
+		const candidate = value as RangeTag;
+		if (!RangeTagTypes.is(candidate.type)) {
+			return false;
+		}
+		switch (candidate.type) {
+			case RangeTagTypes.definition:
+				return DefinitionTag.is(value);
+			case RangeTagTypes.declaration:
+				return DeclarationTag.is(value);
+			case RangeTagTypes.reference:
+				return ReferenceTag.is(value);
+			case RangeTagTypes.unknown:
+				return UnknownTag.is(value);
+		}
+		return false;
+	}
+}
 
 /**
  * A vertex representing a range inside a document.
