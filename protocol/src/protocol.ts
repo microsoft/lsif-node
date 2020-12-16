@@ -5,7 +5,7 @@
 
 import * as lsp from 'vscode-languageserver-protocol';
 
-import { element, property } from './protocolMeta';
+import { element, property, I } from './protocolMeta';
 
 namespace Is {
 	export function boolean(value: any): value is boolean {
@@ -60,31 +60,35 @@ export namespace ElementTypes {
 	}
 }
 
-@element()
-class ElementDescription {
-	@property(Id.is)
-	id: Id;
-	@property(ElementTypes.is)
-	type: ElementTypes;
-	protected constructor() {
-		throw new Error(`Don't instantiate`);
-	}
-}
-
 /**
  * An element in the graph.
  */
 export interface Element {
 	id: Id;
-	type: ElementTypes;
+	type?: ElementTypes;
 }
 
 export namespace Element {
+	export const description: Description<Element> = {
+		id: { validate: Id.is },
+		type: { validate: ElementTypes.is }
+	};
 	export function is(value: any): value is Element {
 		const candidate = value as Element;
 		return candidate && Id.is(candidate.id) && ElementTypes.is(candidate.type);
 	}
 }
+
+interface Property<T> {
+	validate: (value: T) => boolean;
+	optional?: boolean;
+}
+
+type Description<T> = {
+	[P in keyof T]-?: Property<T[P]>;
+}
+
+type ElementDescription = Description<Element>;
 
 /**
  * All know vertices label values.

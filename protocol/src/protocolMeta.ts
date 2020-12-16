@@ -170,7 +170,20 @@ export function property(validator: ValidateFunc, isOptional: boolean = false) {
 	};
 }
 
-export type Interface<T> = { [P in keyof T]: T[P] };
+export type I<T> = { [P in keyof T]: T[P] };
+
+@element()
+class _Element {
+	@property(Id.is)
+	id: Id;
+	@property(ElementTypes.is)
+	type: ElementTypes;
+	protected constructor() {
+		throw new Error(`Don't instantiate`);
+	}
+}
+
+
 
 @element()
 class _V extends _Element implements Required<V> {
