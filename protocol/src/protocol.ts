@@ -14,6 +14,19 @@ namespace Is {
 		return typeof value === 'string' || value instanceof String;
 	}
 
+	export function isStringArray(value: any): value is string[] {
+		if (!Array.isArray(value)) {
+			return false;
+		}
+		const candidate: string[] = value;
+		for (const str of candidate) {
+			if (!string(str)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	export function number(value: any): value is number {
 		return typeof value === 'number' || value instanceof Number;
 	}
@@ -74,6 +87,12 @@ class BooleanProperty extends Property<boolean | undefined | null> {
 class StringProperty extends Property<string | undefined | null> {
 	constructor(flags: PropertyFlags = PropertyFlags.none) {
 		super(Is.string, flags);
+	}
+}
+
+class StringArrayProperty extends Property<string[] | undefined | null> {
+	constructor(flags: PropertyFlags = PropertyFlags.none) {
+		super(Is.isStringArray, flags);
 	}
 }
 
@@ -150,7 +169,7 @@ export namespace Id {
 			super(Id.is, flags);
 		}
 	}
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<uinteger | string> {
 		return new _Property(flags);
 	}
 	export function is(value: any): value is Id {
@@ -165,7 +184,7 @@ export enum ElementTypes {
 
 export namespace ElementTypes {
 	const values = StringEnum.values(ElementTypes as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is ElementTypes {
@@ -219,7 +238,7 @@ export enum VertexLabels {
 
 export namespace VertexLabels {
 	const values = StringEnum.values(VertexLabels as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is VertexLabels {
@@ -233,7 +252,7 @@ export namespace VertexLabels {
 export type Uri = string;
 
 namespace Uri {
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringProperty {
 		return new StringProperty(flags);
 	}
 	export function is (value: any): value is Uri {
@@ -266,7 +285,7 @@ export enum EventKind {
 
 export namespace EventKind {
 	const values = StringEnum.values(EventKind as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is EventKind {
@@ -286,7 +305,7 @@ export enum EventScope {
 
 export namespace EventScope {
 	const values = StringEnum.values(EventScope as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is EventScope {
@@ -320,7 +339,7 @@ export namespace Event {
 		kind: EventKind.property(),
 		data: Id.property()
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is Event {
 		return descriptor.validate(value);
 	}
 }
@@ -334,7 +353,7 @@ export namespace GroupEvent {
 	export const descriptor = new ObjectDescriptor<GroupEvent>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.group),
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is GroupEvent {
 		return descriptor.validate(value);
 	}
 }
@@ -347,7 +366,7 @@ export namespace ProjectEvent {
 	export const descriptor = new ObjectDescriptor<ProjectEvent>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.project),
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is ProjectEvent {
 		return descriptor.validate(value);
 	}
 }
@@ -360,7 +379,7 @@ export namespace DocumentEvent {
 	export const descriptor = new ObjectDescriptor<DocumentEvent>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.document),
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is DocumentEvent {
 		return descriptor.validate(value);
 	}
 }
@@ -373,7 +392,7 @@ export namespace MonikerAttachEvent {
 	export const descriptor = new ObjectDescriptor<MonikerAttachEvent>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.monikerAttach),
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is MonikerAttachEvent {
 		return descriptor.validate(value);
 	}
 }
@@ -390,7 +409,7 @@ export namespace ResultSet {
 	export const descriptor = new ObjectDescriptor<ResultSet>(Object.assign({}, V.descriptor.description, {
 		label: new Property(value => value === VertexLabels.resultSet),
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is ResultSet {
 		return descriptor.validate(value);
 	}
 }
@@ -407,7 +426,7 @@ export enum RangeTagTypes {
 
 export namespace RangeTagTypes {
 	const values = StringEnum.values(RangeTagTypes as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none) {
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is RangeTagTypes {
@@ -511,7 +530,7 @@ export namespace DefinitionTag {
 		fullRange: new Property(lsp.Range.is),
 		detail: new StringProperty(PropertyFlags.optional)
 	});
-	export function is(value: any): value is DeclarationTag {
+	export function is(value: any): value is DefinitionTag {
 		return descriptor.validate(value);
 	}
 }
@@ -537,7 +556,7 @@ export namespace ReferenceTag {
 		type: new Property(value => value === RangeTagTypes.reference),
 		text: new StringProperty()
 	});
-	export function is(value: any): value is DeclarationTag {
+	export function is(value: any): value is ReferenceTag {
 		return descriptor.validate(value);
 	}
 }
@@ -563,7 +582,7 @@ export namespace UnknownTag {
 		type: new Property(value => value === RangeTagTypes.unknown),
 		text: new StringProperty()
 	});
-	export function is(value: any): value is DeclarationTag {
+	export function is(value: any): value is UnknownTag {
 		return descriptor.validate(value);
 	}
 }
@@ -592,7 +611,6 @@ export namespace RangeTag {
 			case RangeTagTypes.unknown:
 				return UnknownTag.is(value);
 		}
-		return false;
 	}
 }
 
@@ -616,7 +634,7 @@ export namespace Range {
 		start: new Property(lsp.Position.is),
 		end: new Property(lsp.Position.is)
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is Range {
 		return descriptor.validate(value);
 	}
 }
@@ -625,7 +643,6 @@ export namespace Range {
  * The id type of the range is a normal id.
  */
 export type RangeId = Id;
-export const RangeId: typeof Id = Id;
 
 /**
  * A range representing a definition.
@@ -641,7 +658,7 @@ export namespace DefinitionRange {
 	export const descriptor = new ObjectDescriptor<DefinitionRange>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(DefinitionTag.is)
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is DefinitionRange {
 		return descriptor.validate(value);
 	}
 }
@@ -660,7 +677,7 @@ export namespace DeclarationRange {
 	export const descriptor = new ObjectDescriptor<DeclarationRange>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(DeclarationRange.is)
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is DeclarationRange {
 		return descriptor.validate(value);
 	}
 }
@@ -679,7 +696,7 @@ export namespace ReferenceRange {
 	export const descriptor = new ObjectDescriptor<ReferenceRange>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(ReferenceRange.is)
 	}));
-	export function is(value: any): value is V {
+	export function is(value: any): value is ReferenceRange {
 		return descriptor.validate(value);
 	}
 }
@@ -699,6 +716,58 @@ export interface Location extends V {
 	 * The location's range
 	 */
 	range: lsp.Range;
+}
+
+export namespace Location {
+	export const descriptor = new ObjectDescriptor<Location>(Object.assign({}, V.descriptor.description, {
+		label: new Property<VertexLabels.location>(value => value === VertexLabels.location),
+		range: new Property<lsp.Range>(value => lsp.Range.is(value))
+	}));
+	export function is(value: any): value is Location {
+		return descriptor.validate(value);
+	}
+}
+
+export interface ToolInfo {
+	name: string;
+	version?: string;
+	args?: string[];
+}
+
+export namespace ToolInfo {
+	export const descriptor = new ObjectDescriptor<ToolInfo>({
+		name: new StringProperty(),
+		version: new StringProperty(PropertyFlags.optional),
+		args: new StringArrayProperty(PropertyFlags.optional)
+	});
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolInfo | undefined | null> {
+		return new Property<ToolInfo | undefined | null>(ToolInfo.is, flags);
+	}
+	export function is(value: any): value is ToolInfo {
+		return descriptor.validate(value);
+	}
+}
+
+export interface ToolState {
+	/**
+	 * A data field that can be used to store a key identifying the dump.
+	 * The length of the string is limited to 512 characters. So usually
+	 * tools should use some sort of hashing algorithm to compute that
+	 * value.
+	 */
+	data?: string;
+}
+
+export namespace ToolState {
+	export const descriptor = new ObjectDescriptor<ToolState>({
+		data: new StringProperty(PropertyFlags.optional)
+	});
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolState | undefined | null> {
+		return new Property<ToolState | undefined | null>(ToolState.is, flags);
+	}
+	export function is(value: any): value is ToolState {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -726,25 +795,35 @@ export interface MetaData extends V {
 	/**
 	 * Information about the tool that created the dump
 	 */
-	toolInfo?: {
-		name: string;
-		version?: string;
-		args?: string[];
-	}
+	toolInfo?: ToolInfo;
 
 	/**
 	 * Additional information a tool can store to identify some
 	 * state with the created dump
 	 */
-	 toolState?: {
-		 /**
-		  * A data field that can be used to store a key identifying the dump.
-		  * The length of the string is limited to 512 characters. So usually
-		  * tools should use some sort of hashing algorithm to compute that
-		  * value.
-		  */
-		 data?: string;
-	 }
+	 toolState?: ToolState;
+}
+
+export namespace MetaData {
+	export const descriptor = new ObjectDescriptor<MetaData>(Object.assign({}, V.descriptor.description, {
+		label: new Property<VertexLabels.metaData>(value => value === VertexLabels.metaData),
+		version: new StringProperty(),
+		positionEncoding: new Property<string>(value => value === 'utf-16'),
+		toolInfo: ToolInfo.property(PropertyFlags.optional),
+		toolState: ToolState.property(PropertyFlags.optional)
+	}));
+}
+
+export interface RepositoryInfo {
+	/**
+	 * The repository type. For example GIT
+	 */
+	type: string;
+
+	/**
+	 * The URL to the repository
+	 */
+	url: string;
 }
 
 export interface Group extends V {
