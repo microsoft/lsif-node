@@ -138,8 +138,10 @@ class StringEnumProperty extends Property<string> {
 	}
 }
 
+type NotUndefined<T> = T extends undefined ? never : T;
+
 type ObjectDescription<T extends Object> = {
-	[P in keyof T]-?: Property<T[P]>;
+	[P in keyof T]-?: Property<NotUndefined<T[P]>>;
 }
 
 interface Indexable {
@@ -776,8 +778,8 @@ export namespace ToolInfo {
 		version: new StringProperty(PropertyFlags.optional),
 		args: new StringArrayProperty(PropertyFlags.optional)
 	});
-	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolInfo | undefined | null> {
-		return new Property<ToolInfo | undefined | null>(ToolInfo.is, flags);
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolInfo> {
+		return new Property<ToolInfo>(ToolInfo.is, flags);
 	}
 	export function is(value: any): value is ToolInfo {
 		return descriptor.validate(value);
@@ -798,8 +800,8 @@ export namespace ToolState {
 	export const descriptor = new ObjectDescriptor<Required<ToolState>>({
 		data: new StringProperty(PropertyFlags.optional)
 	});
-	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolState | undefined | null> {
-		return new Property<ToolState | undefined | null>(ToolState.is, flags);
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolState> {
+		return new Property<ToolState>(ToolState.is, flags);
 	}
 	export function is(value: any): value is ToolState {
 		return descriptor.validate(value);
@@ -868,7 +870,7 @@ export interface RepositoryInfo {
 }
 
 export namespace RepositoryInfo {
-	export const descriptor = new ObjectDescriptor<Required<RepositoryInfo>>({
+	export const descriptor = new ObjectDescriptor<RepositoryInfo>({
 		type: new StringProperty(),
 		url: new StringProperty(),
 		commitId: new StringProperty(PropertyFlags.optional)
@@ -924,7 +926,7 @@ export interface Group extends V {
 }
 
 export namespace Group {
-	export const descriptor = new VertexDescriptor<Required<Group>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Group>(Object.assign({}, V.descriptor.description, {
 		label:VertexLabels.property(VertexLabels.group),
 		uri: new StringProperty(),
 		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB'),
@@ -971,7 +973,7 @@ export interface Project extends V {
 }
 
 export namespace Project {
-	export const descriptor = new VertexDescriptor<Required<Project>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Project>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.project),
 		kind: new StringProperty(),
 		name: new StringProperty(),
@@ -1013,7 +1015,7 @@ export interface Document extends V {
 }
 
 export namespace Document {
-	export const descriptor = new VertexDescriptor<Required<Document>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Document>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.document),
 		uri: new StringProperty(),
 		languageId: new StringProperty(),
@@ -1119,7 +1121,7 @@ export interface Moniker extends V {
 }
 
 export namespace Moniker {
-	export const descriptor = new VertexDescriptor<Required<Moniker>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Moniker>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.moniker),
 		scheme: new StringProperty(),
 		identifier: new StringProperty(),
@@ -1167,7 +1169,7 @@ export interface PackageInformation extends V {
 }
 
 export namespace PackageInformation {
-	export const descriptor = new VertexDescriptor<Required<PackageInformation>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<PackageInformation>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.packageInformation),
 		name: new StringProperty(),
 		manager: new StringProperty(),
@@ -1199,7 +1201,7 @@ export interface RangeBasedDocumentSymbol {
 }
 
 export namespace RangeBasedDocumentSymbol {
-	export const descriptor = new ObjectDescriptor<Required<RangeBasedDocumentSymbol>>({
+	export const descriptor = new ObjectDescriptor<RangeBasedDocumentSymbol>({
 		id: Id.property(),
 		children: new Property<RangeBasedDocumentSymbol[]>(value => {
 			if (!Array.isArray(value)) {
@@ -1229,7 +1231,7 @@ export interface DocumentSymbolResult extends V {
 }
 
 export namespace DocumentSymbolResult {
-	export const descriptor = new VertexDescriptor<Required<DocumentSymbolResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<DocumentSymbolResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.documentSymbolResult),
 		result: new Property<lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>(value => {
 			if (!Array.isArray(value)) {
@@ -1272,7 +1274,7 @@ export interface DiagnosticResult extends V {
 }
 
 export namespace DiagnosticResult {
-	export const descriptor = new VertexDescriptor<Required<DiagnosticResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<DiagnosticResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.diagnosticResult),
 		result: new ArrayProperty(lsp.Diagnostic.is)
 	}));
@@ -1298,7 +1300,7 @@ export interface FoldingRangeResult extends V {
 }
 
 export namespace FoldingRangeResult {
-	export const descriptor = new VertexDescriptor<Required<FoldingRangeResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<FoldingRangeResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.foldingRangeResult),
 		result: new ArrayProperty(lsp.FoldingRange.is)
 	}));
@@ -1324,7 +1326,7 @@ export interface DocumentLinkResult extends V {
 }
 
 export namespace DocumentLinkResult {
-	export const descriptor = new VertexDescriptor<Required<DocumentLinkResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<DocumentLinkResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.documentLinkResult),
 		result: new ArrayProperty(lsp.DocumentLink.is)
 	}));
@@ -1341,7 +1343,7 @@ export interface DeclarationResult extends V {
 }
 
 export namespace DeclarationResult {
-	export const descriptor = new VertexDescriptor<Required<DeclarationResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<DeclarationResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.declarationResult)
 	}));
 	export function is(value: any): value is DeclarationResult {
@@ -1360,7 +1362,7 @@ export interface DefinitionResult extends V {
 }
 
 export namespace DefinitionResult {
-	export const descriptor = new VertexDescriptor<Required<DefinitionResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<DefinitionResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.definitionResult)
 	}));
 	export function is(value: any): value is DefinitionResult {
@@ -1380,7 +1382,7 @@ export interface TypeDefinitionResult extends V {
 }
 
 export namespace TypeDefinitionResult {
-	export const descriptor = new VertexDescriptor<Required<TypeDefinitionResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<TypeDefinitionResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.typeDefinitionResult)
 	}));
 	export function is(value: any): value is TypeDefinitionResult {
@@ -1400,7 +1402,7 @@ export interface ReferenceResult extends V {
 }
 
 export namespace ReferenceResult {
-	export const descriptor = new VertexDescriptor<Required<ReferenceResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<ReferenceResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.referenceResult)
 	}));
 	export function is(value: any): value is ReferenceResult {
@@ -1420,7 +1422,7 @@ export interface ImplementationResult extends V {
 }
 
 export namespace ImplementationResult {
-	export const descriptor = new VertexDescriptor<Required<ImplementationResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<ImplementationResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.implementationResult)
 	}));
 	export function is(value: any): value is ImplementationResult {
@@ -1447,7 +1449,7 @@ export interface HoverResult extends V {
 }
 
 export namespace HoverResult {
-	export const descriptor = new VertexDescriptor<Required<HoverResult>>(Object.assign({}, V.descriptor.description, {
+	export const descriptor = new VertexDescriptor<HoverResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.hoverResult),
 		result: new Property<lsp.Hover>(lsp.Hover.is)
 	}));
@@ -1500,6 +1502,31 @@ export enum EdgeLabels {
 	textDocument_implementation = 'textDocument/implementation',
 }
 
+export namespace EdgeLabels {
+	const values = StringEnum.values(EdgeLabels as unknown as StringEnum);
+	export function property(flags?: PropertyFlags): StringEnumProperty;
+	export function property(value: EdgeLabels, flags?: PropertyFlags): Property<EdgeLabels>;
+	export function property(valueOrFlags?: EdgeLabels | PropertyFlags, flags?: PropertyFlags): StringEnumProperty | Property<EdgeLabels> {
+		if (typeof valueOrFlags === 'string') {
+			return new Property<EdgeLabels>(value => value === valueOrFlags, flags);
+		}
+		return new StringEnumProperty(values, flags);
+	}
+	export function is(value: any): value is EdgeLabels {
+		return values.has(value);
+	}
+}
+
+class Edge11Descriptor<T, O extends V = V, I extends V = V> extends ObjectDescriptor<T> {
+	public readonly outDescriptor: ObjectDescriptor<O>;
+	public readonly inDescriptor: ObjectDescriptor<I>;
+	constructor(description: ObjectDescription<T>, outDescriptor: ObjectDescriptor<O>, inDescriptor: ObjectDescriptor<I>) {
+		super(description);
+		this.outDescriptor = outDescriptor;
+		this.inDescriptor = inDescriptor;
+	}
+}
+
 /**
  * A common base type of all edge types. The type parameters `S` and `T` are for typing and
  * documentation purpose only. An edge never holds a direct reference to a vertex. They are
@@ -1521,6 +1548,23 @@ export interface E11<S extends V, T extends V, K extends EdgeLabels> extends Ele
 	 * The id of the to Vertex.
 	 */
 	inV: Id;
+}
+
+class BrandProperty extends Property<any> {
+	public constructor() {
+		super(() => true, PropertyFlags.optional);
+	}
+}
+
+export namespace E11 {
+	export const descriptor = new Edge11Descriptor<E11<V, V, EdgeLabels>>({
+		_: new BrandProperty(),
+		id: Id.property(),
+		type: new Property<ElementTypes.edge>(value => value === ElementTypes.edge),
+		label: EdgeLabels.property(),
+		outV: Id.property(),
+		inV: Id.property()
+	}, V.descriptor, V.descriptor);
 }
 
 export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
@@ -1613,12 +1657,30 @@ export type moniker =
  */
 export type attach = E11<Moniker, Moniker, EdgeLabels.attach>;
 
+export namespace attach {
+	export const descriptor = new Edge11Descriptor<attach, Moniker, Moniker>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.attach)
+	}), Moniker.descriptor, Moniker.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge associating a moniker with a package information. The relationship exists between:
  *
  * - `Moniker` -> `PackageInformation`
  */
 export type packageInformation = E11<Moniker, PackageInformation, EdgeLabels.packageInformation>;
+
+export namespace packageInformation {
+	export const descriptor = new Edge11Descriptor<packageInformation, Moniker, PackageInformation>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.packageInformation)
+	}), Moniker.descriptor, PackageInformation.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge associating a project with a group. The relationship exists between:
@@ -1627,6 +1689,14 @@ export type packageInformation = E11<Moniker, PackageInformation, EdgeLabels.pac
  */
 export type belongsTo = E11<Project, Group, EdgeLabels.belongsTo>;
 
+export namespace belongsTo {
+	export const descriptor = new Edge11Descriptor<belongsTo, Project, Group>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.belongsTo)
+	}), Project.descriptor, Group.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge representing a `textDocument/documentSymbol` relationship. The relationship exists between:
@@ -1635,12 +1705,30 @@ export type belongsTo = E11<Project, Group, EdgeLabels.belongsTo>;
  */
 export type textDocument_documentSymbol = E11<Document, DocumentSymbolResult, EdgeLabels.textDocument_documentSymbol>;
 
+export namespace textDocument_documentSymbol {
+	export const descriptor = new Edge11Descriptor<textDocument_documentSymbol, Document, DocumentSymbolResult>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_documentSymbol)
+	}), Document.descriptor, DocumentSymbolResult.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a `textDocument/foldingRange` relationship. The relationship exists between:
  *
  * - `Document` -> `FoldingRangeResult`
  */
 export type textDocument_foldingRange = E11<Document, FoldingRangeResult, EdgeLabels.textDocument_foldingRange>;
+
+export namespace textDocument_foldingRange {
+	export const descriptor = new Edge11Descriptor<textDocument_foldingRange, Document, FoldingRangeResult>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_foldingRange)
+	}), Document.descriptor, FoldingRangeResult.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge representing a `textDocument/documentLink` relationship. The relationship exists between:
@@ -1649,6 +1737,15 @@ export type textDocument_foldingRange = E11<Document, FoldingRangeResult, EdgeLa
  */
 export type textDocument_documentLink = E11<Document, DocumentLinkResult, EdgeLabels.textDocument_documentLink>;
 
+export namespace textDocument_documentLink {
+	export const descriptor = new Edge11Descriptor<textDocument_documentLink, Document, DocumentLinkResult>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_documentLink)
+	}), Document.descriptor, DocumentLinkResult.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a `textDocument/diagnostic` relationship. The relationship exists between:
  *
@@ -1656,6 +1753,15 @@ export type textDocument_documentLink = E11<Document, DocumentLinkResult, EdgeLa
  * - `Document` -> `DiagnosticResult`
  */
 export type textDocument_diagnostic = E11<Project, DiagnosticResult, EdgeLabels.textDocument_diagnostic> | E11<Document, DiagnosticResult, EdgeLabels.textDocument_diagnostic>;
+
+export namespace textDocument_diagnostic {
+	export const descriptor = new Edge11Descriptor<textDocument_diagnostic, Document, DiagnosticResult>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_diagnostic)
+	}), Document.descriptor, DiagnosticResult.descriptor);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge representing a declaration relationship. The relationship exists between:
