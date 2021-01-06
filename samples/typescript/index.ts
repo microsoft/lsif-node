@@ -1,31 +1,15 @@
-// file A
-export const values: ReadonlyArray<{ line: number; character: number}> = [];
+chrome.debugger.onDetach;
 
-// file B
-values[1].character;
-values.find(() => true).character;
-
-
-// file A
-interface Hidden {
-	line2: number;
-	character: number;
+interface Y {
+	value: number;
 }
 
-export const range: {
-	start: Hidden,
-	end: Hidden
-} = { start: { line2: 10, character: 10 }, end: { line2: 10, character: 10 } };
-
-
-// file B
-range.start.line2;
-range.end.line2;
-
-
-abstract class Foo {
-    run(): void { }
+export namespace X {
+	export type B = Y;
 }
-export class Bar extends Foo {
-    do(): void { }
-}
+
+import { mul } from './sub/provide';
+mul(1, 1);
+
+import { div } from '../provide'
+div(1,1);

@@ -78,19 +78,41 @@ class Property<T> {
 	}
 }
 
-class BooleanProperty extends Property<boolean | undefined | null> {
+class BooleanProperty extends Property<boolean> {
 	constructor(flags: PropertyFlags = PropertyFlags.none) {
 		super(Is.boolean, flags);
 	}
 }
 
-class StringProperty extends Property<string | undefined | null> {
+class StringProperty extends Property<string> {
 	constructor(flags: PropertyFlags = PropertyFlags.none) {
 		super(Is.string, flags);
 	}
 }
 
-class StringArrayProperty extends Property<string[] | undefined | null> {
+class UriProperty extends StringProperty {
+	constructor(flags: PropertyFlags = PropertyFlags.none) {
+		super(flags);
+	}
+}
+
+class ArrayProperty<T> extends Property<T[]> {
+	constructor(validator: Validator<T>, flags: PropertyFlags = PropertyFlags.none) {
+		super(value => {
+			if (!Array.isArray(value)) {
+				return false;
+			}
+			for (const item of value) {
+				if (!validator(item)) {
+					return false;
+				}
+			}
+			return true;
+		}, flags);
+	}
+}
+
+class StringArrayProperty extends Property<string[]> {
 	constructor(flags: PropertyFlags = PropertyFlags.none) {
 		super(Is.isStringArray, flags);
 	}
@@ -110,7 +132,7 @@ namespace StringEnum {
 	}
 }
 
-class StringEnumProperty extends Property<string | undefined | null> {
+class StringEnumProperty extends Property<string> {
 	constructor(values: Set<string | undefined | null>, flags: PropertyFlags = PropertyFlags.none) {
 		super(value => values.has(value), flags);
 	}
@@ -130,7 +152,10 @@ class ObjectDescriptor<T extends Object> {
 		this.description = description;
 	}
 
-	public validate(value: T): boolean {
+	public validate(value: T | undefined | null): boolean {
+		if (value === undefined || value === null) {
+			return false;
+		}
 		const properties = Object.keys(this.description);
 		for (const propertyName of properties) {
 			const property = (this.description as Indexable)[propertyName];
@@ -238,7 +263,12 @@ export enum VertexLabels {
 
 export namespace VertexLabels {
 	const values = StringEnum.values(VertexLabels as unknown as StringEnum);
-	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
+	export function property(flags?: PropertyFlags): StringEnumProperty;
+	export function property(value: VertexLabels, flags?: PropertyFlags): Property<VertexLabels>;
+	export function property(valueOrFlags?: VertexLabels | PropertyFlags, flags?: PropertyFlags): StringEnumProperty | Property<VertexLabels> {
+		if (typeof valueOrFlags === 'string') {
+			return new Property<VertexLabels>(value => value === valueOrFlags, flags);
+		}
 		return new StringEnumProperty(values, flags);
 	}
 	export function is(value: any): value is VertexLabels {
@@ -265,8 +295,14 @@ export interface V extends Element {
 	label: VertexLabels;
 }
 
+class VertexDescriptor<T extends V> extends ObjectDescriptor<T> {
+	constructor(description: ObjectDescription<T>) {
+		super(description);
+	}
+}
+
 export namespace V {
-	export const descriptor = new ObjectDescriptor<V>(Object.assign({}, Element.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<V>>(Object.assign({}, Element.descriptor.description, {
 		type: new Property<ElementTypes.vertex>(value => value === ElementTypes.vertex),
 		label: VertexLabels.property()
 	}));
@@ -333,8 +369,8 @@ export interface Event extends V {
 }
 
 export namespace Event {
-	export const descriptor = new ObjectDescriptor<Event>(Object.assign({}, V.descriptor.description, {
-		label: new Property<VertexLabels.event>(value => value === VertexLabels.event),
+	export const descriptor = new VertexDescriptor<Required<Event>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.event),
 		scope: EventScope.property(),
 		kind: EventKind.property(),
 		data: Id.property()
@@ -350,7 +386,7 @@ export interface GroupEvent extends Event {
 
 
 export namespace GroupEvent {
-	export const descriptor = new ObjectDescriptor<GroupEvent>(Object.assign({}, Event.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<GroupEvent>>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.group),
 	}));
 	export function is(value: any): value is GroupEvent {
@@ -363,7 +399,7 @@ export interface ProjectEvent extends Event {
 }
 
 export namespace ProjectEvent {
-	export const descriptor = new ObjectDescriptor<ProjectEvent>(Object.assign({}, Event.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<ProjectEvent>>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.project),
 	}));
 	export function is(value: any): value is ProjectEvent {
@@ -376,7 +412,7 @@ export interface DocumentEvent extends Event {
 }
 
 export namespace DocumentEvent {
-	export const descriptor = new ObjectDescriptor<DocumentEvent>(Object.assign({}, Event.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<DocumentEvent>>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.document),
 	}));
 	export function is(value: any): value is DocumentEvent {
@@ -389,7 +425,7 @@ export interface MonikerAttachEvent extends Event {
 }
 
 export namespace MonikerAttachEvent {
-	export const descriptor = new ObjectDescriptor<MonikerAttachEvent>(Object.assign({}, Event.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<MonikerAttachEvent>>(Object.assign({}, Event.descriptor.description, {
 		scope: new Property(value => value === EventScope.monikerAttach),
 	}));
 	export function is(value: any): value is MonikerAttachEvent {
@@ -406,8 +442,8 @@ export interface ResultSet extends V {
 }
 
 export namespace ResultSet {
-	export const descriptor = new ObjectDescriptor<ResultSet>(Object.assign({}, V.descriptor.description, {
-		label: new Property(value => value === VertexLabels.resultSet),
+	export const descriptor = new VertexDescriptor<Required<ResultSet>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.resultSet)
 	}));
 	export function is(value: any): value is ResultSet {
 		return descriptor.validate(value);
@@ -472,7 +508,7 @@ export interface DeclarationTag {
 }
 
 export namespace DeclarationTag {
-	export const descriptor = new ObjectDescriptor<DeclarationTag>({
+	export const descriptor = new ObjectDescriptor<Required<DeclarationTag>>({
 		type: new Property(value => value === RangeTagTypes.declaration),
 		text: new StringProperty(),
 		kind: new Property(Is.symbolKind),
@@ -522,7 +558,7 @@ export interface DefinitionTag {
 }
 
 export namespace DefinitionTag {
-	export const descriptor = new ObjectDescriptor<DefinitionTag>({
+	export const descriptor = new ObjectDescriptor<Required<DefinitionTag>>({
 		type: new Property(value => value === RangeTagTypes.definition),
 		text: new StringProperty(),
 		kind: new Property(Is.symbolKind),
@@ -552,7 +588,7 @@ export interface ReferenceTag {
 }
 
 export namespace ReferenceTag {
-	export const descriptor = new ObjectDescriptor<ReferenceTag>({
+	export const descriptor = new ObjectDescriptor<Required<ReferenceTag>>({
 		type: new Property(value => value === RangeTagTypes.reference),
 		text: new StringProperty()
 	});
@@ -578,7 +614,7 @@ export interface UnknownTag {
 }
 
 export namespace UnknownTag {
-	export const descriptor = new ObjectDescriptor<UnknownTag>({
+	export const descriptor = new ObjectDescriptor<Required<UnknownTag>>({
 		type: new Property(value => value === RangeTagTypes.unknown),
 		text: new StringProperty()
 	});
@@ -593,8 +629,8 @@ export namespace UnknownTag {
 export type RangeTag = DefinitionTag | DeclarationTag | ReferenceTag | UnknownTag;
 
 export namespace RangeTag {
-	export function property(flags: PropertyFlags = PropertyFlags.none): Property<RangeTag | undefined | null> {
-		return new Property<RangeTag | undefined | null>(RangeTag.is, flags);
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<RangeTag> {
+		return new Property<RangeTag>(RangeTag.is, flags);
 	}
 	export function is(value: any): value is RangeTag {
 		const candidate = value as RangeTag;
@@ -628,8 +664,8 @@ export interface Range extends V, lsp.Range {
 }
 
 export namespace Range {
-	export const descriptor = new ObjectDescriptor<Range>(Object.assign({}, V.descriptor.description, {
-		label: new Property<VertexLabels.range>(value => value === VertexLabels.range),
+	export const descriptor = new VertexDescriptor<Required<Range>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.range),
 		tag: RangeTag.property(PropertyFlags.optional),
 		start: new Property(lsp.Position.is),
 		end: new Property(lsp.Position.is)
@@ -655,7 +691,7 @@ export interface DefinitionRange extends Range {
 }
 
 export namespace DefinitionRange {
-	export const descriptor = new ObjectDescriptor<DefinitionRange>(Object.assign({}, Range.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<DefinitionRange>>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(DefinitionTag.is)
 	}));
 	export function is(value: any): value is DefinitionRange {
@@ -674,7 +710,7 @@ export interface DeclarationRange extends Range {
 }
 
 export namespace DeclarationRange {
-	export const descriptor = new ObjectDescriptor<DeclarationRange>(Object.assign({}, Range.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<DeclarationRange>>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(DeclarationRange.is)
 	}));
 	export function is(value: any): value is DeclarationRange {
@@ -693,7 +729,7 @@ export interface ReferenceRange extends Range {
 }
 
 export namespace ReferenceRange {
-	export const descriptor = new ObjectDescriptor<ReferenceRange>(Object.assign({}, Range.descriptor.description, {
+	export const descriptor = new VertexDescriptor<Required<ReferenceRange>>(Object.assign({}, Range.descriptor.description, {
 		tag: new Property(ReferenceRange.is)
 	}));
 	export function is(value: any): value is ReferenceRange {
@@ -719,8 +755,8 @@ export interface Location extends V {
 }
 
 export namespace Location {
-	export const descriptor = new ObjectDescriptor<Location>(Object.assign({}, V.descriptor.description, {
-		label: new Property<VertexLabels.location>(value => value === VertexLabels.location),
+	export const descriptor = new VertexDescriptor<Required<Location>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.location),
 		range: new Property<lsp.Range>(value => lsp.Range.is(value))
 	}));
 	export function is(value: any): value is Location {
@@ -735,7 +771,7 @@ export interface ToolInfo {
 }
 
 export namespace ToolInfo {
-	export const descriptor = new ObjectDescriptor<ToolInfo>({
+	export const descriptor = new ObjectDescriptor<Required<ToolInfo>>({
 		name: new StringProperty(),
 		version: new StringProperty(PropertyFlags.optional),
 		args: new StringArrayProperty(PropertyFlags.optional)
@@ -759,7 +795,7 @@ export interface ToolState {
 }
 
 export namespace ToolState {
-	export const descriptor = new ObjectDescriptor<ToolState>({
+	export const descriptor = new ObjectDescriptor<Required<ToolState>>({
 		data: new StringProperty(PropertyFlags.optional)
 	});
 	export function property(flags: PropertyFlags = PropertyFlags.none): Property<ToolState | undefined | null> {
@@ -805,8 +841,8 @@ export interface MetaData extends V {
 }
 
 export namespace MetaData {
-	export const descriptor = new ObjectDescriptor<MetaData>(Object.assign({}, V.descriptor.description, {
-		label: new Property<VertexLabels.metaData>(value => value === VertexLabels.metaData),
+	export const descriptor = new VertexDescriptor<MetaData>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.metaData),
 		version: new StringProperty(),
 		positionEncoding: new Property<string>(value => value === 'utf-16'),
 		toolInfo: ToolInfo.property(PropertyFlags.optional),
@@ -824,6 +860,25 @@ export interface RepositoryInfo {
 	 * The URL to the repository
 	 */
 	url: string;
+
+	/**
+	 * A commitId if available.
+	 */
+	commitId?: string;
+}
+
+export namespace RepositoryInfo {
+	export const descriptor = new ObjectDescriptor<Required<RepositoryInfo>>({
+		type: new StringProperty(),
+		url: new StringProperty(),
+		commitId: new StringProperty(PropertyFlags.optional)
+	});
+	export function is(value: any): value is RepositoryInfo {
+		return descriptor.validate(value);
+	}
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<RepositoryInfo> {
+		return new Property<RepositoryInfo>(RepositoryInfo.is, flags);
+	}
 }
 
 export interface Group extends V {
@@ -865,16 +920,21 @@ export interface Group extends V {
 	/**
 	 * Optional information about the repository containing the source of the package.
 	 */
-	repository?: {
-		/**
-		 * The repository type. For example GIT
-		 */
-		type: string;
+	repository?: RepositoryInfo;
+}
 
-		/**
-		 * The URL to the repository
-		 */
-		url: string;
+export namespace Group {
+	export const descriptor = new VertexDescriptor<Required<Group>>(Object.assign({}, V.descriptor.description, {
+		label:VertexLabels.property(VertexLabels.group),
+		uri: new StringProperty(),
+		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB'),
+		name: new StringProperty(),
+		rootUri: new UriProperty(),
+		description: new StringProperty(),
+		repository: RepositoryInfo.property(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is Group {
+		return descriptor.validate(value);
 	}
 }
 
@@ -910,6 +970,19 @@ export interface Project extends V {
 	contents?: string;
 }
 
+export namespace Project {
+	export const descriptor = new VertexDescriptor<Required<Project>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.project),
+		kind: new StringProperty(),
+		name: new StringProperty(),
+		resource: new UriProperty(PropertyFlags.optional),
+		contents: new StringProperty(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is Project {
+		return descriptor.validate(value);
+	}
+}
+
 export type DocumentId = Id;
 
 /**
@@ -939,6 +1012,18 @@ export interface Document extends V {
 	contents?: string;
 }
 
+export namespace Document {
+	export const descriptor = new VertexDescriptor<Required<Document>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.document),
+		uri: new StringProperty(),
+		languageId: new StringProperty(),
+		contents: new StringProperty(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is Document {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * The moniker kind.
  */
@@ -958,6 +1043,16 @@ export enum MonikerKind {
 	 * variable of a function, a class not visible outside the project, ...)
 	 */
 	local = 'local'
+}
+
+export namespace MonikerKind {
+	const values = StringEnum.values(MonikerKind as unknown as StringEnum);
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
+		return new StringEnumProperty(values, flags);
+	}
+	export function is(value: any): value is MonikerKind {
+		return values.has(value);
+	}
 }
 
 export enum UniquenessLevel {
@@ -987,6 +1082,16 @@ export enum UniquenessLevel {
 	global = 'global'
 }
 
+export namespace UniquenessLevel {
+	const values = StringEnum.values(UniquenessLevel as unknown as StringEnum);
+	export function property(flags: PropertyFlags = PropertyFlags.none): StringEnumProperty {
+		return new StringEnumProperty(values, flags);
+	}
+	export function is(value: any): value is UniquenessLevel {
+		return values.has(value);
+	}
+}
+
 export interface Moniker extends V {
 
 	label: VertexLabels.moniker;
@@ -1011,6 +1116,19 @@ export interface Moniker extends V {
 	 * The moniker kind if known.
 	 */
 	kind?: MonikerKind;
+}
+
+export namespace Moniker {
+	export const descriptor = new VertexDescriptor<Required<Moniker>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.moniker),
+		scheme: new StringProperty(),
+		identifier: new StringProperty(),
+		unique: UniquenessLevel.property(),
+		kind: MonikerKind.property(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is Moniker {
+		return descriptor.validate(value);
+	}
 }
 
 export interface PackageInformation extends V {
@@ -1045,21 +1163,21 @@ export interface PackageInformation extends V {
 	/**
 	 * Optional information about the repository containing the source of the package.
 	 */
-	repository?: {
-		/**
-		 * The repository type. For example GIT
-		 */
-		type: string;
+	repository?: RepositoryInfo
+}
 
-		/**
-		 * The URL to the repository
-		 */
-		url: string;
-
-		/**
-		 * A commitId if available.
-		 */
-		commitId?: string;
+export namespace PackageInformation {
+	export const descriptor = new VertexDescriptor<Required<PackageInformation>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.packageInformation),
+		name: new StringProperty(),
+		manager: new StringProperty(),
+		uri: new UriProperty(PropertyFlags.optional),
+		contents: new StringProperty(PropertyFlags.optional),
+		version: new StringProperty(PropertyFlags.optional),
+		repository: RepositoryInfo.property(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is PackageInformation {
+		return descriptor.validate(value);
 	}
 }
 
@@ -1080,6 +1198,26 @@ export interface RangeBasedDocumentSymbol {
 	children?: RangeBasedDocumentSymbol[];
 }
 
+export namespace RangeBasedDocumentSymbol {
+	export const descriptor = new ObjectDescriptor<Required<RangeBasedDocumentSymbol>>({
+		id: Id.property(),
+		children: new Property<RangeBasedDocumentSymbol[]>(value => {
+			if (!Array.isArray(value)) {
+				return false;
+			}
+			for (const element of value) {
+				if (!RangeBasedDocumentSymbol.is(element)) {
+					return false;
+				}
+			}
+			return true;
+		}, PropertyFlags.optional)
+	});
+	export function is(value: any): value is RangeBasedDocumentSymbol {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * A vertex representing the document symbol result.
  */
@@ -1088,6 +1226,33 @@ export interface DocumentSymbolResult extends V {
 	label: VertexLabels.documentSymbolResult;
 
 	result: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[];
+}
+
+export namespace DocumentSymbolResult {
+	export const descriptor = new VertexDescriptor<Required<DocumentSymbolResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.documentSymbolResult),
+		result: new Property<lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>(value => {
+			if (!Array.isArray(value)) {
+				return false;
+			}
+			if (value.length === 0) {
+				return true;
+			}
+			const first = value[0];
+			const validator = (first as RangeBasedDocumentSymbol).id !== undefined
+				? RangeBasedDocumentSymbol.is
+				: lsp.DocumentSymbol.is;
+			for (const item of value) {
+				if (!validator(item)) {
+					return false;
+				}
+			}
+			return true;
+		})
+	}));
+	export function is(value: any): value is DocumentSymbolResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -1106,6 +1271,16 @@ export interface DiagnosticResult extends V {
 	result: lsp.Diagnostic[];
 }
 
+export namespace DiagnosticResult {
+	export const descriptor = new VertexDescriptor<Required<DiagnosticResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.diagnosticResult),
+		result: new ArrayProperty(lsp.Diagnostic.is)
+	}));
+	export function is(value: any): value is DiagnosticResult {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * A vertex representing a folding range result.
  */
@@ -1120,6 +1295,16 @@ export interface FoldingRangeResult extends V {
 	 * The actual folding ranges.
 	 */
 	result: lsp.FoldingRange[];
+}
+
+export namespace FoldingRangeResult {
+	export const descriptor = new VertexDescriptor<Required<FoldingRangeResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.foldingRangeResult),
+		result: new ArrayProperty(lsp.FoldingRange.is)
+	}));
+	export function is(value: any): value is FoldingRangeResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -1138,11 +1323,30 @@ export interface DocumentLinkResult extends V {
 	result: lsp.DocumentLink[];
 }
 
+export namespace DocumentLinkResult {
+	export const descriptor = new VertexDescriptor<Required<DocumentLinkResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.documentLinkResult),
+		result: new ArrayProperty(lsp.DocumentLink.is)
+	}));
+	export function is(value: any): value is DocumentLinkResult {
+		return descriptor.validate(value);
+	}
+}
+
 export interface DeclarationResult extends V {
 	/**
 	 * The label property.
 	 */
 	label: VertexLabels.declarationResult;
+}
+
+export namespace DeclarationResult {
+	export const descriptor = new VertexDescriptor<Required<DeclarationResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.declarationResult)
+	}));
+	export function is(value: any): value is DeclarationResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -1153,6 +1357,15 @@ export interface DefinitionResult extends V {
 	 * The label property.
 	 */
 	label: VertexLabels.definitionResult;
+}
+
+export namespace DefinitionResult {
+	export const descriptor = new VertexDescriptor<Required<DefinitionResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.definitionResult)
+	}));
+	export function is(value: any): value is DefinitionResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -1166,6 +1379,15 @@ export interface TypeDefinitionResult extends V {
 	label: VertexLabels.typeDefinitionResult;
 }
 
+export namespace TypeDefinitionResult {
+	export const descriptor = new VertexDescriptor<Required<TypeDefinitionResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.typeDefinitionResult)
+	}));
+	export function is(value: any): value is TypeDefinitionResult {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * A vertex representing a reference result.
  */
@@ -1177,6 +1399,15 @@ export interface ReferenceResult extends V {
 	label: VertexLabels.referenceResult;
 }
 
+export namespace ReferenceResult {
+	export const descriptor = new VertexDescriptor<Required<ReferenceResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.referenceResult)
+	}));
+	export function is(value: any): value is ReferenceResult {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * A vertex representing an implementation result.
  */
@@ -1186,6 +1417,15 @@ export interface ImplementationResult extends V {
 	 * The label property.
 	 */
 	label: VertexLabels.implementationResult;
+}
+
+export namespace ImplementationResult {
+	export const descriptor = new VertexDescriptor<Required<ImplementationResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.implementationResult)
+	}));
+	export function is(value: any): value is ImplementationResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
@@ -1204,6 +1444,16 @@ export interface HoverResult extends V {
 	 * The hover result. This is the normal LSP hover result.
 	 */
 	result: lsp.Hover;
+}
+
+export namespace HoverResult {
+	export const descriptor = new VertexDescriptor<Required<HoverResult>>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.hoverResult),
+		result: new Property<lsp.Hover>(lsp.Hover.is)
+	}));
+	export function is(value: any): value is HoverResult {
+		return descriptor.validate(value);
+	}
 }
 
 /**
