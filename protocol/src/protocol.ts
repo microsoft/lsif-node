@@ -36,34 +36,6 @@ namespace Is {
 	}
 }
 
-// ---- These need to come first to ensure they are non when defining the descriptor types.
-
-/**
- * All know vertices label values.
- */
-export enum VertexLabels {
-	metaData = 'metaData',
-	event = '$event',
-	project = 'project',
-	group = 'group',
-	range = 'range',
-	location = 'location',
-	document = 'document',
-	moniker = 'moniker',
-	packageInformation = 'packageInformation',
-	resultSet = 'resultSet',
-	documentSymbolResult = 'documentSymbolResult',
-	foldingRangeResult = 'foldingRangeResult',
-	documentLinkResult = 'documentLinkResult',
-	diagnosticResult = 'diagnosticResult',
-	declarationResult = 'declarationResult',
-	definitionResult = 'definitionResult',
-	typeDefinitionResult = 'typeDefinitionResult',
-	hoverResult = 'hoverResult',
-	referenceResult = 'referenceResult',
-	implementationResult = 'implementationResult'
-}
-
 interface Validator<T> {
 	(value: T | undefined | null): boolean;
 }
@@ -176,11 +148,27 @@ class VertexLabelsProperty extends Property<VertexLabels> {
 	}
 }
 
+class EdgeLabelsProperty extends Property<EdgeLabels> {
+	constructor(valueOrFlags?: EdgeLabels | PropertyFlags, flags?: PropertyFlags) {
+		if (typeof valueOrFlags === 'string') {
+			super(value => value === valueOrFlags, flags);
+		} else {
+			super(EdgeLabels.is, flags);
+		}
+	}
+}
+
 type NotUndefined<T> = T extends undefined ? never : T;
 
-type ObjectDescription<T extends Object> = {
-	readonly [P in keyof T]-?: T[P] extends VertexLabels ? VertexLabelsProperty : Property<NotUndefined<T[P]>>;
+type _objectDescription<T extends Object> = {
+	readonly [P in keyof T]-?: T[P] extends VertexLabels
+		? VertexLabelsProperty
+		: T[P] extends EdgeLabels
+			? EdgeLabelsProperty
+			: Property<NotUndefined<T[P]>>;
 }
+
+type ObjectDescription<T extends Object> = Omit<_objectDescription<T>, '__brand'>;
 
 interface Indexable {
 	[key: string]: Property<any>;
@@ -273,6 +261,40 @@ export namespace Element {
 	export function is(value: any): value is Element {
 		return descriptor.validate(value);
 	}
+	export function getDescriptor(element: Element): VertexDescriptor<V> | EdgeDescriptor<E<V, V, EdgeLabels>> {
+		switch (element.type) {
+			case ElementTypes.vertex:
+				return Vertex.getDescriptor((element as Vertex).label);
+			case ElementTypes.edge:
+				return Edge.getDescriptor((element as Edge).label);
+		}
+	}
+}
+
+/**
+ * All know vertices label values.
+ */
+export enum VertexLabels {
+	metaData = 'metaData',
+	event = '$event',
+	project = 'project',
+	group = 'group',
+	range = 'range',
+	location = 'location',
+	document = 'document',
+	moniker = 'moniker',
+	packageInformation = 'packageInformation',
+	resultSet = 'resultSet',
+	documentSymbolResult = 'documentSymbolResult',
+	foldingRangeResult = 'foldingRangeResult',
+	documentLinkResult = 'documentLinkResult',
+	diagnosticResult = 'diagnosticResult',
+	declarationResult = 'declarationResult',
+	definitionResult = 'definitionResult',
+	typeDefinitionResult = 'typeDefinitionResult',
+	hoverResult = 'hoverResult',
+	referenceResult = 'referenceResult',
+	implementationResult = 'implementationResult'
 }
 
 export namespace VertexLabels {
@@ -1489,6 +1511,36 @@ export type Vertex =
 	ReferenceResult |
 	ImplementationResult;
 
+export namespace Vertex {
+	const descriptors: Map<VertexLabels, VertexDescriptor<V>> = new Map();
+	descriptors.set(VertexLabels.metaData, MetaData.descriptor);
+	descriptors.set(VertexLabels.event, Event.descriptor);
+	descriptors.set(VertexLabels.project, Project.descriptor);
+	descriptors.set(VertexLabels.group, Group.descriptor);
+	descriptors.set(VertexLabels.document, Document.descriptor);
+	descriptors.set(VertexLabels.moniker, Moniker.descriptor);
+	descriptors.set(VertexLabels.packageInformation, PackageInformation.descriptor);
+	descriptors.set(VertexLabels.resultSet, ResultSet.descriptor);
+	descriptors.set(VertexLabels.range, Range.descriptor);
+	descriptors.set(VertexLabels.documentSymbolResult, DocumentSymbolResult.descriptor);
+	descriptors.set(VertexLabels.foldingRangeResult, FoldingRangeResult.descriptor);
+	descriptors.set(VertexLabels.documentLinkResult, DocumentLinkResult.descriptor);
+	descriptors.set(VertexLabels.diagnosticResult, DiagnosticResult.descriptor);
+	descriptors.set(VertexLabels.definitionResult, DefinitionResult.descriptor);
+	descriptors.set(VertexLabels.declarationResult, DeclarationResult.descriptor);
+	descriptors.set(VertexLabels.typeDefinitionResult, TypeDefinitionResult.descriptor);
+	descriptors.set(VertexLabels.hoverResult, HoverResult.descriptor);
+	descriptors.set(VertexLabels.referenceResult, ReferenceResult.descriptor);
+	descriptors.set(VertexLabels.implementationResult, ImplementationResult.descriptor);
+	export function getDescriptor(label: VertexLabels): VertexDescriptor<V> {
+		const result =  descriptors.get(label);
+		if (result === undefined) {
+			throw new Error(`No descriptor registered for vertex ${label}`);
+		}
+		return result;
+	}
+}
+
 export enum EdgeLabels {
 	contains = 'contains',
 	item = 'item',
@@ -1539,7 +1591,7 @@ class EdgeDescriptor<T> extends ObjectDescriptor<T> {
  */
 export interface E11<S extends V, T extends V, K extends EdgeLabels> extends Element {
 	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
-	_?: [S, T];
+	__brand?: [S, T];
 	id: Id;
 	type: ElementTypes.edge;
 	label: K;
@@ -1555,15 +1607,8 @@ export interface E11<S extends V, T extends V, K extends EdgeLabels> extends Ele
 	inV: Id;
 }
 
-class BrandProperty extends Property<any> {
-	public constructor() {
-		super(() => true, PropertyFlags.optional);
-	}
-}
-
 export namespace E11 {
 	export const descriptor = new EdgeDescriptor<E11<V, V, EdgeLabels>>({
-		_: new BrandProperty(),
 		id: Id.property(),
 		type: new Property<ElementTypes.edge>(value => value === ElementTypes.edge),
 		label: EdgeLabels.property(),
@@ -1574,7 +1619,7 @@ export namespace E11 {
 
 export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
 	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
-	_?: [S, T];
+	__brand?: [S, T];
 	id: Id;
 	type: ElementTypes.edge;
 	label: K;
@@ -1592,7 +1637,6 @@ export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Ele
 
 export namespace E1N {
 	export const descriptor = new EdgeDescriptor<E1N<V, V, EdgeLabels>>({
-		_: new BrandProperty(),
 		id: Id.property(),
 		type: new Property<ElementTypes.edge>(value => value === ElementTypes.edge),
 		label: EdgeLabels.property(),
@@ -2008,5 +2052,32 @@ export namespace Edge {
 		let candidate = edge as E1N<any, any, any>;
 		return candidate && Array.isArray(candidate.inVs);
 
+	}
+
+	const descriptors: Map<EdgeLabels, EdgeDescriptor<E<V,V,EdgeLabels>>> = new Map();
+	descriptors.set(EdgeLabels.contains, contains.descriptor);
+	descriptors.set(EdgeLabels.item, item.descriptor);
+	descriptors.set(EdgeLabels.next, next.descriptor);
+	descriptors.set(EdgeLabels.moniker, moniker.descriptor);
+	descriptors.set(EdgeLabels.attach, attach.descriptor);
+	descriptors.set(EdgeLabels.packageInformation, packageInformation.descriptor);
+	descriptors.set(EdgeLabels.belongsTo, belongsTo.descriptor);
+	descriptors.set(EdgeLabels.textDocument_documentSymbol, textDocument_documentSymbol.descriptor);
+	descriptors.set(EdgeLabels.textDocument_foldingRange, textDocument_foldingRange.descriptor);
+	descriptors.set(EdgeLabels.textDocument_documentLink, textDocument_documentLink.descriptor);
+	descriptors.set(EdgeLabels.textDocument_diagnostic, textDocument_diagnostic.descriptor);
+	descriptors.set(EdgeLabels.textDocument_declaration, textDocument_declaration.descriptor);
+	descriptors.set(EdgeLabels.textDocument_definition, textDocument_definition.descriptor);
+	descriptors.set(EdgeLabels.textDocument_typeDefinition, textDocument_typeDefinition.descriptor);
+	descriptors.set(EdgeLabels.textDocument_hover, textDocument_hover.descriptor);
+	descriptors.set(EdgeLabels.textDocument_references, textDocument_references.descriptor);
+	descriptors.set(EdgeLabels.textDocument_implementation, textDocument_implementation.descriptor);
+
+	export function getDescriptor(label: EdgeLabels): EdgeDescriptor<E<V, V, EdgeLabels>> {
+		const result =  descriptors.get(label);
+		if (result === undefined) {
+			throw new Error(`No descriptor registered for edge ${label}`);
+		}
+		return result;
 	}
 }
