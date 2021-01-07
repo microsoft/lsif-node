@@ -36,6 +36,34 @@ namespace Is {
 	}
 }
 
+// ---- These need to come first to ensure they are non when defining the descriptor types.
+
+/**
+ * All know vertices label values.
+ */
+export enum VertexLabels {
+	metaData = 'metaData',
+	event = '$event',
+	project = 'project',
+	group = 'group',
+	range = 'range',
+	location = 'location',
+	document = 'document',
+	moniker = 'moniker',
+	packageInformation = 'packageInformation',
+	resultSet = 'resultSet',
+	documentSymbolResult = 'documentSymbolResult',
+	foldingRangeResult = 'foldingRangeResult',
+	documentLinkResult = 'documentLinkResult',
+	diagnosticResult = 'diagnosticResult',
+	declarationResult = 'declarationResult',
+	definitionResult = 'definitionResult',
+	typeDefinitionResult = 'typeDefinitionResult',
+	hoverResult = 'hoverResult',
+	referenceResult = 'referenceResult',
+	implementationResult = 'implementationResult'
+}
+
 interface Validator<T> {
 	(value: T | undefined | null): boolean;
 }
@@ -138,10 +166,20 @@ class StringEnumProperty extends Property<string> {
 	}
 }
 
+class VertexLabelsProperty extends Property<VertexLabels> {
+	constructor(valueOrFlags?: VertexLabels | PropertyFlags, flags?: PropertyFlags) {
+		if (typeof valueOrFlags === 'string') {
+			super(value => value === valueOrFlags, flags);
+		} else {
+			super(VertexLabels.is, flags);
+		}
+	}
+}
+
 type NotUndefined<T> = T extends undefined ? never : T;
 
 type ObjectDescription<T extends Object> = {
-	[P in keyof T]-?: Property<NotUndefined<T[P]>>;
+	readonly [P in keyof T]-?: T[P] extends VertexLabels ? VertexLabelsProperty : Property<NotUndefined<T[P]>>;
 }
 
 interface Indexable {
@@ -237,41 +275,10 @@ export namespace Element {
 	}
 }
 
-/**
- * All know vertices label values.
- */
-export enum VertexLabels {
-	metaData = 'metaData',
-	event = '$event',
-	project = 'project',
-	group = 'group',
-	range = 'range',
-	location = 'location',
-	document = 'document',
-	moniker = 'moniker',
-	packageInformation = 'packageInformation',
-	resultSet = 'resultSet',
-	documentSymbolResult = 'documentSymbolResult',
-	foldingRangeResult = 'foldingRangeResult',
-	documentLinkResult = 'documentLinkResult',
-	diagnosticResult = 'diagnosticResult',
-	declarationResult = 'declarationResult',
-	definitionResult = 'definitionResult',
-	typeDefinitionResult = 'typeDefinitionResult',
-	hoverResult = 'hoverResult',
-	referenceResult = 'referenceResult',
-	implementationResult = 'implementationResult'
-}
-
 export namespace VertexLabels {
 	const values = StringEnum.values(VertexLabels as unknown as StringEnum);
-	export function property(flags?: PropertyFlags): StringEnumProperty;
-	export function property(value: VertexLabels, flags?: PropertyFlags): Property<VertexLabels>;
-	export function property(valueOrFlags?: VertexLabels | PropertyFlags, flags?: PropertyFlags): StringEnumProperty | Property<VertexLabels> {
-		if (typeof valueOrFlags === 'string') {
-			return new Property<VertexLabels>(value => value === valueOrFlags, flags);
-		}
-		return new StringEnumProperty(values, flags);
+	export function property(valueOrFlags?: VertexLabels | PropertyFlags, flags?: PropertyFlags): VertexLabelsProperty {
+		return new VertexLabelsProperty(valueOrFlags, flags);
 	}
 	export function is(value: any): value is VertexLabels {
 		return values.has(value);
@@ -304,7 +311,7 @@ class VertexDescriptor<T extends V> extends ObjectDescriptor<T> {
 }
 
 export namespace V {
-	export const descriptor = new VertexDescriptor<Required<V>>(Object.assign({}, Element.descriptor.description, {
+	export const descriptor = new VertexDescriptor<V>(Object.assign({}, Element.descriptor.description, {
 		type: new Property<ElementTypes.vertex>(value => value === ElementTypes.vertex),
 		label: VertexLabels.property()
 	}));
@@ -1517,13 +1524,11 @@ export namespace EdgeLabels {
 	}
 }
 
-class Edge11Descriptor<T, O extends V = V, I extends V = V> extends ObjectDescriptor<T> {
-	public readonly outDescriptor: ObjectDescriptor<O>;
-	public readonly inDescriptor: ObjectDescriptor<I>;
-	constructor(description: ObjectDescription<T>, outDescriptor: ObjectDescriptor<O>, inDescriptor: ObjectDescriptor<I>) {
+class EdgeDescriptor<T> extends ObjectDescriptor<T> {
+	public readonly edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][];
+	constructor(description: ObjectDescription<T>, edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][]) {
 		super(description);
-		this.outDescriptor = outDescriptor;
-		this.inDescriptor = inDescriptor;
+		this.edgeDescriptions = edgeDescriptions;
 	}
 }
 
@@ -1557,14 +1562,14 @@ class BrandProperty extends Property<any> {
 }
 
 export namespace E11 {
-	export const descriptor = new Edge11Descriptor<E11<V, V, EdgeLabels>>({
+	export const descriptor = new EdgeDescriptor<E11<V, V, EdgeLabels>>({
 		_: new BrandProperty(),
 		id: Id.property(),
 		type: new Property<ElementTypes.edge>(value => value === ElementTypes.edge),
 		label: EdgeLabels.property(),
 		outV: Id.property(),
 		inV: Id.property()
-	}, V.descriptor, V.descriptor);
+	}, [[V.descriptor, V.descriptor]]);
 }
 
 export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
@@ -1585,7 +1590,24 @@ export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Ele
 	inVs: Id[];
 }
 
+export namespace E1N {
+	export const descriptor = new EdgeDescriptor<E1N<V, V, EdgeLabels>>({
+		_: new BrandProperty(),
+		id: Id.property(),
+		type: new Property<ElementTypes.edge>(value => value === ElementTypes.edge),
+		label: EdgeLabels.property(),
+		outV: Id.property(),
+		inVs: new ArrayProperty<Id>(Id.is)
+	}, [[V.descriptor, V.descriptor]]);
+}
+
 export type E<S extends V, T extends V, K extends EdgeLabels> = E11<S, T, K> | E1N<S, T, K>;
+
+type EdgeTuple<T> = T extends E11<infer SV, infer TV, infer _K>
+	? [VertexDescriptor<SV>, VertexDescriptor<TV>]
+	: T extends E1N<infer SV, infer TV, infer _K>
+		? [VertexDescriptor<SV>, VertexDescriptor<TV>]
+		: never;
 
 export enum ItemEdgeProperties {
 	declarations = 'declarations',
@@ -1595,6 +1617,16 @@ export enum ItemEdgeProperties {
 	referenceLinks = 'referenceLinks',
 	implementationResults = 'implementationResults',
 	implementationLinks = 'implementationLinks'
+}
+
+export namespace ItemEdgeProperties {
+	const values = StringEnum.values(ItemEdgeProperties as unknown as StringEnum);
+	export function property(flags?: PropertyFlags): Property<ItemEdgeProperties> {
+		return new Property(ItemEdgeProperties.is, flags);
+	}
+	export function is(value: any): value is EdgeLabels {
+		return values.has(value);
+	}
 }
 
 export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels.item> {
@@ -1610,6 +1642,16 @@ export interface ItemEdge<S extends V, T extends V> extends E1N<S, T, EdgeLabels
  */
 export type contains = E1N<Project, Document, EdgeLabels.contains> | E1N<Document, Range, EdgeLabels.contains>;
 
+export namespace contains {
+	const edgeInformation: EdgeTuple<contains>[] = [[Project.descriptor, Document.descriptor], [Document.descriptor, Range.descriptor]];
+	export const descriptor = new EdgeDescriptor<contains>(Object.assign({}, E1N.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.contains)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge associating a range with a result set or a result set with another result set. The relationship exists between:
  *
@@ -1618,6 +1660,16 @@ export type contains = E1N<Project, Document, EdgeLabels.contains> | E1N<Documen
  */
 export type next = E11<Range, ResultSet, EdgeLabels.next> | E11<ResultSet, ResultSet, EdgeLabels.next>;
 
+export namespace next {
+	const edgeInformation: EdgeTuple<next>[] = [[Range.descriptor, ResultSet.descriptor], [ResultSet.descriptor, ResultSet.descriptor]];
+	export const descriptor = new EdgeDescriptor<next>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.next)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a item in a result set. The relationship exists between:
  *
@@ -1625,10 +1677,37 @@ export type next = E11<Range, ResultSet, EdgeLabels.next> | E11<ResultSet, Resul
  * - `ReferenceResult` -> `ReferenceResult[]`
  */
 export type item =
-	ItemEdge<DeclarationResult, Range> | ItemEdge<DefinitionResult, Range> |
+	ItemEdge<DeclarationResult, Range> |
+	ItemEdge<DefinitionResult, Range> |
 	ItemEdge<TypeDefinitionResult, Range> |
-	ItemEdge<ReferenceResult, Range> | ItemEdge<ReferenceResult, ReferenceResult> | ItemEdge<ReferenceResult, Moniker> |
-	ItemEdge<ImplementationResult, Range> | ItemEdge<ImplementationResult, ImplementationResult> | ItemEdge<ImplementationResult, Moniker>;
+	ItemEdge<ReferenceResult, Range> |
+	ItemEdge<ReferenceResult, ReferenceResult> |
+	ItemEdge<ReferenceResult, Moniker> |
+	ItemEdge<ImplementationResult, Range> |
+	ItemEdge<ImplementationResult, ImplementationResult> |
+	ItemEdge<ImplementationResult, Moniker>;
+
+export namespace item {
+	const edgeInformation: EdgeTuple<item>[] = [
+		[DeclarationResult.descriptor, Range.descriptor],
+		[DefinitionResult.descriptor, Range.descriptor],
+		[TypeDefinitionResult.descriptor, Range.descriptor],
+		[ReferenceResult.descriptor, Range.descriptor],
+		[ReferenceResult.descriptor, ReferenceResult.descriptor],
+		[ReferenceResult.descriptor, Moniker.descriptor],
+		[ImplementationResult.descriptor, Range.descriptor],
+		[ImplementationResult.descriptor, ImplementationResult.descriptor],
+		[ImplementationResult.descriptor, Moniker.descriptor]
+	];
+	export const descriptor = new EdgeDescriptor<item>(Object.assign({}, E1N.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.item),
+		shard: Id.property(),
+		property: ItemEdgeProperties.property()
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge associating a range with a moniker. The relationship exists between:
@@ -1650,6 +1729,24 @@ export type moniker =
 	E11<ReferenceResult, Moniker, EdgeLabels.moniker> |
 	E11<ImplementationResult, Moniker, EdgeLabels.moniker>;
 
+export namespace moniker {
+	const edgeInformation: EdgeTuple<moniker>[] = [
+		[Range.descriptor, Moniker.descriptor],
+		[ResultSet.descriptor, Moniker.descriptor],
+		[DeclarationResult.descriptor, Moniker.descriptor],
+		[DefinitionResult.descriptor, Moniker.descriptor],
+		[TypeDefinitionResult.descriptor, Moniker.descriptor],
+		[ReferenceResult.descriptor, Moniker.descriptor],
+		[ImplementationResult.descriptor, Moniker.descriptor]
+	];
+	export const descriptor = new EdgeDescriptor<moniker>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.moniker)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge associating a moniker with another moniker. The relationship exists between:
  *
@@ -1658,9 +1755,10 @@ export type moniker =
 export type attach = E11<Moniker, Moniker, EdgeLabels.attach>;
 
 export namespace attach {
-	export const descriptor = new Edge11Descriptor<attach, Moniker, Moniker>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<attach>[] = [[Moniker.descriptor, Moniker.descriptor]];
+	export const descriptor = new EdgeDescriptor<attach>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.attach)
-	}), Moniker.descriptor, Moniker.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1674,9 +1772,10 @@ export namespace attach {
 export type packageInformation = E11<Moniker, PackageInformation, EdgeLabels.packageInformation>;
 
 export namespace packageInformation {
-	export const descriptor = new Edge11Descriptor<packageInformation, Moniker, PackageInformation>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<packageInformation>[] = [[Moniker.descriptor, PackageInformation.descriptor]];
+	export const descriptor = new EdgeDescriptor<packageInformation>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.packageInformation)
-	}), Moniker.descriptor, PackageInformation.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1690,9 +1789,10 @@ export namespace packageInformation {
 export type belongsTo = E11<Project, Group, EdgeLabels.belongsTo>;
 
 export namespace belongsTo {
-	export const descriptor = new Edge11Descriptor<belongsTo, Project, Group>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<belongsTo>[] = [[Project.descriptor, Group.descriptor]];
+	export const descriptor = new EdgeDescriptor<belongsTo>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.belongsTo)
-	}), Project.descriptor, Group.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1706,9 +1806,10 @@ export namespace belongsTo {
 export type textDocument_documentSymbol = E11<Document, DocumentSymbolResult, EdgeLabels.textDocument_documentSymbol>;
 
 export namespace textDocument_documentSymbol {
-	export const descriptor = new Edge11Descriptor<textDocument_documentSymbol, Document, DocumentSymbolResult>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<textDocument_documentSymbol>[] = [[Document.descriptor, DocumentSymbolResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_documentSymbol>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_documentSymbol)
-	}), Document.descriptor, DocumentSymbolResult.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1722,9 +1823,10 @@ export namespace textDocument_documentSymbol {
 export type textDocument_foldingRange = E11<Document, FoldingRangeResult, EdgeLabels.textDocument_foldingRange>;
 
 export namespace textDocument_foldingRange {
-	export const descriptor = new Edge11Descriptor<textDocument_foldingRange, Document, FoldingRangeResult>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<textDocument_foldingRange>[] = [[Document.descriptor, FoldingRangeResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_foldingRange>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_foldingRange)
-	}), Document.descriptor, FoldingRangeResult.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1738,9 +1840,10 @@ export namespace textDocument_foldingRange {
 export type textDocument_documentLink = E11<Document, DocumentLinkResult, EdgeLabels.textDocument_documentLink>;
 
 export namespace textDocument_documentLink {
-	export const descriptor = new Edge11Descriptor<textDocument_documentLink, Document, DocumentLinkResult>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<textDocument_documentLink>[] = [[Document.descriptor, DocumentLinkResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_documentLink>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_documentLink)
-	}), Document.descriptor, DocumentLinkResult.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1755,9 +1858,10 @@ export namespace textDocument_documentLink {
 export type textDocument_diagnostic = E11<Project, DiagnosticResult, EdgeLabels.textDocument_diagnostic> | E11<Document, DiagnosticResult, EdgeLabels.textDocument_diagnostic>;
 
 export namespace textDocument_diagnostic {
-	export const descriptor = new Edge11Descriptor<textDocument_diagnostic, Document, DiagnosticResult>(Object.assign({}, E11.descriptor.description, {
+	const edgeInformation: EdgeTuple<textDocument_diagnostic>[] = [[Project.descriptor, DiagnosticResult.descriptor], [Document.descriptor, DiagnosticResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_diagnostic>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_diagnostic)
-	}), Document.descriptor, DiagnosticResult.descriptor);
+	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1771,6 +1875,16 @@ export namespace textDocument_diagnostic {
  */
 export type textDocument_declaration = E11<Range, DeclarationResult, EdgeLabels.textDocument_declaration> | E11<ResultSet, DeclarationResult, EdgeLabels.textDocument_declaration>;
 
+export namespace textDocument_declaration {
+	const edgeInformation: EdgeTuple<textDocument_declaration>[] = [[Range.descriptor, DeclarationResult.descriptor], [ResultSet.descriptor, DeclarationResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_declaration>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_declaration)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a definition relationship. The relationship exists between:
  *
@@ -1778,6 +1892,16 @@ export type textDocument_declaration = E11<Range, DeclarationResult, EdgeLabels.
  * - `ResultSet` -> `DefinitionResult`
  */
 export type textDocument_definition = E11<Range, DefinitionResult, EdgeLabels.textDocument_definition> | E11<ResultSet, DefinitionResult, EdgeLabels.textDocument_definition>;
+
+export namespace textDocument_definition {
+	const edgeInformation: EdgeTuple<textDocument_definition>[] = [[Range.descriptor, DefinitionResult.descriptor], [ResultSet.descriptor, DefinitionResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_definition>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_definition)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge representing a type definition relations ship. The relationship exists between:
@@ -1787,6 +1911,16 @@ export type textDocument_definition = E11<Range, DefinitionResult, EdgeLabels.te
  */
 export type textDocument_typeDefinition = E11<Range, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition> | E11<ResultSet, TypeDefinitionResult, EdgeLabels.textDocument_typeDefinition>;
 
+export namespace textDocument_typeDefinition {
+	const edgeInformation: EdgeTuple<textDocument_typeDefinition>[] = [[Range.descriptor, TypeDefinitionResult.descriptor], [ResultSet.descriptor, TypeDefinitionResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_typeDefinition>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_typeDefinition)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a hover relationship. The relationship exists between:
  *
@@ -1794,6 +1928,16 @@ export type textDocument_typeDefinition = E11<Range, TypeDefinitionResult, EdgeL
  * - `ResultSet` -> `HoverResult`
  */
 export type textDocument_hover = E11<Range, HoverResult, EdgeLabels.textDocument_hover> | E11<ResultSet, HoverResult, EdgeLabels.textDocument_hover>;
+
+export namespace textDocument_hover {
+	const edgeInformation: EdgeTuple<textDocument_hover>[] = [[Range.descriptor, HoverResult.descriptor], [ResultSet.descriptor, HoverResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_hover>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_hover)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  * An edge representing a references relationship. The relationship exists between:
@@ -1803,6 +1947,16 @@ export type textDocument_hover = E11<Range, HoverResult, EdgeLabels.textDocument
  */
 export type textDocument_references = E11<Range, ReferenceResult, EdgeLabels.textDocument_references> | E11<ResultSet, ReferenceResult, EdgeLabels.textDocument_references>;
 
+export namespace textDocument_references {
+	const edgeInformation: EdgeTuple<textDocument_references>[] = [[Range.descriptor, ReferenceResult.descriptor], [ResultSet.descriptor, ReferenceResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_references>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_references)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
+
 /**
  * An edge representing a implementation relationship. The relationship exists between:
  *
@@ -1810,6 +1964,16 @@ export type textDocument_references = E11<Range, ReferenceResult, EdgeLabels.tex
  * - `ResultSet` -> `ImplementationResult`
  */
 export type textDocument_implementation = E11<Range, ImplementationResult, EdgeLabels.textDocument_implementation> | E11<ResultSet, ImplementationResult, EdgeLabels.textDocument_implementation>;
+
+export namespace textDocument_implementation {
+	const edgeInformation: EdgeTuple<textDocument_implementation>[] = [[Range.descriptor, ImplementationResult.descriptor], [ResultSet.descriptor, ImplementationResult.descriptor]];
+	export const descriptor = new EdgeDescriptor<textDocument_implementation>(Object.assign({}, E11.descriptor.description, {
+		label: EdgeLabels.property(EdgeLabels.textDocument_implementation)
+	}), edgeInformation);
+	export function is(value: any): value is attach {
+		return descriptor.validate(value);
+	}
+}
 
 /**
  *
