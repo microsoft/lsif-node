@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 
-import { Edge, EdgeLabels, ElementTypes, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
+import { Edge, EdgeLabels, ElementTypes, EventKind, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
 
 import { Command } from './command';
 
@@ -18,6 +18,8 @@ export class ValidateCommand extends Command {
 	private readonly vertices: Map<Id, VertexLabels>;
 	private readonly edges: Map<Id, EdgeLabels>;
 	private readonly edgeInformation: Map<EdgeLabels, Map<VertexDescriptor<V>, Set<VertexDescriptor<V>>>>;
+	private readonly openElements: Set<Id>;
+	private readonly closedElements: Set<Id>;
 
 	constructor(input: NodeJS.ReadStream | fs.ReadStream, options: ValidateOptions) {
 		super(input);
@@ -25,6 +27,8 @@ export class ValidateCommand extends Command {
 		this.vertices = new Map();
 		this.edges = new Map();
 		this.edgeInformation = new Map();
+		this.openElements = new Set();
+		this.closedElements = new Set();
 		this.options;
 	}
 
@@ -38,6 +42,15 @@ export class ValidateCommand extends Command {
 
 	private validateVertex(vertex: Vertex): void {
 		this.vertices.set(vertex.id, vertex.label);
+		if (vertex.label === VertexLabels.event) {
+			if (vertex.kind === EventKind.begin) {
+				this.openElements.add(vertex.data);
+			} else if (vertex.kind === EventKind.end) {
+				this.openElements.delete(vertex.data);
+				this.closedElements.add(vertex.data);
+			}
+		}
+
 		const descriptor = Vertex.getDescriptor(vertex);
 		const valid = descriptor.validate(vertex);
 		if (!valid) {
@@ -57,6 +70,8 @@ export class ValidateCommand extends Command {
 		let sameInVs: boolean = true;
 		let verticesEmitted: boolean = true;
 		let inOutCorrect: boolean = true;
+		let isOpen: boolean = true;
+		let isClosed: boolean = false;
 		if (valid) {
 			const referencedVertices: [VertexLabels | undefined, VertexLabels | undefined][] = [];
 			if (Edge.is11(edge)) {
@@ -92,8 +107,12 @@ export class ValidateCommand extends Command {
 					}
 				}
 			}
+			if (edge.label === EdgeLabels.item) {
+				isOpen = this.openElements.has(edge.shard)!!;
+				isClosed = this.closedElements.has(edge.shard)!!;
+			}
 		}
-		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect) {
+		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen) {
 			console.log(`Malformed edge: ${JSON.stringify(edge, undefined, 0)}`);
 			if (!valid) {
 				console.log(`\t - edge has invalid property values.`);
@@ -109,6 +128,13 @@ export class ValidateCommand extends Command {
 			}
 			if (!inOutCorrect) {
 				console.log(`\t- vertices referenced via the edge are of unsupported type for this edge.`);
+			}
+			if (!isOpen) {
+				if (isClosed) {
+					console.log(`\t- the vertex referenced via the shard property is already closed.`);
+				} else {
+					console.log(`\t- the vertex referenced via the shard property is not open yet.`);
+				}
 			}
 		}
 	}
