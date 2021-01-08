@@ -264,9 +264,9 @@ export namespace Element {
 	export function getDescriptor(element: Element): VertexDescriptor<V> | EdgeDescriptor<E<V, V, EdgeLabels>> {
 		switch (element.type) {
 			case ElementTypes.vertex:
-				return Vertex.getDescriptor((element as Vertex).label);
+				return Vertex.getDescriptor(element as Vertex);
 			case ElementTypes.edge:
-				return Edge.getDescriptor((element as Edge).label);
+				return Edge.getDescriptor(element as Edge);
 		}
 	}
 }
@@ -326,7 +326,7 @@ export interface V extends Element {
 	label: VertexLabels;
 }
 
-class VertexDescriptor<T extends V> extends ObjectDescriptor<T> {
+export class VertexDescriptor<T extends V> extends ObjectDescriptor<T> {
 	constructor(description: ObjectDescription<T>) {
 		super(description);
 	}
@@ -961,7 +961,7 @@ export namespace Group {
 		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB'),
 		name: new StringProperty(),
 		rootUri: new UriProperty(),
-		description: new StringProperty(),
+		description: new StringProperty(PropertyFlags.optional),
 		repository: RepositoryInfo.property(PropertyFlags.optional)
 	}));
 	export function is(value: any): value is Group {
@@ -1532,7 +1532,8 @@ export namespace Vertex {
 	descriptors.set(VertexLabels.hoverResult, HoverResult.descriptor);
 	descriptors.set(VertexLabels.referenceResult, ReferenceResult.descriptor);
 	descriptors.set(VertexLabels.implementationResult, ImplementationResult.descriptor);
-	export function getDescriptor(label: VertexLabels): VertexDescriptor<V> {
+	export function getDescriptor(vertexOrVertexLabel: Vertex | VertexLabels): VertexDescriptor<V> {
+		const label = typeof vertexOrVertexLabel === 'string' ? vertexOrVertexLabel : vertexOrVertexLabel.label;
 		const result =  descriptors.get(label);
 		if (result === undefined) {
 			throw new Error(`No descriptor registered for vertex ${label}`);
@@ -1576,7 +1577,7 @@ export namespace EdgeLabels {
 	}
 }
 
-class EdgeDescriptor<T> extends ObjectDescriptor<T> {
+export class EdgeDescriptor<T> extends ObjectDescriptor<T> {
 	public readonly edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][];
 	constructor(description: ObjectDescription<T>, edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][]) {
 		super(description);
@@ -1746,7 +1747,7 @@ export namespace item {
 	export const descriptor = new EdgeDescriptor<item>(Object.assign({}, E1N.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.item),
 		shard: Id.property(),
-		property: ItemEdgeProperties.property()
+		property: ItemEdgeProperties.property(PropertyFlags.optional)
 	}), edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
@@ -2073,7 +2074,8 @@ export namespace Edge {
 	descriptors.set(EdgeLabels.textDocument_references, textDocument_references.descriptor);
 	descriptors.set(EdgeLabels.textDocument_implementation, textDocument_implementation.descriptor);
 
-	export function getDescriptor(label: EdgeLabels): EdgeDescriptor<E<V, V, EdgeLabels>> {
+	export function getDescriptor(edgeOrEdgeLabel: Edge | EdgeLabels): EdgeDescriptor<E<V, V, EdgeLabels>> {
+		const label = typeof edgeOrEdgeLabel === 'string' ? edgeOrEdgeLabel : edgeOrEdgeLabel.label;
 		const result =  descriptors.get(label);
 		if (result === undefined) {
 			throw new Error(`No descriptor registered for edge ${label}`);

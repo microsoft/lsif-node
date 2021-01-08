@@ -6,16 +6,19 @@ import * as fs from 'fs';
 
 import * as yargs from 'yargs';
 
-import * as proto from 'lsif-protocol';
-
+import { ValidateCommand } from './validate';
 
 interface Options {
+	help: boolean;
+	version: boolean;
 	stdin: boolean;
 	in: string | undefined;
 }
 
 namespace Options {
 	export const defaults: Options = {
+		help: false,
+		version: false,
 		stdin: false,
 		in: undefined
 	};
@@ -28,7 +31,7 @@ export async function main(): Promise<void> {
 		yargs.
 			exitProcess(false).
 			usage(`Language Server Index Format tool to validate LSIF dumps\nVersion: ${require('../package.json').version}\nUsage: lsif-tooling [options]`).
-			example(`lsif-tooling --stdin`, `Reads a LSIF dump from stdin and validated it.`).
+			example(`lsif-tooling --stdin`, `Reads a LSIF dump from stdin and validates it.`).
 			version(false).
 			option('v', {
 				alias: 'version',
@@ -50,13 +53,20 @@ export async function main(): Promise<void> {
 			}).
 			argv
 	);
+	if (options.help) {
+		return;
+	}
+	if (options.version) {
+		console.log(require('../package.json').version);
+		return;
+	}
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-
+	await new ValidateCommand(input, {}).run();
 }
 
 if (require.main === module) {
-	main().then(undefined, (error) => console.error(error));
+	main();
 }
