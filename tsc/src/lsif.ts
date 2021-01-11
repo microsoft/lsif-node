@@ -980,18 +980,18 @@ class SymbolDataWithRoots extends StandardSymbolData {
 			const moniker = element.getMostUniqueMoniker();
 			// We take the first source file to cluster this. We might want to find a source
 			// file that has already changed to make the diff minimal.
-			if (this.sourceFilePartition !== undefined) {
-				super.addReference(this.projectId, this.sourceFilePartition, element.getOrCreateReferenceResult());
-				if (moniker !== undefined && moniker.scheme !== 'local') {
-					super.addReference(this.projectId, this.sourceFilePartition, moniker);
-				}
-			} else {
+			if (Project.is(this.shard) || this.sourceFilePartition === undefined) {
 				if (this.transientPartition === undefined) {
 					this.transientPartition = new SymbolDataPartition(this.projectId, this.context, this, this.shard, undefined);
 				}
 				this.transientPartition.addReference(element.getOrCreateReferenceResult());
 				if (moniker !== undefined && moniker.scheme !== 'local') {
 					this.transientPartition.addReference(moniker);
+				}
+			} else {
+				super.addReference(this.projectId, this.sourceFilePartition, element.getOrCreateReferenceResult());
+				if (moniker !== undefined && moniker.scheme !== 'local') {
+					super.addReference(this.projectId, this.sourceFilePartition, moniker);
 				}
 			}
 		}
