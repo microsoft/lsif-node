@@ -16,8 +16,8 @@ suite('Scope Tests', () => {
 		target: ts.ScriptTarget.ES5,
 		rootDir: '/@test'
 	};
-	test('Function parameter', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Function parameter', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[

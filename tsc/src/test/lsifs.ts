@@ -9,12 +9,36 @@ import * as path from 'path';
 
 import * as ts from 'typescript';
 
-import { Vertex, Edge, Id, Element } from 'lsif-protocol';
+import { Vertex, Edge, Id, ElementTypes } from 'lsif-protocol';
+
+import { DiagnosticReporter } from 'lsif-tooling/lib/command';
+import { ValidateCommand } from 'lsif-tooling/lib/validate';
 
 import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode, Reporter } from '../lsif';
 import { Emitter } from '../emitters/emitter';
 import { Builder } from '../graph';
 import { URI } from 'vscode-uri';
+
+class TestDiagnosticReporter implements DiagnosticReporter {
+	public readonly buffer: string[] = [];
+	error(element: Edge | Vertex, message?: string): void {
+		if (message === undefined) {
+			if (element.type === ElementTypes.edge) {
+				this.buffer.push(`Malformed edge ${JSON.stringify(element, undefined, 0)}:`);
+			} else {
+				this.buffer.push(`Malformed vertex ${JSON.stringify(element, undefined, 0)}:`);
+			}
+		} else {
+			this.buffer.push(`\t- ${message}`);
+		}
+	}
+	warn(element: Edge | Vertex, message?: string): void {
+		this.error(element, message);
+	}
+	info(element: Edge | Vertex, message?: string): void {
+		this.error(element, message);
+	}
+}
 
 export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 
@@ -108,9 +132,9 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 
 class TestEmitter implements Emitter {
 
-	private sequence: Element[];
 	private _lastId: Id;
-	public elements: Map<Id, Element>;
+	public readonly sequence: (Vertex | Edge)[];
+	public readonly elements: Map<Id, Vertex | Edge>;
 
 	constructor() {
 		this._lastId = -1;
@@ -144,7 +168,7 @@ class TestEmitter implements Emitter {
 	}
 }
 
-export function lsif(cwd: string, scripts: Map<string, string>, options: ts.CompilerOptions): TestEmitter {
+export async function lsif(cwd: string, scripts: Map<string, string>, options: ts.CompilerOptions): Promise<TestEmitter> {
 	const emitter = new TestEmitter();
 	const host = new InMemoryLanguageServiceHost(cwd, scripts, options);
 	const languageService = ts.createLanguageService(host);
@@ -178,6 +202,12 @@ export function lsif(cwd: string, scripts: Map<string, string>, options: ts.Comp
 		_lsif(emitterContext, languageService, dataManager, [], lsifOptions);
 	} finally {
 		dataManager.end();
+	}
+	const testReporter = new TestDiagnosticReporter();
+	const validate: ValidateCommand = new ValidateCommand(emitter.sequence.values(), {}, testReporter);
+	await validate.run();
+	if (testReporter.buffer.length !== 0) {
+		throw new Error(`Validation failed:${os.EOL}${testReporter.buffer.join(os.EOL)}`);
 	}
 	return emitter;
 }

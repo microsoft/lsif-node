@@ -6,7 +6,7 @@ import * as fs from 'fs';
 
 import { Edge, EdgeLabels, ElementTypes, EventKind, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
 
-import { Command } from './command';
+import { Command, DiagnosticReporter } from './command';
 
 export interface ValidateOptions {
 }
@@ -21,8 +21,8 @@ export class ValidateCommand extends Command {
 	private readonly openElements: Set<Id>;
 	private readonly closedElements: Set<Id>;
 
-	constructor(input: NodeJS.ReadStream | fs.ReadStream, options: ValidateOptions) {
-		super(input);
+	constructor(input: NodeJS.ReadStream | fs.ReadStream | IterableIterator<Edge | Vertex>, options: ValidateOptions, reporter: DiagnosticReporter) {
+		super(input, reporter);
 		this.options = options;
 		this.vertices = new Map();
 		this.edges = new Map();
@@ -54,9 +54,9 @@ export class ValidateCommand extends Command {
 		const descriptor = Vertex.getDescriptor(vertex);
 		const valid = descriptor.validate(vertex);
 		if (!valid) {
-			console.log(`Malformed vertex: ${JSON.stringify(vertex, undefined, 0)}`);
+			this.reporter.error(vertex);
 			if (!valid) {
-				console.log(`\t - vertex has invalid property values.`);
+				this.reporter.error(vertex, 'vertex has invalid property values.');
 			}
 		}
 	}
@@ -113,27 +113,27 @@ export class ValidateCommand extends Command {
 			}
 		}
 		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen) {
-			console.log(`Malformed edge: ${JSON.stringify(edge, undefined, 0)}`);
+			this.reporter.error(edge);
 			if (!valid) {
-				console.log(`\t - edge has invalid property values.`);
+				this.reporter.error(edge, 'edge has invalid property values.');
 			}
 			if (!verticesEmitted) {
-				console.log(`\t- references vertices are not emitted yet.`);
+				this.reporter.error(edge, 'references vertices are not emitted yet.');
 			}
 			if (!hasInVs) {
-				console.log(`\t- inVs property is empty.`);
+				this.reporter.error(edge, `inVs property is empty.`);
 			}
 			if (!sameInVs) {
-				console.log(`\t- vertices referenced via the inVs property are of different types.`);
+				this.reporter.error(edge, `vertices referenced via the inVs property are of different types.`);
 			}
 			if (!inOutCorrect) {
-				console.log(`\t- vertices referenced via the edge are of unsupported type for this edge.`);
+				this.reporter.error(edge, `vertices referenced via the edge are of unsupported type for this edge.`);
 			}
 			if (!isOpen) {
 				if (isClosed) {
-					console.log(`\t- the vertex referenced via the shard property is already closed.`);
+					this.reporter.error(edge, `the vertex referenced via the shard property is already closed.`);
 				} else {
-					console.log(`\t- the vertex referenced via the shard property is not open yet.`);
+					this.reporter.error(edge, `the vertex referenced via the shard property is not open yet.`);
 				}
 			}
 		}

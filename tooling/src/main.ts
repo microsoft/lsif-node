@@ -3,8 +3,10 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
+import { Edge, Vertex, ElementTypes } from 'lsif-protocol';
 
 import * as yargs from 'yargs';
+import { DiagnosticReporter } from './command';
 
 import { ValidateCommand } from './validate';
 
@@ -22,6 +24,26 @@ namespace Options {
 		stdin: false,
 		in: undefined
 	};
+}
+
+class ConsoleDiagnosticReporter implements DiagnosticReporter {
+	error(element: Edge | Vertex, message?: string): void {
+		if (message === undefined) {
+			if (element.type === ElementTypes.edge) {
+				console.log(`Malformed edge ${JSON.stringify(element, undefined, 0)}:`);
+			} else {
+				console.log(`Malformed vertex ${JSON.stringify(element, undefined, 0)}:`);
+			}
+		} else {
+			console.log(`\t- ${message}`);
+		}
+	}
+	warn(element: Edge | Vertex, message?: string): void {
+		this.error(element, message);
+	}
+	info(element: Edge | Vertex, message?: string): void {
+		this.error(element, message);
+	}
 }
 
 export async function main(): Promise<void> {
@@ -64,7 +86,7 @@ export async function main(): Promise<void> {
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-	await new ValidateCommand(input, {}).run();
+	await new ValidateCommand(input, {}, new ConsoleDiagnosticReporter()).run();
 }
 
 if (require.main === module) {

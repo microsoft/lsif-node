@@ -16,8 +16,8 @@ suite('Union Types', () => {
 		target: ts.ScriptTarget.ES5,
 		rootDir: '/@test'
 	};
-	test('base types', () => {
-		const emitter = lsif('/@test', new Map([
+	test('base types', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -34,8 +34,8 @@ suite('Union Types', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union type (2)', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union type (2)', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -65,8 +65,8 @@ suite('Union Types', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union type (3)', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union type (3)', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -99,8 +99,8 @@ suite('Union Types', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union types with literals', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union types with literals', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[

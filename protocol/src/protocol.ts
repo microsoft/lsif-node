@@ -187,10 +187,11 @@ class ObjectDescriptor<T extends Object> {
 		const properties = Object.keys(this.description);
 		for (const propertyName of properties) {
 			const property = (this.description as Indexable)[propertyName];
-			if (PropertyFlags.isOptional(property.flags) && !value.hasOwnProperty(propertyName)) {
+			const propValue: any = (value as any)[propertyName];
+			if (PropertyFlags.isOptional(property.flags) && propValue === undefined) {
 				continue;
 			}
-			if (!property.validate((value as any)[propertyName])) {
+			if (!property.validate(propValue)) {
 				return false;
 			}
 		}

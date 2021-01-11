@@ -9,8 +9,8 @@ import { lsif } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('Simple Tests', () => {
-	test('Single export', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Single export', async () => {
+		const emitter = await lsif('/@test', new Map([
 			['/@test/a.ts', 'export const x = 10;']
 		]), { });
 		const validate: Element[] = [
