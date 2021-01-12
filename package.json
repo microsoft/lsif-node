@@ -32,7 +32,7 @@
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
 		"lint": "cd protocol && npm run lint && cd ../tsc && npm run lint && cd ../npm && npm run lint && cd ../sqlite && npm run lint && cd ../tooling && npm run lint && cd ../util && npm run lint && cd ..",
-		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ../sqlite && npm run clean && cd ../tooling && npm run clean && cd ..",
+		"clean": "cd protocol && npm run clean && cd ../tooling && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ../sqlite && npm run clean && cd ../tooling && npm run clean && cd ..",
 		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."
 	}
 }
