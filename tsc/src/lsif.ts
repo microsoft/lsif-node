@@ -1742,7 +1742,11 @@ class Symbols {
 		for (const declaration of declarations) {
 			const path: number[] | undefined = Symbols.TopLevelPaths.get(declaration.kind);
 			if (path === undefined) {
-				result = result || ts.isSourceFile(declaration.parent);
+				if (declaration.parent === undefined || ts.isSourceFile(declaration)) {
+					result = false;
+				} else {
+					result = result || ts.isSourceFile(declaration.parent);
+				}
 			} else {
 				result = result || this.matchPath(declaration.parent, path);
 			}
