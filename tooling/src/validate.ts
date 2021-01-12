@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 
-import { Edge, EdgeLabels, ElementTypes, EventKind, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
+import { Cardinality, Edge, EdgeLabels, ElementTypes, EventKind, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
 
 import { Command, DiagnosticReporter } from './command';
 
@@ -17,6 +17,7 @@ export class ValidateCommand extends Command {
 
 	private readonly vertices: Map<Id, VertexLabels>;
 	private readonly edges: Map<Id, EdgeLabels>;
+	private readonly cardinality: Map<string /* CardinalityKey */, number>;
 	private readonly edgeInformation: Map<EdgeLabels, Map<VertexDescriptor<V>, Set<VertexDescriptor<V>>>>;
 	private readonly openElements: Set<Id>;
 	private readonly closedElements: Set<Id>;
@@ -26,6 +27,7 @@ export class ValidateCommand extends Command {
 		this.options = options;
 		this.vertices = new Map();
 		this.edges = new Map();
+		this.cardinality = new Map();
 		this.edgeInformation = new Map();
 		this.openElements = new Set();
 		this.closedElements = new Set();
@@ -70,6 +72,7 @@ export class ValidateCommand extends Command {
 		let sameInVs: boolean = true;
 		let verticesEmitted: boolean = true;
 		let inOutCorrect: boolean = true;
+		let cardinalityCorrect: boolean = true;
 		let isOpen: boolean = true;
 		let isClosed: boolean = false;
 		if (valid) {
@@ -107,12 +110,23 @@ export class ValidateCommand extends Command {
 					}
 				}
 			}
+			const cardinalityKey: string = JSON.stringify({ k: edge.outV, el: edge.label }, undefined, 0);
+			let cardinality = this.cardinality.get(cardinalityKey);
+			if (cardinality === undefined) {
+				cardinality = 1;
+			} else {
+				cardinality++;
+			}
+			this.cardinality.set(cardinalityKey, cardinality);
+			if (descriptor.cardinality === Cardinality.one2one && cardinality !== 1) {
+				cardinalityCorrect = false;
+			}
 			if (edge.label === EdgeLabels.item) {
 				isOpen = this.openElements.has(edge.shard)!!;
 				isClosed = this.closedElements.has(edge.shard)!!;
 			}
 		}
-		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen) {
+		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen || !cardinalityCorrect) {
 			this.reporter.error(edge);
 			if (!valid) {
 				this.reporter.error(edge, 'edge has invalid property values.');
@@ -128,6 +142,9 @@ export class ValidateCommand extends Command {
 			}
 			if (!inOutCorrect) {
 				this.reporter.error(edge, `vertices referenced via the edge are of unsupported type for this edge.`);
+			}
+			if (!cardinalityCorrect) {
+				this.reporter.error(edge, `The cardinality of the edge is 1:1 but the out vertex already has an edge of type ${edge.label}`);
 			}
 			if (!isOpen) {
 				if (isClosed) {

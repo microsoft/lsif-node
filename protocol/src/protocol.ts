@@ -1578,10 +1578,18 @@ export namespace EdgeLabels {
 	}
 }
 
+export enum Cardinality {
+	'one2one' = '1:1',
+	'one2many' = '1:N',
+	'many2many' = 'N:N'
+}
+
 export class EdgeDescriptor<T> extends ObjectDescriptor<T> {
 	public readonly edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][];
-	constructor(description: ObjectDescription<T>, edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][]) {
+	public readonly cardinality: Cardinality;
+	constructor(description: ObjectDescription<T>, cardinality: Cardinality, edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][]) {
 		super(description);
+		this.cardinality = cardinality;
 		this.edgeDescriptions = edgeDescriptions;
 	}
 }
@@ -1616,7 +1624,7 @@ export namespace E11 {
 		label: EdgeLabels.property(),
 		outV: Id.property(),
 		inV: Id.property()
-	}, [[V.descriptor, V.descriptor]]);
+	}, Cardinality.one2one, [[V.descriptor, V.descriptor]]);
 }
 
 export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
@@ -1644,7 +1652,7 @@ export namespace E1N {
 		label: EdgeLabels.property(),
 		outV: Id.property(),
 		inVs: new ArrayProperty<Id>(Id.is)
-	}, [[V.descriptor, V.descriptor]]);
+	}, Cardinality.one2many, [[V.descriptor, V.descriptor]]);
 }
 
 export type E<S extends V, T extends V, K extends EdgeLabels> = E11<S, T, K> | E1N<S, T, K>;
@@ -1692,7 +1700,7 @@ export namespace contains {
 	const edgeInformation: EdgeTuple<contains>[] = [[Project.descriptor, Document.descriptor], [Document.descriptor, Range.descriptor]];
 	export const descriptor = new EdgeDescriptor<contains>(Object.assign({}, E1N.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.contains)
-	}), edgeInformation);
+	}), Cardinality.one2many, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1710,7 +1718,7 @@ export namespace next {
 	const edgeInformation: EdgeTuple<next>[] = [[Range.descriptor, ResultSet.descriptor], [ResultSet.descriptor, ResultSet.descriptor]];
 	export const descriptor = new EdgeDescriptor<next>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.next)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1749,7 +1757,7 @@ export namespace item {
 		label: EdgeLabels.property(EdgeLabels.item),
 		shard: Id.property(),
 		property: ItemEdgeProperties.property(PropertyFlags.optional)
-	}), edgeInformation);
+	}), Cardinality.one2many, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1787,7 +1795,7 @@ export namespace moniker {
 	];
 	export const descriptor = new EdgeDescriptor<moniker>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.moniker)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1804,7 +1812,7 @@ export namespace attach {
 	const edgeInformation: EdgeTuple<attach>[] = [[Moniker.descriptor, Moniker.descriptor]];
 	export const descriptor = new EdgeDescriptor<attach>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.attach)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1821,7 +1829,7 @@ export namespace packageInformation {
 	const edgeInformation: EdgeTuple<packageInformation>[] = [[Moniker.descriptor, PackageInformation.descriptor]];
 	export const descriptor = new EdgeDescriptor<packageInformation>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.packageInformation)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1838,7 +1846,7 @@ export namespace belongsTo {
 	const edgeInformation: EdgeTuple<belongsTo>[] = [[Project.descriptor, Group.descriptor]];
 	export const descriptor = new EdgeDescriptor<belongsTo>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.belongsTo)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1855,7 +1863,7 @@ export namespace textDocument_documentSymbol {
 	const edgeInformation: EdgeTuple<textDocument_documentSymbol>[] = [[Document.descriptor, DocumentSymbolResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_documentSymbol>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_documentSymbol)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1872,7 +1880,7 @@ export namespace textDocument_foldingRange {
 	const edgeInformation: EdgeTuple<textDocument_foldingRange>[] = [[Document.descriptor, FoldingRangeResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_foldingRange>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_foldingRange)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1889,7 +1897,7 @@ export namespace textDocument_documentLink {
 	const edgeInformation: EdgeTuple<textDocument_documentLink>[] = [[Document.descriptor, DocumentLinkResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_documentLink>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_documentLink)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1907,7 +1915,7 @@ export namespace textDocument_diagnostic {
 	const edgeInformation: EdgeTuple<textDocument_diagnostic>[] = [[Project.descriptor, DiagnosticResult.descriptor], [Document.descriptor, DiagnosticResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_diagnostic>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_diagnostic)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1925,7 +1933,7 @@ export namespace textDocument_declaration {
 	const edgeInformation: EdgeTuple<textDocument_declaration>[] = [[Range.descriptor, DeclarationResult.descriptor], [ResultSet.descriptor, DeclarationResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_declaration>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_declaration)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1943,7 +1951,7 @@ export namespace textDocument_definition {
 	const edgeInformation: EdgeTuple<textDocument_definition>[] = [[Range.descriptor, DefinitionResult.descriptor], [ResultSet.descriptor, DefinitionResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_definition>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_definition)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1961,7 +1969,7 @@ export namespace textDocument_typeDefinition {
 	const edgeInformation: EdgeTuple<textDocument_typeDefinition>[] = [[Range.descriptor, TypeDefinitionResult.descriptor], [ResultSet.descriptor, TypeDefinitionResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_typeDefinition>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_typeDefinition)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1979,7 +1987,7 @@ export namespace textDocument_hover {
 	const edgeInformation: EdgeTuple<textDocument_hover>[] = [[Range.descriptor, HoverResult.descriptor], [ResultSet.descriptor, HoverResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_hover>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_hover)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -1997,7 +2005,7 @@ export namespace textDocument_references {
 	const edgeInformation: EdgeTuple<textDocument_references>[] = [[Range.descriptor, ReferenceResult.descriptor], [ResultSet.descriptor, ReferenceResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_references>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_references)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
@@ -2015,7 +2023,7 @@ export namespace textDocument_implementation {
 	const edgeInformation: EdgeTuple<textDocument_implementation>[] = [[Range.descriptor, ImplementationResult.descriptor], [ResultSet.descriptor, ImplementationResult.descriptor]];
 	export const descriptor = new EdgeDescriptor<textDocument_implementation>(Object.assign({}, E11.descriptor.description, {
 		label: EdgeLabels.property(EdgeLabels.textDocument_implementation)
-	}), edgeInformation);
+	}), Cardinality.one2one, edgeInformation);
 	export function is(value: any): value is attach {
 		return descriptor.validate(value);
 	}
