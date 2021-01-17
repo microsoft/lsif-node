@@ -16,8 +16,8 @@ suite('Module System Tests', () => {
 		target: ts.ScriptTarget.ES5,
 		rootDir: '/@test'
 	};
-	test('Single export', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Single export', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -33,8 +33,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Namespace export', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Namespace export', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -50,8 +50,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Default export', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Default export', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -73,8 +73,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export = foo', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export = foo', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -96,8 +96,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { foo }', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { foo }', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -119,8 +119,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { _foo as foo }', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { _foo as foo }', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -142,8 +142,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { foo } with children', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { foo } with children', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -170,8 +170,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with multiple declarations', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { RAL } with multiple declarations', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -193,8 +193,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with nested declarations', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { RAL } with nested declarations', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -215,8 +215,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with nested public declarations', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { RAL } with nested public declarations', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -238,8 +238,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } aliased interface type', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { RAL } aliased interface type', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -260,8 +260,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { foo } with import', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export { foo } with import', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -290,8 +290,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export variable declaration', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export variable declaration', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -308,8 +308,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export variable declaration with inferred type', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export variable declaration with inferred type', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -326,8 +326,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export inferred function return type', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export inferred function return type', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -345,8 +345,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export inferred method return type', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export inferred method return type', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -363,8 +363,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export composite return type', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export composite return type', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -383,8 +383,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export type via property', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export type via property', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -405,8 +405,8 @@ suite('Module System Tests', () => {
 		// However symbol data must survive for b.ts
 		assert.deepEqual(emitter.lastId, 136);
 	});
-	test('Export type via property signature', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export type via property signature', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -427,8 +427,8 @@ suite('Module System Tests', () => {
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
-	test('Export type via variable declaration in namespace', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export type via variable declaration in namespace', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -448,8 +448,8 @@ suite('Module System Tests', () => {
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
-	test('Export type via variable declaration with anonymous class declaration', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export type via variable declaration with anonymous class declaration', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -469,8 +469,8 @@ suite('Module System Tests', () => {
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
-	test('Export function with literal param', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export function with literal param', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -488,8 +488,8 @@ suite('Module System Tests', () => {
 		// Tests that the LSIF tool doesn't throw due to data recreation.
 		assert.deepEqual(emitter.lastId, 153);
 	});
-	test('Export function with callback signature', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export function with callback signature', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -515,8 +515,36 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export function with callback signature as return value', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export function type with callback signature', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface Func { (callback: (entry: { key: string; value: number; }) => void); }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Func } from "./a";',
+					'let f: Func;',
+					'f(e => { e.key; e.value; });'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 200);
+		const validate: Element[] = [
+			JSON.parse('{"id":65,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Func.callback.entry.key","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":66,"type":"edge","label":"attach","outV":65,"inV":37}'),
+			JSON.parse('{"id":67,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Func.callback.entry.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":68,"type":"edge","label":"attach","outV":67,"inV":44}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export function with callback signature as return value', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -538,8 +566,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Transient symbols', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Transient symbols', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -564,8 +592,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Property with ReadonlyArray<string>', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Property with ReadonlyArray<string>', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -583,8 +611,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Property with ReadonlyArray<literal type>', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Property with ReadonlyArray<literal type>', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -613,8 +641,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Property with literal type[]', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Property with literal type[]', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -640,8 +668,8 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Extend private class', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Extend private class', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[

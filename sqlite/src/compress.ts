@@ -299,9 +299,9 @@ export class GenericCompressor<T> extends Compressor<T> {
 					break;
 				case CompressionKind.any:
 					const handleValue = (value: any): any => {
-						const compresor = getCompressor(item.compressor, value, false);
-						if (compresor !== undefined) {
-							return compresor.compress(value, options);
+						const compressor = getCompressor(item.compressor, value, false);
+						if (compressor !== undefined) {
+							return compressor.compress(value, options);
 						}
 						const type = typeof value;
 						if (type === 'number' || type === 'string' || type === 'boolean') {
@@ -322,7 +322,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					result.push(convertedAny);
 					break;
 				default:
-					throw new Error(`Comresion kind ${item.compressionKind} unknown.`);
+					throw new Error(`Compression kind ${item.compressionKind} unknown.`);
 			}
 		}
 		return result;

@@ -16,8 +16,8 @@ suite('Union Types', () => {
 		target: ts.ScriptTarget.ES5,
 		rootDir: '/@test'
 	};
-	test('base types', () => {
-		const emitter = lsif('/@test', new Map([
+	test('base types', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -34,8 +34,8 @@ suite('Union Types', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union type (2)', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union type (2)', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -58,15 +58,15 @@ suite('Union Types', () => {
 			JSON.parse('{"id":129,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":154,"type":"vertex","label":"referenceResult"}'),
 			JSON.parse('{"id":155,"type":"edge","label":"textDocument/references","outV":128,"inV":154}'),
-			JSON.parse('{"id":156,"type":"edge","label":"item","outV":154,"inVs":[70,83],"shard":98,"property":"referenceResults"}'),
-			JSON.parse('{"id":157,"type":"edge","label":"item","outV":154,"inVs":[23,37],"shard":98,"property":"referenceLinks"}')
+			JSON.parse('{"id":156,"type":"edge","label":"item","outV":154,"inVs":[70,83],"shard":2,"property":"referenceResults"}'),
+			JSON.parse('{"id":157,"type":"edge","label":"item","outV":154,"inVs":[23,37],"shard":2,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union type (3)', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union type (3)', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -92,15 +92,15 @@ suite('Union Types', () => {
 			JSON.parse('{"id":157,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":182,"type":"vertex","label":"referenceResult"}'),
 			JSON.parse('{"id":183,"type":"edge","label":"textDocument/references","outV":156,"inV":182}'),
-			JSON.parse('{"id":184,"type":"edge","label":"item","outV":182,"inVs":[86,99],"shard":126,"property":"referenceResults"}'),
-			JSON.parse('{"id":185,"type":"edge","label":"item","outV":182,"inVs":[23,37],"shard":126,"property":"referenceLinks"}'),
+			JSON.parse('{"id":184,"type":"edge","label":"item","outV":182,"inVs":[86,99],"shard":2,"property":"referenceResults"}'),
+			JSON.parse('{"id":185,"type":"edge","label":"item","outV":182,"inVs":[23,37],"shard":2,"property":"referenceLinks"}'),
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Union types with literals', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Union types with literals', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[

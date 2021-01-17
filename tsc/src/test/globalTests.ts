@@ -10,8 +10,8 @@ import { lsif } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('Global Module Tests', () => {
-	test('Single export', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Single export', async () => {
+		const emitter = await lsif('/@test', new Map([
 			['/@test/a.ts', 'let x = 10;']
 		]), { });
 		const validate: Element[] = [
@@ -21,8 +21,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export in namespace', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export in namespace', async () => {
+		const emitter = await lsif('/@test', new Map([
 			['/@test/a.ts', 'namespace N { export const a: number = 10; }']
 		]), { });
 		const validate: Element[] = [
@@ -33,8 +33,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Private in namespace', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Private in namespace', async () => {
+		const emitter = await lsif('/@test', new Map([
 			['/@test/a.ts', 'namespace N { const a: number = 10; }']
 		]), { });
 		const validate: Element[] = [
@@ -45,8 +45,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Same export name', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Same export name', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -64,8 +64,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export via type literal', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export via type literal', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
 				[
@@ -82,8 +82,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export in declaration file', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export in declaration file', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.d.ts',
 				[
@@ -99,8 +99,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export function signature in declaration file', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Export function signature in declaration file', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.d.ts',
 				[
@@ -115,8 +115,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Interface with signature', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Interface with signature', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.d.ts',
 				[
@@ -136,15 +136,23 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 419);
+		assert.deepEqual(emitter.lastId, 427);
 		const validate: Element[] = [
+			JSON.parse('{"id":131,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":132,"type":"edge","label":"attach","outV":131,"inV":30}'),
+			JSON.parse('{"id":133,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":134,"type":"edge","label":"attach","outV":133,"inV":93}'),
+			JSON.parse('{"id":135,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":136,"type":"edge","label":"attach","outV":135,"inV":106}'),
+			JSON.parse('{"id":137,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":138,"type":"edge","label":"attach","outV":137,"inV":119}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Ambient module', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Ambient module', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.d.ts',
 				[
@@ -163,8 +171,8 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Bug 76', () => {
-		const emitter = lsif('/@test', new Map([
+	test('Bug 76', async () => {
+		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.d.ts',
 				[
