@@ -1567,7 +1567,7 @@ class Symbols {
 	}
 
 	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
-		return parent.exports !== undefined && parent.exports.has(symbol.getName() as ts.__String);
+		return parent.exports !== undefined && parent.exports.has(symbol.getEscapedName() as ts.__String);
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -3050,6 +3050,9 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
+		if (symbolId === 'pI+jLJFVyQNRx9JWm7T1vg==') {
+			debugger;
+		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
@@ -3378,10 +3381,12 @@ class Visitor {
 				return;
 			}
 			const type = this.tsProject.getTypeAtLocation(node.name);
-			this.emitAttachedMonikers(
-				monikerParts.path,
-				this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
-			);
+			if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
+				this.emitAttachedMonikers(
+					monikerParts.path,
+					this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
+				);
+			}
 		}
 	}
 
