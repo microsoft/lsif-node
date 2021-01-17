@@ -1365,7 +1365,7 @@ class Symbols {
 		const typeTraverseMode = (type: ts.Type, current: TraverseMode): TraverseMode => {
 			// Always continue with call signatures even if they are exported.
 			if (current === TraverseMode.done || current === TraverseMode.mark || current === TraverseMode.noMark
-			 	|| tss.Type.hasCallSignature(type)
+			 	|| tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)
 				|| type.aliasTypeArguments !== undefined
 				|| (tss.Type.isObjectType(type) && tss.Type.isTypeReference(type) && this.typeChecker.getTypeArguments(type).length > 0)) {
 				return current;
@@ -3469,7 +3469,7 @@ class Visitor {
 		return [symbol, symbolData, TscMoniker.parse(moniker.identifier)];
 	}
 
-	private handleSignatures(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration | ts.SetAccessorDeclaration | ts.GetAccessorDeclaration | ts.CallSignatureDeclaration): void {
+	private handleSignatures(node: ts.FunctionDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.PropertyDeclaration | ts.SetAccessorDeclaration | ts.GetAccessorDeclaration): void {
 		// The return type of a function could be an inferred type or a literal type
 		// In both cases the type has no name and therefore the symbol has no monikers.
 		// Ensure that the return symbol has the correct visibility and moniker.

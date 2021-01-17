@@ -205,5 +205,24 @@ suite('Global Module Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Constructor Signature', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'interface TestConstructor { new <K, V>(): [K, V] }'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 74);
+		const validate: Element[] = [
+			JSON.parse('{"id":40,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":TestConstructor.K","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":41,"type":"edge","label":"attach","outV":40,"inV":18}'),
+			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":TestConstructor.V","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":25}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
-

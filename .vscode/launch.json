@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Interface with signature"
+				"-g", "Constructor Signature"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
