@@ -213,8 +213,13 @@ export namespace Symbol {
 }
 
 export namespace Type {
-	export function isCallSignature(type: ts.Type): boolean {
+	export function hasCallSignature(type: ts.Type): boolean {
 		const signatures = type.getCallSignatures();
+		return signatures.length > 0;
+	}
+
+	export function hasConstructSignatures(type: ts.Type): boolean {
+		const signatures = type.getConstructSignatures();
 		return signatures.length > 0;
 	}
 
@@ -252,6 +257,10 @@ export namespace Type {
 			return (symbol.flags & ts.SymbolFlags.Interface) !== 0;
 		}
 		return type.isClassOrInterface() && !type.isClass();
+	}
+
+	export function isTypeParameter(type: ts.Type): boolean {
+		return (type.flags & ts.TypeFlags.TypeParameter) !== 0;
 	}
 }
 

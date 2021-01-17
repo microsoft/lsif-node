@@ -7,7 +7,6 @@
 		"enable": false
 	},
 	"include": [
-		"./declare.d.ts",
 		"./index.ts"
 	]
 }

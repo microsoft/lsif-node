@@ -1,15 +1,6 @@
-chrome.debugger.onDetach;
-
-interface Y {
-	value: number;
+export interface Func {
+	(callback: (entry: { key: string; value: number; }) => void);
 }
 
-export namespace X {
-	export type B = Y;
-}
-
-import { mul } from './sub/provide';
-mul(1, 1);
-
-import { div } from '../provide'
-div(1,1);
+let f: Func;
+f(e => { e.key; e.value; });

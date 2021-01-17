@@ -515,6 +515,34 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export function type with callback signature', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface Func { (callback: (entry: { key: string; value: number; }) => void); }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Func } from "./a";',
+					'let f: Func;',
+					'f(e => { e.key; e.value; });'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 200);
+		const validate: Element[] = [
+			JSON.parse('{"id":65,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Func.callback.entry.key","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":66,"type":"edge","label":"attach","outV":65,"inV":37}'),
+			JSON.parse('{"id":67,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Func.callback.entry.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":68,"type":"edge","label":"attach","outV":67,"inV":44}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 	test('Export function with callback signature as return value', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
