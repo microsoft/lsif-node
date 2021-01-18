@@ -18,12 +18,18 @@ const readdir = util.promisify(fs.readdir);
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
+interface TestFormat {
+	tsconfig: string;
+	projectRoot?: string;
+	cwd?: string;
+}
+
 interface DataFormat {
 	name: string;
 	repository: string;
 	branch?: string;
-	init?: { command: string, args?: string[] }[];
-	tests: { tsconfig: string, projectRoot?: string, cwd?: string,  }[];
+	init?: { command: string; args?: string[]; }[];
+	tests: TestFormat[];
 }
 
 interface TestStatistics {
@@ -62,6 +68,25 @@ async function runCommand(command: string, args: ReadonlyArray<string>, cwd?: st
 	})
 }
 
+async function runLsifTsc(cwd: string, name: string, test: TestFormat): Promise<void> {
+	let args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js'),
+		'-p', test.tsconfig,
+		'--outputFormat', 'line'
+	];
+	if (test.projectRoot) {
+		args.push('--projectRoot', test.projectRoot);
+	}
+	args.push('--out', path.join(cwd, `${name}.lsif`));
+	await runCommand('node', args, cwd);
+}
+
+async function runValidate(cwd: string, name: string): Promise<void> {
+	let args: string[] = [path.join(ROOT, 'tooling', 'lib', 'main.js'),
+		'--in', `${name}.lsif`
+	];
+	await runCommand('node', args, cwd);
+}
+
 async function runTest(filename: string): Promise<number | undefined> {
 	process.stdout.write(`Running tests for: ${filename}\n`);
 	if (!filename) {
@@ -80,7 +105,7 @@ async function runTest(filename: string): Promise<number | undefined> {
 		shelljs.rm('-rf', directory);
 	}
 
-	await runCommand('git', ['clone', data.repository, directory]);
+	await runCommand('git', ['clone', '--depth 1', data.repository, directory]);
 	if (data.branch) {
 		await runCommand('git', ['checkout', data.branch], directory);
 	}
@@ -93,15 +118,9 @@ async function runTest(filename: string): Promise<number | undefined> {
 		for (let test of data.tests) {
 			let cwd = test.cwd ? path.join(directory, test.cwd) : directory;
 			process.stdout.write(`Running LSIF exporter for ${path.join(cwd, test.tsconfig)}\n`);
-			let args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js'),
-				'-p', test.tsconfig,
-				'--outputFormat', 'line'
-			];
-			if (test.projectRoot) {
-				args.push('--projectRoot', test.projectRoot);
-			}
-			args.push('--out', path.join(cwd, `${data.name}.lsif`));
-			await runCommand('node', args, cwd);
+			await runLsifTsc(cwd, data.name, test);
+			process.stdout.write(`Running validation tool for ${path.join(cwd, data.name)}.lsif\n`);
+			await runValidate(cwd, data.name);
 			process.stdout.write(`\n`);
 		}
 	}

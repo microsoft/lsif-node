@@ -2,7 +2,7 @@
 	"name": "mobx",
 	"repository": "https://github.com/mobxjs/mobx.git",
 	"init": [
-		{ "command": "npm", "args": ["install"] }
+		{ "command": "yarn", "args": ["install"] }
 	],
 	"tests": [
 		{
