@@ -39,7 +39,7 @@ suite('Global Module Tests', () => {
 		]), { });
 		const validate: Element[] = [
 			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":N","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":18,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"X7TAD/7fCTUXK66nQL3Zcw==","unique":"document","kind":"local"}')
+			JSON.parse('{"id":18,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"g5yRGXDFrx4hhFmRmF/HHA==","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -194,7 +194,7 @@ suite('Global Module Tests', () => {
 		assert.deepEqual(emitter.lastId, 85);
 		const validate: Element[] = [
 			JSON.parse('{"id":24,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":25,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"fJm3sB0iM5Tk8y8RD36nyQ==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":25,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"qKuKQk2vMciItiwlUxWfVg==","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":26,"type":"edge","label":"moniker","outV":24,"inV":25}'),
 			JSON.parse('{"id":27,"type":"vertex","label":"range","start":{"line":2,"character":13},"end":{"line":2,"character":21},"tag":{"type":"definition","text":"onDetach","kind":7,"fullRange":{"start":{"line":2,"character":13},"end":{"line":2,"character":29}}}}'),
 			JSON.parse('{"id":28,"type":"edge","label":"next","outV":27,"inV":24}'),

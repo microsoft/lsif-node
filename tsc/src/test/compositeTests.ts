@@ -124,14 +124,14 @@ suite('Union Types', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 193);
 		const validate: Element[] = [
 			JSON.parse('{"id":46,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.name","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":47,"type":"edge","label":"attach","outV":46,"inV":23}'),
 			JSON.parse('{"id":48,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:D.name","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":49,"type":"edge","label":"attach","outV":48,"inV":35}'),
-			JSON.parse('{"id":113,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":a:D.name","unique":"group","kind":"export"}')
+			JSON.parse('{"id":115,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":a:D.name","unique":"group","kind":"export"}')
 		];
-		assert.deepEqual(emitter.lastId, 191);
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}

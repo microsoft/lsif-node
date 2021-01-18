@@ -26,7 +26,7 @@ suite('Scope Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"KXyaWAVvNlCv7grudI07wg==","unique":"document","kind":"local"}')
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"2ZCxI9/jgL7ThCn7ogThOg==","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
