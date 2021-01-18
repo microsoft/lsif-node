@@ -697,4 +697,48 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Class constructor', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export class Foo {',
+					'    constructor(callback: (entry: { key: string; value: number; }) => void) { }',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 121);
+		const validate: Element[] = [
+			JSON.parse('{"id":65,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.callback.entry.key","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":66,"type":"edge","label":"attach","outV":65,"inV":42}'),
+			JSON.parse('{"id":67,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.callback.entry.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":68,"type":"edge","label":"attach","outV":67,"inV":49}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export class as default', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export default class {',
+					'    constructor(callback: (entry: { key: string; value: number; }) => void) { }',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 109);
+		const validate: Element[] = [
+			JSON.parse('{"id":61,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:16I.callback.entry.key","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":62,"type":"edge","label":"attach","outV":61,"inV":38}'),
+			JSON.parse('{"id":63,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:16I.callback.entry.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":64,"type":"edge","label":"attach","outV":63,"inV":45}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

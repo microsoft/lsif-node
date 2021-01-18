@@ -3050,9 +3050,6 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
-		if (symbolId === 'pI+jLJFVyQNRx9JWm7T1vg==') {
-			debugger;
-		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
@@ -3217,6 +3214,9 @@ class Visitor {
 			case ts.SyntaxKind.TypeParameter:
 				this.doVisit(this.visitTypeParameter, this.endVisitTypeParameter, node as ts.TypeParameterDeclaration);
 				break;
+			case ts.SyntaxKind.Constructor:
+				this.doVisit(this.visitConstructor, this.endVisitConstructor, node as ts.ConstructorDeclaration);
+				break;
 			case ts.SyntaxKind.MethodDeclaration:
 				this.doVisit(this.visitMethodDeclaration, this.endVisitMethodDeclaration, node as ts.MethodDeclaration);
 				break;
@@ -3258,9 +3258,6 @@ class Visitor {
 				break;
 			case ts.SyntaxKind.ArrayType:
 				this.doVisit(this.visitArrayType, this.endVisitArrayType, node as ts.ArrayTypeNode);
-				break;
-			case ts.SyntaxKind.Constructor:
-				this.doVisit(this.visitGeneric, this.endVisitConstructor, node as ts.ConstructorDeclaration);
 				break;
 			case ts.SyntaxKind.Identifier:
 				let identifier = node as ts.Identifier;
@@ -3374,18 +3371,43 @@ class Visitor {
 	private endVisitClassOrInterfaceDeclaration(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
 		this.endVisitDeclaration(node);
 		this.handleBase(node);
-		// This could be a function signature declaration
+		// Interface can be used to declare function or constructor signatures.
+		const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
+		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
+			return;
+		}
 		if (ts.isInterfaceDeclaration(node)) {
-			const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
-			if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
-				return;
-			}
 			const type = this.tsProject.getTypeAtLocation(node.name);
 			if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
 				this.emitAttachedMonikers(
 					monikerParts.path,
 					this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
 				);
+			}
+		} else if (ts.isClassDeclaration(node)) {
+			const type = this.tsProject.getTypeOfSymbolAtLocation(symbol, node);
+			if (tss.Type.hasConstructSignatures(type)) {
+				this.emitAttachedMonikers(
+					monikerParts.path,
+					this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
+				);
+			}
+		}
+	}
+
+	private visitConstructor(node: ts.ConstructorDeclaration): boolean {
+		// Constructors have no identifier so we need to handle the symbol here.
+		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
+		return true;
+	}
+
+	private endVisitConstructor(node: ts.ConstructorDeclaration): void {
+		// In a constructor class properties can be declared via a parameter.
+		// Handle them as properties.
+		for (const param of node.parameters) {
+			const flags  = ts.getCombinedModifierFlags(param);
+			if ((flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected | ts.ModifierFlags.Public)) !== 0) {
+				this.handlePropertyType(param);
 			}
 		}
 	}
@@ -3665,14 +3687,6 @@ class Visitor {
 
 	private endVisitGetAccessor(node: ts.GetAccessorDeclaration): void {
 		this.handleSignatures(node);
-	}
-	private endVisitConstructor(node: ts.ConstructorDeclaration): void {
-		for (const param of node.parameters) {
-			const flags  = ts.getCombinedModifierFlags(param);
-			if ((flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected | ts.ModifierFlags.Public)) !== 0) {
-				this.handlePropertyType(param);
-			}
-		}
 	}
 
 	private visitArrayType(_node: ts.ArrayTypeNode): boolean {
