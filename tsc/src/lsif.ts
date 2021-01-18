@@ -1057,10 +1057,33 @@ namespace FlowMode {
 }
 
 enum TraverseMode {
+	/**
+	 * End the traversal since the symbol is direct or indirect exported.
+	 */
 	done = 1,
+
+	/**
+	 * We still traverse the type / symbol tree but we don't generate any
+	 * export path. We have `noMark` | `mark` to not loose the previous
+	 * `noExport` | `export` state. When in mark mode we still change
+	 * the symbol visibility to not delete symbols that are indirectly
+	 * referenced.
+	 */
 	noMark = 2,
 	mark = 3,
+
+	/**
+	 * We are in a callback signature and hence we don't export unnamed symbols
+	 * since they are no accessible. The traversal flips between `noExport` and
+	 * `export` based on the `FlowMode`.
+	 */
 	noExport = 4,
+
+	/**
+	 * The symbol has no unique name hence we need to compute an export path
+	 * based on some parent information. An example is a literal type returned
+	 * from a function.
+	 */
 	export = 5
 }
 
