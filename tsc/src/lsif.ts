@@ -1347,7 +1347,7 @@ class Symbols {
 		}
 	}
 
-	public getType(symbol: ts.Symbol, location: ts.Node): ts.Type {
+	public getTypeOfSymbol(symbol: ts.Symbol, location: ts.Node): ts.Type {
 		return Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)
 			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
 			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : location);
@@ -1476,7 +1476,7 @@ class Symbols {
 						}
 					}
 					for (const parameter of signature.getParameters()) {
-						const parameterType = this.getType(parameter, sourceFile);
+						const parameterType = this.getTypeOfSymbol(parameter, sourceFile);
 						const parameterTraverseMode = typeTraverseMode(parameterType, traverseMode);
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
 						const newMode = tss.Type.hasCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
@@ -1564,7 +1564,7 @@ class Symbols {
 			}
 
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			const type = this.getType(symbol, sourceFile);
+			const type = this.getTypeOfSymbol(symbol, sourceFile);
 			// On the first level we start with a symbol or type that is exported. So don't recompute the
 			// traverse mode.
 			walkType(type, exportIdentifier, symbolData.moduleSystem, mode, level === 0 ? traverseMode : typeTraverseMode(type, traverseMode), level);
@@ -2501,10 +2501,6 @@ class TSProject {
 		return this.languageService.getProgram()!;
 	}
 
-	public getSymbols(): Symbols {
-		return this.symbols;
-	}
-
 	public getSymbolId(symbol: ts.Symbol): SymbolId {
 		return tss.Symbol.createKey(this.typeChecker, symbol);
 	}
@@ -2548,8 +2544,16 @@ class TSProject {
 		return this.typeChecker.getTypeAtLocation(node);
 	}
 
-	public getTypeOfSymbolAtLocation(symbol: ts.Symbol, node: ts.Node): ts.Type {
-		return this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+	public getTypeOfSymbol(symbol: ts.Symbol, location: ts.Node): ts.Type {
+		return this.symbols.getTypeOfSymbol(symbol, location);
+	}
+
+	public getBaseTypes(type: ts.Type): ts.Type[] | undefined {
+		return this.symbols.types.getBaseTypes(type);
+	}
+
+	public getExtendsTypes(type: ts.Type): ts.Type[] | undefined {
+		return this.symbols.types.getExtendsTypes(type);
 	}
 
 	public getAliasedSymbol(symbol: ts.Symbol): ts.Symbol {
@@ -3393,14 +3397,30 @@ class Visitor {
 
 	private endVisitClassOrInterfaceDeclaration(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
 		this.endVisitDeclaration(node);
-		this.handleBase(node);
-		// Interface can be used to declare function or constructor signatures.
 		const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 			return;
 		}
+
+		const type = this.tsProject.getTypeOfSymbol(symbol, node);
+
+		// We don't need t traverse the class or interface itself. Only the parents.
+		const bases = this.tsProject.getBaseTypes(type);
+		if (bases !== undefined) {
+			for (const type of bases) {
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
+			}
+		}
+		const extendz = this.tsProject.getExtendsTypes(type);
+		if (extendz !== undefined) {
+			for (const type of extendz) {
+				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
+			}
+		}
+
+		// Interface can be used to declare function or constructor signatures.
 		if (ts.isInterfaceDeclaration(node)) {
-			const type = this.tsProject.getTypeAtLocation(node.name);
+			const type = this.tsProject.getTypeOfSymbol(symbol, node.name);
 			if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
 				this.emitAttachedMonikers(
 					monikerParts.path,
@@ -3408,7 +3428,7 @@ class Visitor {
 				);
 			}
 		} else if (ts.isClassDeclaration(node)) {
-			const type = this.tsProject.getTypeOfSymbolAtLocation(symbol, node);
+			const type = this.tsProject.getTypeOfSymbol(symbol, node);
 			if (tss.Type.hasConstructSignatures(type)) {
 				this.emitAttachedMonikers(
 					monikerParts.path,
@@ -3494,7 +3514,7 @@ class Visitor {
 			if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 				continue;
 			}
-			const type = this.tsProject.getSymbols().getType(symbol, node);
+			const type = this.tsProject.getTypeOfSymbol(symbol, node);
 			this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
 		}
 	}
@@ -3528,7 +3548,7 @@ class Visitor {
 			return;
 		}
 
-		const type = this.tsProject.getTypeOfSymbolAtLocation(symbol, node);
+		const type = this.tsProject.getTypeOfSymbol(symbol, node);
 		this.emitAttachedMonikers(
 			monikerParts.path,
 			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
@@ -3540,33 +3560,10 @@ class Visitor {
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
 			return;
 		}
-		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name, symbolData.moduleSystem)
+			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), this.tsProject.getTypeOfSymbol(symbol, node), monikerParts.name, symbolData.moduleSystem)
 		);
-	}
-
-	private handleBase(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
-		const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
-		if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
-			return;
-		}
-		const symbols = this.tsProject.getSymbols();
-		const type = symbols.getType(symbol, node);
-		// We don't need t traverse the class or interface itself. Only the parents.
-		const bases = symbols.types.getBaseTypes(type);
-		if (bases !== undefined) {
-			for (const type of bases) {
-				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
-			}
-		}
-		const extendz = symbols.types.getExtendsTypes(type);
-		if (extendz !== undefined) {
-			for (const type of extendz) {
-				this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
-			}
-		}
 	}
 
 	private visitParameterDeclaration(node: ts.ParameterDeclaration): boolean {
@@ -3603,10 +3600,9 @@ class Visitor {
 		if (symbol === undefined || symbolData === undefined || monikerParts === undefined || !Symbols.isTypeAlias(symbol)) {
 			return;
 		}
-		const symbols = this.tsProject.getSymbols();
 		this.emitAttachedMonikers(
 			monikerParts.path,
-			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), symbols.getType(symbol, node), monikerParts.name, symbolData.moduleSystem)
+			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), this.tsProject.getTypeOfSymbol(symbol, node), monikerParts.name, symbolData.moduleSystem)
 		);
 	}
 

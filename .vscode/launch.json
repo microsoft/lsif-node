@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export class as default"
+				"-g", "Extend private class"
 
 			],
 			"cwd": "${workspaceRoot}/tsc",
