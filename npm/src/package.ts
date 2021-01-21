@@ -42,12 +42,12 @@ class PackageJson {
 		this.version = json.version;
 		this.repository = json.repository;
 		if (Is.string(json.main)) {
-			this.main = paths.normalizeSeparator(paths.removeExtension(json.main));
+			this.main = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.main)));
 		} else {
 			this.main= 'index';
 		}
 		if (Is.string(json.typings)) {
-			this.typings = paths.normalizeSeparator(paths.removeExtension(json.typings));
+			this.typings = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.typings)));
 		} else {
 			this.typings = 'index';
 		}
