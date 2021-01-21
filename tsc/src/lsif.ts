@@ -1174,6 +1174,142 @@ class Types {
 		}
 		return result;
 	}
+
+	public getTypeArguments(type: ts.TypeReference): readonly ts.Type[] {
+		return this.typeChecker.getTypeArguments(type);
+	}
+}
+
+interface SymbolWalkerContext {
+	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
+}
+
+abstract class SymbolWalker {
+
+	protected result: [SymbolData, string][];
+	private context: SymbolWalkerContext;
+	private symbols: Symbols;
+	private visitedSymbols: Set<ts.Symbol>;
+	private visitedTypes: Set<ts.Type>;
+
+	public constructor(context: SymbolWalkerContext, symbols: Symbols) {
+		this.result = [];
+		this.context = context;
+		this.symbols = symbols;
+		this.visitedSymbols = new Set();
+		this.visitedTypes = new Set();
+	}
+
+	public walk(start: ts.Symbol | ts.Type): [SymbolData, string][] {
+		return this.result;
+	}
+
+	protected walkType(type: ts.Type, mode: FlowMode, path: string): void {
+		if (this.visitedTypes.has(type)) {
+			return;
+		}
+
+		if (type.isUnionOrIntersection()) {
+			for (const part of type.types) {
+				this.walkType(part, mode, path);
+			}
+		}
+
+		if (tss.Type.isInterface(type)) {
+			const bases = this.symbols.types.getBaseTypes(type);
+			if (bases !== undefined) {
+				for (const base of bases) {
+					this.walkType(base, mode, path);
+				}
+			}
+		}
+
+		if (tss.Type.isClass(type)) {
+			const bases = this.symbols.types.getExtendsTypes(type);
+			if (bases !== undefined) {
+				for (const base of bases) {
+					this.walkType(base, mode, path);
+				}
+			}
+		}
+
+		if (tss.Type.isObjectType(type)) {
+			if (tss.Type.isTypeReference(type)) {
+				const typeReferences = this.symbols.types.getTypeArguments(type);
+				for (const reference of typeReferences) {
+					this.walkType(reference, mode, path);
+				}
+			}
+		}
+
+		if (type.aliasTypeArguments !== undefined) {
+			for (const aliasTypeArgument of type.aliasTypeArguments) {
+				this.walkType(aliasTypeArgument, mode, path);
+			}
+		}
+
+		if (tss.Type.isConditionalType(type)) {
+			this.walkType(type.checkType, mode, path);
+			this.walkType(type.extendsType, mode, path);
+			this.walkType(type.resolvedTrueType, mode, path);
+			this.walkType(type.resolvedFalseType, mode, path);
+		}
+
+		const symbol = type.getSymbol();
+		if (symbol !== undefined) {
+			this.walkSymbol(symbol, mode, path);
+		}
+	}
+
+	protected walkSymbol(symbol: ts.Symbol, mode: FlowMode, path: string): void {
+		if (this.visitedSymbols.has(symbol)) {
+			return;
+		}
+		const symbolData = this.context.getOrCreateSymbolData(symbol);
+		this.visitedSymbols.add(symbol);
+		const newPath = this.visitSymbol(symbol, symbolData, path);
+		if (newPath !== undefined) {
+			const type = this.symbols.getTypeOfSymbol(symbol);
+			this.walkType(type, mode, path);
+			if (symbol.exports !== undefined) {
+				const iterator = symbol.exports.values();
+				for (let item = iterator.next(); !item.done; item = iterator.next()) {
+					this.walkSymbol(item.value, mode, newPath);
+				}
+			}
+			if (symbol.members !== undefined) {
+				const iterator = symbol.members.values();
+				for (let item = iterator.next(); !item.done; item = iterator.next()) {
+					this.walkSymbol(item.value, mode, newPath);
+				}
+			}
+		}
+	}
+
+	protected abstract visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, mode: FlowMode, path: string): string | undefined;
+}
+
+/**
+ * Marks symbols as indirect exported and generates Monikers for unnamed
+ * symbols that are indirectly exported. Examples are:
+ *
+ * - export const foo: { count: number; };
+ * - export function foo(callback: (param: { count: number; }) => void): void;
+ *
+ * It doesn't generate a Monikers for named symbols that are indirectly exported.
+ */
+class IndirectExportWalker extends SymbolWalker {
+
+	protected visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, mode: FlowMode, path: string): string | undefined {
+		if (symbolData.isAtLeastIndirectExported()) {
+			return undefined;
+		}
+		symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+		// This is an unnamed symbol
+		if (Symbols.isInternal(symbol)) {
+
+		}
+	}
 }
 
 class Symbols {
@@ -1182,26 +1318,16 @@ class Symbols {
 		[ts.SyntaxKind.VariableDeclaration, [ts.SyntaxKind.VariableDeclarationList, ts.SyntaxKind.VariableStatement, ts.SyntaxKind.SourceFile]]
 	]);
 
-	private static InternalSymbolNames: Map<string, string> = new Map([
-		[ts.InternalSymbolName.Call, '1I'],
-		[ts.InternalSymbolName.Constructor, '2I'],
-		[ts.InternalSymbolName.New, '3I'],
-		[ts.InternalSymbolName.Index, '4I'],
-		[ts.InternalSymbolName.ExportStar, '5I'],
-		[ts.InternalSymbolName.Global, '6I'],
-		[ts.InternalSymbolName.Missing, '7I'],
-		[ts.InternalSymbolName.Type, '8I'],
-		[ts.InternalSymbolName.Object, '9I'],
-		[ts.InternalSymbolName.JSXAttributes, '10I'],
-		[ts.InternalSymbolName.Class, '11I'],
-		[ts.InternalSymbolName.Function, '12I'],
-		[ts.InternalSymbolName.Computed, '13I'],
-		[ts.InternalSymbolName.Resolving, '14I'],
-		[ts.InternalSymbolName.ExportEquals, '15I'],
-		[ts.InternalSymbolName.Default, '16I'],
-		[ts.InternalSymbolName.This, '17I']
-	]);
-
+	private static internalSymbolNames: Set<string>;
+	public static isInternal(symbol: ts.Symbol): boolean {
+		if (this.internalSymbolNames === undefined) {
+			this.internalSymbolNames = new Set();
+			for (const item in ts.InternalSymbolName) {
+				this.internalSymbolNames.add((ts.InternalSymbolName as any)[item]);
+			}
+		}
+		return this.internalSymbolNames.has(symbol.escapedName as string);
+	}
 
 	public static isSourceFile(symbol: ts.Symbol): boolean  {
 		const declarations = symbol.getDeclarations();
@@ -1347,26 +1473,16 @@ class Symbols {
 		}
 	}
 
-	public getTypeOfSymbol(symbol: ts.Symbol, location: ts.Node): ts.Type {
+	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
+		const node = location !== undefined
+			? location
+			: symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined;
+		if (node === undefined) {
+			throw new Error(`No location provided when querying types of a symbol ${symbol.name}`);
+		}
 		return Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)
 			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
-			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, symbol.declarations !== undefined ? symbol.declarations[0] : location);
-	}
-
-	public getSymbolsOfType(type: ts.Type): ts.Symbol[] {
-		if (type.isUnionOrIntersection()) {
-			const result: ts.Symbol[] = [];
-			for (const part of type.types) {
-				const symbol = part.getSymbol();
-				if (symbol !== undefined) {
-					result.push(symbol);
-				}
-			}
-			return result;
-		} else {
-			const result = type.getSymbol();
-			return result !== undefined ? [result] : [];
-		}
+			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
 	}
 
 	public computeAdditionalExportPaths(context: ExportPathsContext, sourceFile: ts.SourceFile, start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, traverseMode?: TraverseMode): [SymbolData, string][] {
@@ -1476,7 +1592,7 @@ class Symbols {
 						}
 					}
 					for (const parameter of signature.getParameters()) {
-						const parameterType = this.getTypeOfSymbol(parameter, sourceFile);
+						const parameterType = this.getTypeOfSymbol(parameter);
 						const parameterTraverseMode = typeTraverseMode(parameterType, traverseMode);
 						const exportIdentifier = `${parentPath}.${this.getExportSymbolName(parameter)}`;
 						const newMode = tss.Type.hasCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
@@ -1564,7 +1680,7 @@ class Symbols {
 			}
 
 			const symbolData = context.getOrCreateSymbolData(symbol);
-			const type = this.getTypeOfSymbol(symbol, sourceFile);
+			const type = this.getTypeOfSymbol(symbol);
 			// On the first level we start with a symbol or type that is exported. So don't recompute the
 			// traverse mode.
 			walkType(type, exportIdentifier, symbolData.moduleSystem, mode, level === 0 ? traverseMode : typeTraverseMode(type, traverseMode), level);
@@ -2544,7 +2660,7 @@ class TSProject {
 		return this.typeChecker.getTypeAtLocation(node);
 	}
 
-	public getTypeOfSymbol(symbol: ts.Symbol, location: ts.Node): ts.Type {
+	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
 		return this.symbols.getTypeOfSymbol(symbol, location);
 	}
 
@@ -3388,6 +3504,9 @@ class Visitor {
 
 	private endVisitModuleDeclaration(node: ts.ModuleDeclaration): void {
 		this.endVisitDeclaration(node);
+		const symbol = this.tsProject.getSymbolAtLocation(node);
+		const type = this.tsProject.getTypeOfSymbol(symbol!, node);
+		console.log(symbol, type);
 	}
 
 	private visitClassOrInterfaceDeclaration(node: ts.ClassDeclaration | ts.InterfaceDeclaration): boolean {
