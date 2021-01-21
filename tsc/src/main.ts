@@ -27,6 +27,7 @@ interface CommonOptions {
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	id: 'number' | 'uuid';
 	noContents: boolean;
+	noProjectReferences: boolean;
 	typeAcquisition: boolean;
 	moniker: 'strict' | 'lenient'
 	out: string | undefined;
@@ -60,6 +61,7 @@ namespace Options {
 		group: undefined,
 		projectName: undefined,
 		noContents: false,
+		noProjectReferences: false,
 		typeAcquisition: false,
 		moniker: 'lenient',
 		out: undefined,
@@ -345,6 +347,7 @@ interface ProcessProjectOptions {
 	groupRoot: string;
 	projectName?:string;
 	typeAcquisition: boolean;
+	noProjectReferences: boolean;
 	stdout: boolean;
 	dataMode: DataMode;
 	reporter: Reporter;
@@ -448,7 +451,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		return -1;
 	}
 	const dependsOn: ProjectInfo[] = [];
-	const references = program.getResolvedProjectReferences();
+	const references = options.noProjectReferences ? undefined : program.getResolvedProjectReferences();
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
@@ -541,6 +544,10 @@ async function run(this: void, args: string[]): Promise<void> {
 			}).
 			option('noContents', {
 				description: 'File contents will not be embedded into the dump.',
+				boolean: true
+			}).
+			option('noProjectReferences', {
+				description: 'Project references will not be follow and embedded into the dump.',
 				boolean: true
 			}).
 			option('typeAcquisition', {
@@ -672,6 +679,7 @@ async function run(this: void, args: string[]): Promise<void> {
 		groupRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
+		noProjectReferences: options.noProjectReferences,
 		stdout: options.stdout,
 		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
 		reporter: reporter,
