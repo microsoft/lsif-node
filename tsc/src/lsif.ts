@@ -23,6 +23,7 @@ import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
+import { pathToFileURL } from 'url';
 
 interface Disposable {
 	(): void;
@@ -1187,8 +1188,8 @@ interface SymbolWalkerContext {
 abstract class SymbolWalker {
 
 	protected result: [SymbolData, string][];
-	private context: SymbolWalkerContext;
-	private symbols: Symbols;
+	protected context: SymbolWalkerContext;
+	protected symbols: Symbols;
 	private visitedSymbols: Set<ts.Symbol>;
 	private visitedTypes: Set<ts.Type>;
 
@@ -1200,18 +1201,29 @@ abstract class SymbolWalker {
 		this.visitedTypes = new Set();
 	}
 
-	public walk(start: ts.Symbol | ts.Type): [SymbolData, string][] {
+	public walk(start: ts.Symbol | ts.Type, path: string, mode: FlowMode = FlowMode.exported): [SymbolData, string][] {
+		this.result = [];
+		if (tss.Symbol.is(start)) {
+			this.walkSymbol(start, mode, false, path);
+			// If the symbol is not exported now mark it at least as indirect exported.
+			const symbolData = this.context.getOrCreateSymbolData(start);
+			if (!symbolData.isExported()) {
+				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+			}
+		} else {
+			this.walkType(start, mode, false, path);
+		}
 		return this.result;
 	}
 
-	protected walkType(type: ts.Type, mode: FlowMode, path: string): void {
+	protected walkType(type: ts.Type, mode: FlowMode, markOnly: boolean, path: string): void {
 		if (this.visitedTypes.has(type)) {
 			return;
 		}
 
 		if (type.isUnionOrIntersection()) {
 			for (const part of type.types) {
-				this.walkType(part, mode, path);
+				this.walkType(part, mode, markOnly, path);
 			}
 		}
 
@@ -1219,7 +1231,7 @@ abstract class SymbolWalker {
 			const bases = this.symbols.types.getBaseTypes(type);
 			if (bases !== undefined) {
 				for (const base of bases) {
-					this.walkType(base, mode, path);
+					this.walkType(base, mode, markOnly, path);
 				}
 			}
 		}
@@ -1228,7 +1240,7 @@ abstract class SymbolWalker {
 			const bases = this.symbols.types.getExtendsTypes(type);
 			if (bases !== undefined) {
 				for (const base of bases) {
-					this.walkType(base, mode, path);
+					this.walkType(base, mode, markOnly, path);
 				}
 			}
 		}
@@ -1237,56 +1249,56 @@ abstract class SymbolWalker {
 			if (tss.Type.isTypeReference(type)) {
 				const typeReferences = this.symbols.types.getTypeArguments(type);
 				for (const reference of typeReferences) {
-					this.walkType(reference, mode, path);
+					this.walkType(reference, mode, markOnly, path);
 				}
 			}
 		}
 
 		if (type.aliasTypeArguments !== undefined) {
 			for (const aliasTypeArgument of type.aliasTypeArguments) {
-				this.walkType(aliasTypeArgument, mode, path);
+				this.walkType(aliasTypeArgument, mode, markOnly, path);
 			}
 		}
 
 		if (tss.Type.isConditionalType(type)) {
-			this.walkType(type.checkType, mode, path);
-			this.walkType(type.extendsType, mode, path);
-			this.walkType(type.resolvedTrueType, mode, path);
-			this.walkType(type.resolvedFalseType, mode, path);
+			this.walkType(type.checkType, mode, markOnly, path);
+			this.walkType(type.extendsType, mode, markOnly, path);
+			this.walkType(type.resolvedTrueType, mode, markOnly, path);
+			this.walkType(type.resolvedFalseType, mode, markOnly, path);
 		}
 
 		const symbol = type.getSymbol();
 		if (symbol !== undefined) {
-			this.walkSymbol(symbol, mode, path);
+			this.walkSymbol(symbol, mode, !Symbols.isInternal(symbol), path);
 		}
 	}
 
-	protected walkSymbol(symbol: ts.Symbol, mode: FlowMode, path: string): void {
+	protected walkSymbol(symbol: ts.Symbol, mode: FlowMode, markOnly: boolean, path: string): void {
 		if (this.visitedSymbols.has(symbol)) {
 			return;
 		}
 		const symbolData = this.context.getOrCreateSymbolData(symbol);
 		this.visitedSymbols.add(symbol);
-		const newPath = this.visitSymbol(symbol, symbolData, path);
+		const newPath = this.visitSymbol(symbol, symbolData, mode, markOnly, path);
 		if (newPath !== undefined) {
 			const type = this.symbols.getTypeOfSymbol(symbol);
-			this.walkType(type, mode, path);
+			this.walkType(type, mode, markOnly, path);
 			if (symbol.exports !== undefined) {
 				const iterator = symbol.exports.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
-					this.walkSymbol(item.value, mode, newPath);
+					this.walkSymbol(item.value, mode, markOnly || !Symbols.isInternal(item.value), newPath);
 				}
 			}
 			if (symbol.members !== undefined) {
 				const iterator = symbol.members.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
-					this.walkSymbol(item.value, mode, newPath);
+					this.walkSymbol(item.value, mode, markOnly || !Symbols.isInternal(item.value), newPath);
 				}
 			}
 		}
 	}
 
-	protected abstract visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, mode: FlowMode, path: string): string | undefined;
+	protected abstract visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, markOnly: boolean, path: string): string | undefined;
 }
 
 /**
@@ -1300,14 +1312,102 @@ abstract class SymbolWalker {
  */
 class IndirectExportWalker extends SymbolWalker {
 
-	protected visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, mode: FlowMode, path: string): string | undefined {
-		if (symbolData.isAtLeastIndirectExported()) {
+	private force: boolean;
+
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, force: boolean = false) {
+		super(context, symbols);
+		this.force = force;
+	}
+
+	protected visitSymbol(symbol: ts.Symbol, symbolData: SymbolData, markOnly: boolean, path: string): string | undefined {
+		if (!this.force && symbolData.isAtLeastIndirectExported()) {
 			return undefined;
 		}
 		symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-		// This is an unnamed symbol
-		if (Symbols.isInternal(symbol)) {
+		if (markOnly) {
+			return path;
+		}
+		const identifier = `${path}.${this.symbols.getExportSymbolName(symbol)}`;
+		this.result.push([symbolData, identifier]);
+		return identifier;
+	}
+}
 
+/**
+ * Symbol walker that creates monikers for symbols that are (re-)exported
+ * via a export statement.
+ */
+enum ChildKind {
+	unknown = 1,
+	exports = 2,
+	members = 3
+}
+
+class ExportSymbolWalker {
+
+	private readonly result: [SymbolData, string][];
+	private readonly context: SymbolWalkerContext;
+	private readonly symbols: Symbols;
+
+	private readonly visitedSymbol: Set<ts.Symbol>;
+
+	constructor(context: SymbolWalkerContext, symbols: Symbols) {
+		this.result = [];
+		this.context = context;
+		this.symbols = symbols;
+		this.visitedSymbol = new Set();
+	}
+
+	public walk(symbol: ts.Symbol, path: string): [SymbolData, string][] {
+		this.walkSymbol(undefined, symbol, ChildKind.unknown, path);
+		return this.result;
+	}
+
+	protected walkSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, kind: ChildKind, path: string): void {
+		if (this.visitedSymbol.has(symbol)) {
+			return;
+		}
+		const symbolData = this.context.getOrCreateSymbolData(symbol);
+		const newPath = this.visitSymbol(parent, symbol, symbolData, kind, path);
+		if (symbol.exports !== undefined) {
+			const iterator = symbol.exports.values();
+			for (let item = iterator.next(); !item.done; item = iterator.next()) {
+				this.walkSymbol(symbol, item.value, ChildKind.exports, newPath);
+			}
+		}
+		if (symbol.members !== undefined) {
+			const iterator = symbol.members.values();
+			for (let item = iterator.next(); !item.done; item = iterator.next()) {
+				this.walkSymbol(symbol, item.value, ChildKind.members, newPath);
+			}
+		}
+	}
+
+	protected visitSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, symbolData: SymbolData, kind: ChildKind, path: string): string {
+		// We are at the first level. If path is not empty we take the path for the first symbol. This
+		// support cases were we rename the top level symbol during export.
+		if (parent === undefined) {
+			if (path.length !== 0) {
+				this.result.push([symbolData, path]);
+				return path;
+			} else {
+				const exportPath = this.symbols.getExportSymbolName(symbol);
+				this.result.push([symbolData, exportPath]);
+				return exportPath;
+			}
+		} else {
+			let exportPath: string;
+			if (Symbols.isClass(parent) && kind === ChildKind.exports) {
+				// This is either a constructor or a static method.
+				exportPath = Symbols.isPrototype(symbol)
+					? `${path}.${this.symbols.getExportSymbolName(symbol)}`
+					: `${path}.__static__.${this.symbols.getExportSymbolName(symbol)}`;
+
+			} else {
+				exportPath = `${path}.${this.symbols.getExportSymbolName(symbol)}`;
+			}
+			this.result.push([symbolData, exportPath]);
+			return exportPath;
 		}
 	}
 }
@@ -1692,16 +1792,6 @@ class Symbols {
 		};
 
 		// We start in export mode since this is why we got called.
-		if (tss.Symbol.is(start)) {
-			walkSymbol(start, exportName, FlowMode.exported, traverseMode ?? symbolTraverseMode(start, TraverseMode.export), 0);
-			// If the symbol is not exported now mark it at least as indirect exported.
-			const symbolData = context.getOrCreateSymbolData(start);
-			if (!symbolData.isExported()) {
-				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-			}
-		} else {
-			walkType(start, exportName, moduleSystem, FlowMode.exported, traverseMode ?? typeTraverseMode(start, TraverseMode.export), 0);
-		}
 		return result;
 	}
 
@@ -1875,8 +1965,9 @@ class Symbols {
 		}
 	}
 
-	public getExportSymbolName(symbol: ts.Symbol, internalName?: string): string {
-		const escapedName = symbol.getEscapedName();
+	private static escapeRegExp: RegExp = new RegExp('\\.', 'g');
+	public getExportSymbolName(symbol: ts.Symbol): string {
+		let escapedName = symbol.getEscapedName() as string;
 		// export default foo && export = foo
 		if (Symbols.isAliasSymbol(symbol) && (escapedName === ts.InternalSymbolName.Default || escapedName === ts.InternalSymbolName.ExportEquals)) {
 			const declarations = symbol.getDeclarations();
@@ -1887,15 +1978,11 @@ class Symbols {
 				}
 			}
 		}
-		const internalSymbolId: string | undefined = Symbols.InternalSymbolNames.get(escapedName as string);
-		if (internalSymbolId !== undefined) {
-			return internalName ?? internalSymbolId;
+		if (escapedName.charAt(0) === '\"' || escapedName.charAt(0) === '\'') {
+			escapedName = escapedName.substr(1, escapedName.length - 2);
 		}
-		const name = symbol.getName();
-		if (name.charAt(0) === '\"' || name.charAt(0) === '\'') {
-			return name.substr(1, name.length - 2);
-		}
-		return name;
+		escapedName = escapedName.replace(Symbols.escapeRegExp, '..');
+		return escapedName;
 	}
 
 	public isTopLevelSymbol(symbol: ts.Symbol): boolean {
