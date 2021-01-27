@@ -879,19 +879,17 @@ class AliasSymbolData extends StandardSymbolData {
 
 	private readonly aliased: SymbolData;
 	private readonly renames: boolean;
+	private initialized: boolean;
 
 	constructor(context: SymbolDataContext, projectId: ProjectId, symbolId: SymbolId, aliased: SymbolData, moduleSystem: ModuleSystemKind, visibility: SymbolDataVisibility, isNamed: boolean, renames: boolean, next: SymbolData | undefined) {
 		super(context, projectId, symbolId, moduleSystem, visibility, isNamed, next);
 		this.aliased = aliased;
 		this.renames = renames;
-	}
-
-	public begin(): void {
-		super.begin();
-		this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
+		this.initialized = false;
 	}
 
 	public addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void {
+		this.checkInitialized(projectId, shard);
 		if (this.renames) {
 			super.addDefinition(projectId, shard, definition, false);
 		} else {
@@ -901,22 +899,46 @@ class AliasSymbolData extends StandardSymbolData {
 	}
 
 	public findDefinition(projectId: ProjectId, shard: Shard, range: lsp.Range): DefinitionRange | undefined {
+		this.checkInitialized(projectId, shard);
 		if (this.renames) {
 			return super.findDefinition(projectId, shard, range);
 		} else {
+			@@ this is not correct since we added the definition as a reference
 			return this.aliased.findDefinition(projectId, shard, range);
 		}
 	}
 
 	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		if (reference.label === 'range') {
-			this.emit(this.edge.next(reference, this.resultSet));
+		this.checkInitialized(projectId, shard);
+		if (this.renames) {
+			super.addReference(projectId, shard, reference, property);
+		} else {
+			if (reference.label === 'range') {
+				this.emit(this.edge.next(reference, this.resultSet));
+			}
+			this.aliased.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
 		}
-		this.aliased.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
 	}
 
 	public getOrCreateReferenceResult(): ReferenceResult {
-		throw new Error(`Shouldn't be called`);
+		if (this.renames) {
+			return super.getOrCreateReferenceResult();
+		} else {
+			return this.aliased.getOrCreateReferenceResult();
+		}
+	}
+
+	private checkInitialized(projectId: ProjectId, shard: Shard): void {
+		if (this.initialized) {
+			return;
+		}
+		if (this.renames) {
+			const referenceResult = super.getOrCreateReferenceResult();
+			this.aliased.addReference(projectId, shard, referenceResult);
+		} else {
+			this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
+		}
+		this.initialized = true;
 	}
 }
 
@@ -1954,7 +1976,8 @@ class Symbols {
 	}
 
 	public getExportPath(symbol: ts.Symbol, kind: ModuleSystemKind): string | undefined {
-		if (Symbols.isInternal(symbol)) {
+		// For a declaration like export default function foo()
+		if (Symbols.isInternal(symbol) && (symbol.escapedName !== ts.InternalSymbolName.Default)) {
 			return undefined;
 		}
 		let result = this.exportPathCache.get(symbol);
@@ -3837,47 +3860,22 @@ class Visitor {
 	}
 
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
-		const symbol = this.tsProject.getSymbolAtLocation(node);
-		this.handleSymbol(symbol, node);
+		// we don't need to create a symbol data for the
+		// export = symbol or export default symbol. But look
+		// at the children;
 		return true;
-		// if (symbol === undefined) {
-		// 	return false;
-		// }
-		// // Handle the export assignment.
-		// const symbolData = this.dataManager.getSymbolData(this.tsProject.getSymbolId(symbol));
-		// if (symbolData === undefined) {
-		// 	return false;
-		// }
-		// const moniker = symbolData.getMostUniqueMoniker();
-		// if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
-		// 	return false;
-		// }
-
-		// const monikerParts = TscMoniker.parse(moniker.identifier);
-		// const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression) || tss.Node.getSymbol(node.expression);
-		// this.handleSymbol(aliasedSymbol, node.expression);
-		// if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
-		// 	const name = node.expression.getText();
-		// 	const sourceFile = node.getSourceFile();
-		// 	this.emitAttachedMonikers(
-		// 		monikerParts.path,
-		// 		this.tsProject.computeAdditionalExportPaths(sourceFile, aliasedSymbol, name, symbolData.moduleSystem)
-		// 	);
-		// }
-		// return false;
 	}
 
 	private endVisitExportAssignment(node: ts.ExportAssignment): void {
-		const monikerPath = this.currentDocumentData.monikerPath;
-		if (monikerPath === undefined) {
-			return;
-		}
+		// export = foo;
+		// export default foo;
 		const symbol = this.tsProject.getSymbolAtLocation(node);
+		this.handleSymbol(symbol, node);
 		if (symbol === undefined) {
 			return;
 		}
-		const symbolData = this.dataManager.getSymbolData(symbol);
-		if (symbolData === undefined) {
+		const monikerPath = this.currentDocumentData.monikerPath;
+		if (monikerPath === undefined) {
 			return;
 		}
 		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression);
@@ -3888,49 +3886,46 @@ class Visitor {
 		if (aliasedSymbolData === undefined) {
 			return;
 		}
-		this.tsProject.exportSymbol(aliasedSymbol, monikerPath);
+		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, symbol.escapedName as string);
 	}
 
-	private visitExportDeclaration(node: ts.ExportDeclaration): boolean {
+	private visitExportDeclaration(_node: ts.ExportDeclaration): boolean {
 		// `export { foo }` ==> ExportDeclaration
 		// `export { _foo as foo }` ==> ExportDeclaration
-		// if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
-		// 	for (const element of node.exportClause.elements) {
-		// 		const symbol = this.tsProject.getSymbolAtLocation(element.name);
-		// 		if (symbol === undefined) {
-		// 			continue;
-		// 		}
-		// 		this.handleSymbol(symbol, element.name);
-		// 		const symbolData = this.dataManager.getSymbolData(this.tsProject.getSymbolId(symbol));
-		// 		if (symbolData === undefined) {
-		// 			return false;
-		// 		}
-		// 		const moniker = symbolData.getMostUniqueMoniker();
-		// 		if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
-		// 			continue;
-		// 		}
-		// 		const monikerParts = TscMoniker.parse(moniker.identifier);
-		// 		const aliasedSymbol = Symbols.isAliasSymbol(symbol)
-		// 			? this.tsProject.getAliasedSymbol(symbol)
-		// 			: element.propertyName !== undefined
-		// 				? this.tsProject.getSymbolAtLocation(element.propertyName)
-		// 				: undefined;
-		// 		if (element.propertyName !== undefined) {
-		// 			this.handleSymbol(aliasedSymbol, element.propertyName);
-		// 		}
-		// 		if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
-		// 			const sourceFile = node.getSourceFile();
-		// 			this.emitAttachedMonikers(
-		// 				monikerParts.path,
-		// 				this.tsProject.computeAdditionalExportPaths(sourceFile, aliasedSymbol, monikerParts.name, symbolData.moduleSystem)
-		// 			);
-		// 		}
-		// 	}
-		// }
 		return false;
 	}
 
-	private endVisitExportDeclaration(_node: ts.ExportDeclaration): void {
+	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
+		// `export { foo }` ==> ExportDeclaration
+		// `export { _foo as foo }` ==> ExportDeclaration
+		if (node.exportClause !== undefined && ts.isNamedExports(node.exportClause)) {
+			for (const element of node.exportClause.elements) {
+				const symbol = this.tsProject.getSymbolAtLocation(element.name);
+				if (symbol === undefined) {
+					continue;
+				}
+				this.handleSymbol(symbol, element.name);
+				const symbolData = this.dataManager.getSymbolData(this.tsProject.getSymbolId(symbol));
+				if (symbolData === undefined) {
+					return;
+				}
+				const moniker = symbolData.getMostUniqueMoniker();
+				if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
+					continue;
+				}
+				const monikerParts = TscMoniker.parse(moniker.identifier);
+				const aliasedSymbol = Symbols.isAliasSymbol(symbol)
+					? this.tsProject.getAliasedSymbol(symbol)
+					: element.propertyName !== undefined
+						? this.tsProject.getSymbolAtLocation(element.propertyName)
+						: undefined;
+				if (element.propertyName !== undefined) {
+					this.handleSymbol(aliasedSymbol, element.propertyName);
+				}
+				if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
+				}
+			}
+		}
 	}
 
 	private visitArrayType(_node: ts.ArrayTypeNode): boolean {
