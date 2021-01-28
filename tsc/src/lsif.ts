@@ -878,39 +878,47 @@ class StandardSymbolData extends SymbolData {
 class AliasSymbolData extends StandardSymbolData {
 
 	private readonly aliased: SymbolData;
-	private readonly renames: boolean;
+	private readonly ownReferences: boolean;
 	private initialized: boolean;
 
 	constructor(context: SymbolDataContext, projectId: ProjectId, symbolId: SymbolId, aliased: SymbolData, moduleSystem: ModuleSystemKind, visibility: SymbolDataVisibility, isNamed: boolean, renames: boolean, next: SymbolData | undefined) {
 		super(context, projectId, symbolId, moduleSystem, visibility, isNamed, next);
 		this.aliased = aliased;
-		this.renames = renames;
+		this.ownReferences = isNamed && renames;
 		this.initialized = false;
+	}
+
+	public begin(): void {
+		super.begin();
+		// Is the symbol is not renamed forward everything to the original symbol.
+		if (!this.ownReferences) {
+			this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
+			this.initialized = true;
+		}
 	}
 
 	public addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void {
 		this.checkInitialized(projectId, shard);
-		if (this.renames) {
-			super.addDefinition(projectId, shard, definition, false);
-		} else {
-			this.emit(this.edge.next(definition, this.resultSet));
-			this.aliased.getOrCreatePartition(projectId, shard).addReference(definition, ItemEdgeProperties.references);
-		}
+		// import { foo as bar } from './provide'
+		// This renames the symbol, however go to declaration on bar should move to
+		// the real declaration of foo. This is why even on rename declarations of
+		// bar is recorded as a reference of foo.
+		this.emit(this.edge.next(definition, this.resultSet));
+		this.aliased.getOrCreatePartition(projectId, shard).addReference(definition, ItemEdgeProperties.references);
 	}
 
-	public findDefinition(projectId: ProjectId, shard: Shard, range: lsp.Range): DefinitionRange | undefined {
+	public findDefinition(projectId: ProjectId, shard: Shard, _range: lsp.Range): DefinitionRange | undefined {
 		this.checkInitialized(projectId, shard);
-		if (this.renames) {
-			return super.findDefinition(projectId, shard, range);
-		} else {
-			@@ this is not correct since we added the definition as a reference
-			return this.aliased.findDefinition(projectId, shard, range);
-		}
+		// Aliased symbols don't record own definitions. Find definition is only used
+		// for document outline. Since aliases aren't outlined we return undefined. If
+		// this needs to change we need to collect definitions in its own property to find
+		// them again
+		return undefined;
 	}
 
 	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		this.checkInitialized(projectId, shard);
-		if (this.renames) {
+		if (this.ownReferences) {
 			super.addReference(projectId, shard, reference, property);
 		} else {
 			if (reference.label === 'range') {
@@ -921,7 +929,7 @@ class AliasSymbolData extends StandardSymbolData {
 	}
 
 	public getOrCreateReferenceResult(): ReferenceResult {
-		if (this.renames) {
+		if (this.ownReferences) {
 			return super.getOrCreateReferenceResult();
 		} else {
 			return this.aliased.getOrCreateReferenceResult();
@@ -932,11 +940,9 @@ class AliasSymbolData extends StandardSymbolData {
 		if (this.initialized) {
 			return;
 		}
-		if (this.renames) {
+		if (this.ownReferences) {
 			const referenceResult = super.getOrCreateReferenceResult();
 			this.aliased.addReference(projectId, shard, referenceResult);
-		} else {
-			this.emit(this.edge.next(this.resultSet, this.aliased.getResultSet()));
 		}
 		this.initialized = true;
 	}
@@ -1414,42 +1420,55 @@ class ExportSymbolWalker {
 	private readonly result: [SymbolData, string][];
 	private readonly context: SymbolWalkerContext;
 	private readonly symbols: Symbols;
+	private readonly skipRoot: boolean;
 
 	private readonly visitedSymbol: Set<ts.Symbol>;
 
-	constructor(context: SymbolWalkerContext, symbols: Symbols) {
+	constructor(context: SymbolWalkerContext, symbols: Symbols, skipRoot: boolean = false) {
 		this.result = [];
 		this.context = context;
 		this.symbols = symbols;
+		this.skipRoot = skipRoot;
 		this.visitedSymbol = new Set();
 	}
 
 	public walk(symbol: ts.Symbol, path: string): [SymbolData, string][] {
-		this.walkSymbol(undefined, symbol, ChildKind.unknown, path);
+		this.walkSymbol(undefined, symbol, ChildKind.unknown, path, 0);
 		return this.result;
 	}
 
-	protected walkSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, kind: ChildKind, path: string): void {
+	protected walkSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, kind: ChildKind, path: string, level: number): void {
 		if (this.visitedSymbol.has(symbol)) {
 			return;
 		}
 		const symbolData = this.context.getOrCreateSymbolData(symbol);
-		const newPath = this.visitSymbol(parent, symbol, symbolData, kind, path);
+		const newPath = level === 0 && this.skipRoot ? path : this.visitSymbol(parent, symbol, symbolData, kind, path);
+		let hasChildren: boolean = false;
 		if (symbol.exports !== undefined) {
 			const iterator = symbol.exports.values();
 			for (let item = iterator.next(); !item.done; item = iterator.next()) {
-				this.walkSymbol(symbol, item.value, ChildKind.exports, newPath);
+				hasChildren = true;
+				this.walkSymbol(symbol, item.value, ChildKind.exports, newPath, level + 1);
 			}
 		}
 		if (symbol.members !== undefined) {
 			const iterator = symbol.members.values();
 			for (let item = iterator.next(); !item.done; item = iterator.next()) {
-				this.walkSymbol(symbol, item.value, ChildKind.members, newPath);
+				hasChildren = true;
+				this.walkSymbol(symbol, item.value, ChildKind.members, newPath, level + 1);
 			}
+		}
+		// This is a root symbol. Check if we have a type and try to walk for indirect exports
+		if (!hasChildren) {
+			const type = this.symbols.getTypeOfSymbol(symbol);
+			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, true);
+			this.result.push(...indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported));
+
 		}
 	}
 
 	protected visitSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, symbolData: SymbolData, kind: ChildKind, path: string): string {
+		symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 		// We are at the first level. If path is not empty we take the path for the first symbol. This
 		// support cases were we rename the top level symbol during export.
 		if (parent === undefined) {
@@ -1977,7 +1996,7 @@ class Symbols {
 
 	public getExportPath(symbol: ts.Symbol, kind: ModuleSystemKind): string | undefined {
 		// For a declaration like export default function foo()
-		if (Symbols.isInternal(symbol) && (symbol.escapedName !== ts.InternalSymbolName.Default)) {
+		if (Symbols.isInternal(symbol) && (symbol.escapedName !== ts.InternalSymbolName.Default && symbol.escapedName !== ts.InternalSymbolName.ExportEquals)) {
 			return undefined;
 		}
 		let result = this.exportPathCache.get(symbol);
@@ -2042,19 +2061,10 @@ class Symbols {
 	private static escapeRegExp: RegExp = new RegExp('\\.', 'g');
 	public getExportSymbolName(symbol: ts.Symbol): string {
 		let escapedName = symbol.getEscapedName() as string;
-		// export default foo && export = foo
-		if (Symbols.isAliasSymbol(symbol) && (escapedName === ts.InternalSymbolName.Default || escapedName === ts.InternalSymbolName.ExportEquals)) {
-			const declarations = symbol.getDeclarations();
-			if (declarations !== undefined && declarations.length === 1) {
-				const declaration = declarations[0];
-				if (ts.isExportAssignment(declaration)) {
-					return declaration.expression.getText();
-				}
-			}
-		}
 		if (escapedName.charAt(0) === '\"' || escapedName.charAt(0) === '\'') {
 			escapedName = escapedName.substr(1, escapedName.length - 2);
 		}
+		// We use `.`as a path separator so escape `.` into `..`
 		escapedName = escapedName.replace(Symbols.escapeRegExp, '..');
 		return escapedName;
 	}
@@ -3090,7 +3100,7 @@ class TSProject {
 	}
 
 	public exportSymbol(symbol: ts.Symbol, monikerPath: string, newName?: string): void {
-		const walker = new ExportSymbolWalker(this.context, this.symbols);
+		const walker = new ExportSymbolWalker(this.context, this.symbols, true);
 		const result = walker.walk(symbol, newName || symbol.escapedName as string);
 		this.emitAttachedMonikers(monikerPath, result);
 	}
@@ -3860,9 +3870,7 @@ class Visitor {
 	}
 
 	private visitExportAssignment(node: ts.ExportAssignment): boolean {
-		// we don't need to create a symbol data for the
-		// export = symbol or export default symbol. But look
-		// at the children;
+		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
 		return true;
 	}
 
@@ -3870,10 +3878,11 @@ class Visitor {
 		// export = foo;
 		// export default foo;
 		const symbol = this.tsProject.getSymbolAtLocation(node);
-		this.handleSymbol(symbol, node);
 		if (symbol === undefined) {
 			return;
 		}
+		// Make sure we have a symbol data;
+		this.dataManager.getOrCreateSymbolData(symbol);
 		const monikerPath = this.currentDocumentData.monikerPath;
 		if (monikerPath === undefined) {
 			return;
@@ -3882,17 +3891,16 @@ class Visitor {
 		if (aliasedSymbol === undefined) {
 			return;
 		}
-		const aliasedSymbolData = this.dataManager.getSymbolData(aliasedSymbol);
+		const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
 		if (aliasedSymbolData === undefined) {
 			return;
 		}
+		aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, symbol.escapedName as string);
 	}
 
 	private visitExportDeclaration(_node: ts.ExportDeclaration): boolean {
-		// `export { foo }` ==> ExportDeclaration
-		// `export { _foo as foo }` ==> ExportDeclaration
-		return false;
+		return true;
 	}
 
 	private endVisitExportDeclaration(node: ts.ExportDeclaration): void {
@@ -3904,26 +3912,26 @@ class Visitor {
 				if (symbol === undefined) {
 					continue;
 				}
-				this.handleSymbol(symbol, element.name);
-				const symbolData = this.dataManager.getSymbolData(this.tsProject.getSymbolId(symbol));
-				if (symbolData === undefined) {
+				// Make sure we have a symbol data;
+				this.dataManager.getOrCreateSymbolData(symbol);
+				const monikerPath = this.currentDocumentData.monikerPath;
+				if (monikerPath === undefined) {
 					return;
 				}
-				const moniker = symbolData.getMostUniqueMoniker();
-				if (moniker === undefined || moniker.unique === UniquenessLevel.document) {
-					continue;
-				}
-				const monikerParts = TscMoniker.parse(moniker.identifier);
 				const aliasedSymbol = Symbols.isAliasSymbol(symbol)
 					? this.tsProject.getAliasedSymbol(symbol)
 					: element.propertyName !== undefined
 						? this.tsProject.getSymbolAtLocation(element.propertyName)
 						: undefined;
-				if (element.propertyName !== undefined) {
-					this.handleSymbol(aliasedSymbol, element.propertyName);
+				if (aliasedSymbol === undefined) {
+					continue;
 				}
-				if (aliasedSymbol !== undefined && monikerParts.path !== undefined) {
+				const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+				if (aliasedSymbolData === undefined) {
+					return;
 				}
+				aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+				this.tsProject.exportSymbol(aliasedSymbol, monikerPath, symbol.escapedName as string);
 			}
 		}
 	}
@@ -3945,25 +3953,11 @@ class Visitor {
 		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
 	}
 
-	private visitGeneric(node: ts.Node): boolean {
-		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
+	private visitGeneric(_node: ts.Node): boolean {
 		return true;
 	}
 
 	private endVisitGeneric(_node: ts.Node): void {
-	}
-
-	private emitAttachedMonikers(path: string | undefined, exports: [SymbolData, string][]): void {
-		for (const item of exports) {
-			const originalMoniker = item[0].getPrimaryMoniker();
-			const identifier = tss.createMonikerIdentifier(path, item[1]);
-			// We don't have a moniker yet
-			if (originalMoniker === undefined) {
-				item[0].addMoniker(identifier, MonikerKind.export);
-			} else {
-				item[0].attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
-			}
-		}
 	}
 
 	private addDocumentSymbol(node: tss.Node.Declaration): boolean {
