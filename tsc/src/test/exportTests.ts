@@ -9,6 +9,7 @@ import * as os from 'os';
 import { lsif } from './lsifs';
 import * as ts from 'typescript';
 import { Element } from 'lsif-protocol';
+import { emit } from 'npm';
 
 suite('Export Tests', () => {
 	const compilerOptions: ts.CompilerOptions = {
@@ -347,7 +348,53 @@ suite('Export use cases', () => {
 			JSON.parse('{"id":52,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":53,"type":"edge","label":"attach","outV":52,"inV":23}'),
 			JSON.parse('{"id":54,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console.warn","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":55,"type":"edge","label":"attach","outV":54,"inV":30}'),
+			JSON.parse('{"id":55,"type":"edge","label":"attach","outV":54,"inV":30}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export { RAL } with nested public declarations', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export interface MyConsole { warn(message?: any, ...optionalParams: any[]): void; }',
+					'interface RAL { readonly console: MyConsole }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		console.log(emitter.toString());
+		assert.deepEqual(emitter.lastId, 146);
+		const validate: Element[] = [
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole.warn","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":82,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":83,"type":"edge","label":"attach","outV":82,"inV":66}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export { RAL } aliased interface type', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface _Buffer { end(); }',
+					'namespace RAL { export type Buffer = _Buffer; }',
+					'export default RAL;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 94);
+		// There is no a:RAL.Buffer.end since _Buffer is named.
+		const validate: Element[] = [
+			JSON.parse('{"id":47,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.Buffer","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":37}'),
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

@@ -44,28 +44,6 @@ suite('Module System Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with nested declarations', async () => {
-		const emitter = await lsif('/@test', new Map([
-			[
-				'/@test/a.ts',
-				[
-					'interface RAL { readonly console: { warn(message?: any, ...optionalParams: any[]): void; } }',
-					'export default RAL;'
-				].join(os.EOL)
-			]
-		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 140);
-		const validate: Element[] = [
-			JSON.parse('{"id":72,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":78,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":79,"type":"edge","label":"attach","outV":78,"inV":23}'),
-			JSON.parse('{"id":80,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console.warn","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":81,"type":"edge","label":"attach","outV":80,"inV":30}')
-		];
-		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
-		}
-	});
 	test('Export { RAL } with nested public declarations', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
