@@ -221,6 +221,10 @@ export namespace Type {
 		return (type.flags & ts.TypeFlags.Conditional) !== 0;
 	}
 
+	export function isAnonymous(type: ts.ObjectType): type is ts.ObjectType {
+		return (type.objectFlags & ts.ObjectFlags.Anonymous) !== 0;
+	}
+
 	export function isClassOrInterface(type: ts.Type): boolean {
 		const symbol = type.getSymbol();
 		if (symbol !== undefined) {

@@ -23,7 +23,6 @@ import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
-import { throws } from 'assert';
 
 interface Disposable {
 	(): void;
@@ -1136,39 +1135,42 @@ interface SymbolWalkerContext {
 abstract class SymbolWalker {
 
 	protected result: [SymbolData, string][];
-	protected context: SymbolWalkerContext;
-	protected symbols: Symbols;
-	private visitedSymbols: Set<ts.Symbol>;
-	private visitedTypes: Set<ts.Type>;
+	protected readonly context: SymbolWalkerContext;
+	protected readonly symbols: Symbols;
+	private readonly visitedSymbols: Set<ts.Symbol>;
+	private readonly visitedTypes: Set<ts.Type>;
+	private readonly walkSymbolFromTopLevelType: boolean;
 
-	public constructor(context: SymbolWalkerContext, symbols: Symbols) {
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, walkSymbolFromTopLevelType: boolean) {
 		this.result = [];
 		this.context = context;
 		this.symbols = symbols;
 		this.visitedSymbols = new Set();
 		this.visitedTypes = new Set();
+		this.walkSymbolFromTopLevelType = walkSymbolFromTopLevelType;
 	}
 
 	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): [SymbolData, string][] {
 		this.result = [];
 		if (tss.Symbol.is(start)) {
-			this.walkSymbol(start, mode, false, path);
+			this.walkSymbol(start, mode, false, path, 0);
 			// If the symbol is not exported now mark it at least as indirect exported.
 			const symbolData = this.context.getOrCreateSymbolData(start);
 			if (!symbolData.isExported()) {
 				symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 			}
 		} else {
-			this.walkType(start, mode, false, moduleSystem, path);
+			this.walkType(start, mode, false, moduleSystem, path, 0);
 		}
 		return this.result;
 	}
 
-	protected walkType(type: ts.Type, mode: FlowMode, markOnly: boolean, moduleSystem: ModuleSystemKind, path: string): void {
+	protected walkType(type: ts.Type, mode: FlowMode, markOnly: boolean, moduleSystem: ModuleSystemKind, path: string, level: number): void {
 		if (this.visitedTypes.has(type)) {
 			return;
 		}
 
+		let walkSymbol: boolean = this.walkSymbolFromTopLevelType || level > 0;
 		// We have a call signature
 		if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
 			for (const signature of type.getCallSignatures().concat(type.getConstructSignatures())) {
@@ -1190,15 +1192,15 @@ abstract class SymbolWalker {
 					const parameterType = this.symbols.getTypeOfSymbol(parameter);
 					const exportIdentifier = `${path}.__arg.${this.symbols.getExportSymbolName(parameter)}`;
 					const newMode = tss.Type.hasCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
-					this.walkType(parameterType, newMode, markOnly, moduleSystem, exportIdentifier);
+					this.walkType(parameterType, newMode, markOnly, moduleSystem, exportIdentifier, level + 1);
 				}
 				const returnType = signature.getReturnType();
-				this.walkType(returnType, mode, markOnly, moduleSystem, `${path}.__rt`);
+				this.walkType(returnType, mode, markOnly, moduleSystem, `${path}.__rt`, level + 1);
 			}
 		}
 		if (type.isUnionOrIntersection()) {
 			for (const part of type.types) {
-				this.walkType(part, mode, markOnly, moduleSystem, path);
+				this.walkType(part, mode, markOnly, moduleSystem, path, level + 1);
 			}
 		}
 
@@ -1206,7 +1208,7 @@ abstract class SymbolWalker {
 			const bases = this.symbols.types.getBaseTypes(type);
 			if (bases !== undefined) {
 				for (const base of bases) {
-					this.walkType(base, mode, markOnly, moduleSystem, path);
+					this.walkType(base, mode, markOnly, moduleSystem, path, level + 1);
 				}
 			}
 		}
@@ -1215,7 +1217,7 @@ abstract class SymbolWalker {
 			const bases = this.symbols.types.getExtendsTypes(type);
 			if (bases !== undefined) {
 				for (const base of bases) {
-					this.walkType(base, mode, markOnly, moduleSystem, path);
+					this.walkType(base, mode, markOnly, moduleSystem, path, level + 1);
 				}
 			}
 		}
@@ -1224,31 +1226,33 @@ abstract class SymbolWalker {
 			if (tss.Type.isTypeReference(type)) {
 				const typeReferences = this.symbols.types.getTypeArguments(type);
 				for (const reference of typeReferences) {
-					this.walkType(reference, mode, markOnly, moduleSystem, path);
+					this.walkType(reference, mode, markOnly, moduleSystem, path, level + 1);
 				}
+			} else if (tss.Type.isAnonymous(type)) {
+				walkSymbol = true;
 			}
 		}
 
 		if (type.aliasTypeArguments !== undefined) {
 			for (const aliasTypeArgument of type.aliasTypeArguments) {
-				this.walkType(aliasTypeArgument, mode, markOnly, moduleSystem, path);
+				this.walkType(aliasTypeArgument, mode, markOnly, moduleSystem, path, level + 1);
 			}
 		}
 
 		if (tss.Type.isConditionalType(type)) {
-			this.walkType(type.checkType, mode, markOnly, moduleSystem, path);
-			this.walkType(type.extendsType, mode, markOnly, moduleSystem, path);
-			this.walkType(type.resolvedTrueType, mode, markOnly, moduleSystem, path);
-			this.walkType(type.resolvedFalseType, mode, markOnly, moduleSystem, path);
+			this.walkType(type.checkType, mode, markOnly, moduleSystem, path, level + 1);
+			this.walkType(type.extendsType, mode, markOnly, moduleSystem, path, level + 1);
+			this.walkType(type.resolvedTrueType, mode, markOnly, moduleSystem, path, level + 1);
+			this.walkType(type.resolvedFalseType, mode, markOnly, moduleSystem, path, level + 1);
 		}
 
 		const symbol = type.getSymbol();
-		if (symbol !== undefined) {
-			this.walkSymbol(symbol, mode, !Symbols.isInternal(symbol), path);
+		if (symbol !== undefined && walkSymbol) {
+			this.walkSymbol(symbol, mode, !Symbols.isInternal(symbol), path, level + 1);
 		}
 	}
 
-	protected walkSymbol(symbol: ts.Symbol, mode: FlowMode, markOnly: boolean, path: string): void {
+	protected walkSymbol(symbol: ts.Symbol, mode: FlowMode, markOnly: boolean, path: string, level: number): void {
 		if (this.visitedSymbols.has(symbol)) {
 			return;
 		}
@@ -1257,17 +1261,17 @@ abstract class SymbolWalker {
 		if (newPath !== undefined) {
 			const type = this.symbols.getTypeOfSymbol(symbol);
 			// First walk the type to handle unnamed types correctly
-			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), path);
+			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), path, level +1);
 			if (symbol.exports !== undefined) {
 				const iterator = symbol.exports.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
-					this.walkSymbol(item.value, mode, markOnly, newPath);
+					this.walkSymbol(item.value, mode, markOnly, newPath, level + 1);
 				}
 			}
 			if (symbol.members !== undefined) {
 				const iterator = symbol.members.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
-					this.walkSymbol(item.value, mode, markOnly, newPath);
+					this.walkSymbol(item.value, mode, markOnly, newPath, level + 1);
 				}
 			}
 		}
@@ -1298,8 +1302,8 @@ class IndirectExportWalker extends SymbolWalker {
 
 	private force: boolean;
 
-	public constructor(context: SymbolWalkerContext, symbols: Symbols, force: boolean = false) {
-		super(context, symbols);
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, walkSymbolFromTopLevelType: boolean, force: boolean) {
+		super(context, symbols, walkSymbolFromTopLevelType);
 		this.force = force;
 	}
 
@@ -1307,7 +1311,7 @@ class IndirectExportWalker extends SymbolWalker {
 		let symbolData: SymbolData | undefined = this.context.getSymbolData(symbol);
 		const isExported: boolean = symbolData?.isAtLeastIndirectExported() ?? this.symbols.isExported(symbol);
 		if (!this.force && isExported) {
-			return;
+			return undefined;
 		}
 		this.changeVisibility(symbol, symbolData);
 
@@ -1384,7 +1388,7 @@ class ExportSymbolWalker {
 		// This is a leave symbol. Check if we have a type and try to walk for indirect exports
 		if (!hasChildren && this.symbols.needsIndirectExportCheck(symbol)) {
 			const type = this.symbols.getTypeOfSymbol(symbol);
-			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, true);
+			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, symbol !== type.getSymbol(), true);
 			this.result.push(...indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported));
 
 		}
@@ -1600,13 +1604,27 @@ class Symbols {
 	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
 		const node = location !== undefined
 			? location
-			: symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined;
+			: this.inferLocationNode(symbol);
 		if (node === undefined) {
 			throw new Error(`No location provided when querying types of a symbol ${symbol.name}`);
 		}
 		return Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)
 			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
 			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+	}
+
+	private inferLocationNode(symbol: ts.Symbol): ts.Node | undefined {
+		const declarations = symbol.declarations;
+		if (declarations !== undefined && declarations.length > 0) {
+			return declarations[0];
+		}
+		if (Symbols.isPrototype(symbol)) {
+			const parent = tss.Symbol.getParent(symbol);
+			if (parent !== undefined) {
+				return this.inferLocationNode(parent);
+			}
+		}
+		return undefined;
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -1844,8 +1862,8 @@ class Symbols {
 	}
 
 	public needsIndirectExportCheck(symbol: ts.Symbol): boolean {
-		return Symbols.isProperty(symbol) || Symbols.isFunction(symbol) || Symbols.isMethodSymbol(symbol) || Symbols.isTypeAlias(symbol)
-			|| Symbols.isVariableDeclaration(symbol);
+		const flags = ts.SymbolFlags.Property | ts.SymbolFlags.Function | ts.SymbolFlags.Method  | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface | ts.SymbolFlags.Class;
+		return (symbol.getFlags() & flags) !== 0 || Symbols.isVariableDeclaration(symbol);
 	}
 
 	public isTopLevelSymbol(symbol: ts.Symbol): boolean {
@@ -2764,7 +2782,7 @@ class TSProject {
 			if (moniker !== undefined && moniker.scheme === TscMoniker.scheme) {
 				const tscMoniker = TscMoniker.parse(moniker.identifier);
 				const type = this.getTypeOfSymbol(symbol);
-				const result  = this.computeIndirectExports(type || symbol, tscMoniker.name, symbolData.moduleSystem );
+				const result  = this.computeIndirectExports(type || symbol, tscMoniker.name, symbolData.moduleSystem, symbol !== type.getSymbol());
 				if (result.length > 0) {
 					this.emitAttachedMonikers(tscMoniker.path, result);
 				}
@@ -2841,8 +2859,8 @@ class TSProject {
 		}
 	}
 
-	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind): [SymbolData, string][] {
-		const walker = new IndirectExportWalker(this.context, this.symbols, false);
+	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): [SymbolData, string][] {
+		const walker = new IndirectExportWalker(this.context, this.symbols, walkSymbolFromTopLevelType, false);
 		return walker.walk(start, moduleSystem, exportName);
 	}
 
