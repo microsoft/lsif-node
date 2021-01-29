@@ -280,6 +280,85 @@ suite('Export Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export variable declaration with inferred type', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export const foo = { touch: true };'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { foo } from "./a";',
+					'foo.touch;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 96);
+		const validate: Element[] = [
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.touch","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export inferred function return type', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo() { return { touch: true }; }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { foo } from "./a";',
+					'foo().touch;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 98);
+		const validate: Element[] = [
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"lvWOeIaS+OEaVbiuAAY5gQ==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.__rt.touch","unique":"group","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export inferred method return type', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export class Foo { public bar() { return { touch: true }; } }'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Foo } from "./a";',
+					'let foo: Foo;',
+					'foo.bar().touch;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 137);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":30,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"Af/0LRnO44z0Y0dy9TkkPg==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":36,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.__rt.touch","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":37,"type":"edge","label":"attach","outV":36,"inV":30}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
 suite('Export use cases', () => {
@@ -289,7 +368,7 @@ suite('Export use cases', () => {
 		esModuleInterop: true,
 		rootDir: '/@test'
 	};
-	test('Export { RAL } with multiple declarations', async () => {
+	test('Export default RAL with multiple declarations', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -319,7 +398,7 @@ suite('Export use cases', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with nested declarations', async () => {
+	test('Export default RAL with nested declarations', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -337,7 +416,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 145);
+		assert.deepEqual(emitter.lastId, 142);
 		const validate: Element[] = [
 			JSON.parse('{"id":43,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":44,"type":"edge","label":"next","outV":43,"inV":15}'),
@@ -345,16 +424,16 @@ suite('Export use cases', () => {
 			JSON.parse('{"id":46,"type":"edge","label":"moniker","outV":43,"inV":45}'),
 			JSON.parse('{"id":47,"type":"vertex","label":"range","start":{"line":1,"character":15},"end":{"line":1,"character":18},"tag":{"type":"reference","text":"RAL"}}'),
 			JSON.parse('{"id":48,"type":"edge","label":"next","outV":47,"inV":15}'),
-			JSON.parse('{"id":52,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":53,"type":"edge","label":"attach","outV":52,"inV":23}'),
-			JSON.parse('{"id":54,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console.warn","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":55,"type":"edge","label":"attach","outV":54,"inV":30}')
+			JSON.parse('{"id":49,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":50,"type":"edge","label":"attach","outV":49,"inV":23}'),
+			JSON.parse('{"id":51,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console.warn","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":52,"type":"edge","label":"attach","outV":51,"inV":30}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } with nested public declarations', async () => {
+	test('Export default RAL with nested public declarations', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -363,22 +442,29 @@ suite('Export use cases', () => {
 					'interface RAL { readonly console: MyConsole }',
 					'export default RAL;'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import RAL from "./a";',
+					'let r: RAL;',
+					'r.console.warn();'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		console.log(emitter.toString());
-		assert.deepEqual(emitter.lastId, 146);
+		assert.deepEqual(emitter.lastId, 195);
 		const validate: Element[] = [
 			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole","unique":"group","kind":"export"}'),
 			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole.warn","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":82,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.console","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":83,"type":"edge","label":"attach","outV":82,"inV":66}')
+			JSON.parse('{"id":76,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":80,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.console","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":81,"type":"edge","label":"attach","outV":80,"inV":66}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
-	test('Export { RAL } aliased interface type', async () => {
+	test('Export default RAL with aliased interface type', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[
 				'/@test/a.ts',
@@ -387,14 +473,21 @@ suite('Export use cases', () => {
 					'namespace RAL { export type Buffer = _Buffer; }',
 					'export default RAL;'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import RAL from "./a";',
+					'let b: RAL.Buffer;'
+				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 94);
+		assert.deepEqual(emitter.lastId, 137);
 		// There is no a:RAL.Buffer.end since _Buffer is named.
 		const validate: Element[] = [
-			JSON.parse('{"id":47,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":53,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:RAL.Buffer","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":54,"type":"edge","label":"attach","outV":53,"inV":37}'),
+			JSON.parse('{"id":47,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":51,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.Buffer","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":52,"type":"edge","label":"attach","outV":51,"inV":37}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);

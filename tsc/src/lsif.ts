@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id, V
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder } from './graph';
@@ -23,6 +23,7 @@ import { LRUCache } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
+import { throws } from 'assert';
 
 interface Disposable {
 	(): void;
@@ -1128,6 +1129,7 @@ class Types {
 }
 
 interface SymbolWalkerContext {
+	getSymbolData(symbol: ts.Symbol): SymbolData | undefined;
 	getOrCreateSymbolData(symbol: ts.Symbol): SymbolData;
 }
 
@@ -1178,11 +1180,8 @@ abstract class SymbolWalker {
 						for (const typeParameter of typeParameters) {
 							const symbol = typeParameter.getSymbol();
 							if (symbol !== undefined && !this.visitedSymbols.has(symbol)) {
-								const symbolData = this.context.getOrCreateSymbolData(symbol);
-								if (!symbolData.isAtLeastIndirectExported()) {
-									this.visitedSymbols.add(symbol);
-									symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-								}
+								this.visitedSymbols.add(symbol);
+								this.changeVisibility(symbol);
 							}
 						}
 					}
@@ -1274,6 +1273,15 @@ abstract class SymbolWalker {
 		}
 	}
 
+	protected changeVisibility(symbol: ts.Symbol, symbolData?: SymbolData): void {
+		symbolData = symbolData ?? this.context.getSymbolData(symbol);
+		if (symbolData !== undefined) {
+			symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+		} else {
+			this.symbols.storeSymbolInitializationData(symbol, SymbolDataVisibility.indirectExported);
+		}
+	}
+
 	protected abstract visitSymbol(symbol: ts.Symbol, markOnly: boolean, path: string): string | undefined;
 }
 
@@ -1296,26 +1304,21 @@ class IndirectExportWalker extends SymbolWalker {
 	}
 
 	protected visitSymbol(symbol: ts.Symbol, markOnly: boolean, path: string): string | undefined {
-		const isExported = this.symbols.isExported(symbol);
+		let symbolData: SymbolData | undefined = this.context.getSymbolData(symbol);
+		const isExported: boolean = symbolData?.isAtLeastIndirectExported() ?? this.symbols.isExported(symbol);
 		if (!this.force && isExported) {
 			return;
 		}
-		// We don't know the visibility of the symbol data
-		let symbolData: SymbolData | undefined;
-		if (!isExported) {
-			symbolData = this.context.getOrCreateSymbolData(symbol);
-			if (!this.force && symbolData.isAtLeastIndirectExported()) {
-				return undefined;
-			}
-			symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-		}
+		this.changeVisibility(symbol, symbolData);
 
 		if (markOnly) {
 			return path;
 		}
 
-		symbolData = symbolData || this.context.getOrCreateSymbolData(symbol);
 		if (!Symbols.isInternal(symbol)) {
+			// we actually need to create the symbol data since we need to attach a
+			// moniker to it.
+			symbolData = symbolData ?? this.context.getOrCreateSymbolData(symbol);
 			const identifier = `${path}.${this.symbols.getExportSymbolName(symbol)}`;
 			this.result.push([symbolData, identifier]);
 			return identifier;
@@ -1455,27 +1458,16 @@ class Symbols {
 
 	}
 
-	public static isFunctionScopedVariable(symbol: ts.Symbol): boolean {
-		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
-	}
-
-	public static isFunctionScopedVariableAndNotParameter(symbol: ts.Symbol): boolean {
-		if (symbol === undefined || (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) === 0) {
-			return false;
-		}
-		const declarations = symbol.getDeclarations();
-		if (declarations === undefined || declarations.length !== 1) {
-			return false;
-		}
-		return !ts.isParameter(declarations[0]);
-	}
-
 	public static asParameterDeclaration(symbol: ts.Symbol): ts.ParameterDeclaration | undefined {
 		const declarations = symbol.getDeclarations();
 		if (declarations === undefined || declarations.length !== 1) {
 			return undefined;
 		}
 		return ts.isParameter(declarations[0]) ? declarations[0] as ts.ParameterDeclaration : undefined;
+	}
+
+	public static isFunctionScopedVariable(symbol: ts.Symbol): boolean {
+		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
 	}
 
 	public static isBlockScopedVariable(symbol: ts.Symbol): boolean {
@@ -1530,6 +1522,17 @@ class Symbols {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Prototype) !== 0;
 	}
 
+	public static isVariableDeclaration(symbol: ts.Symbol): boolean {
+		if (!Symbols.isBlockScopedVariable(symbol)) {
+			return false;
+		}
+		const declarations = symbol.declarations;
+		if (declarations === undefined || declarations.length !== 1) {
+			return false;
+		}
+		return declarations[0].kind === ts.SyntaxKind.VariableDeclaration;
+	}
+
 	public static isPrivate(symbol: ts.Symbol): boolean {
 		const declarations = symbol.getDeclarations();
 		if (declarations) {
@@ -1561,6 +1564,7 @@ class Symbols {
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly symbolCache: LRUCache<ts.Symbol, CachedSymbolInformation>;
+	private readonly symbolInitializationData: Map<string, SymbolDataVisibility>;
 
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
@@ -1569,6 +1573,7 @@ class Symbols {
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
 		this.symbolCache = new LRUCache(4096);
+		this.symbolInitializationData = new Map();
 
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
@@ -1582,6 +1587,14 @@ class Symbols {
 				}
 			}
 		}
+	}
+
+	public getSymbolId(symbol: ts.Symbol): SymbolId {
+		return tss.Symbol.createKey(this.typeChecker, symbol);
+	}
+
+	public getTypeAtLocation(node: ts.Node): ts.Type {
+		return this.typeChecker.getTypeAtLocation(node);
 	}
 
 	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
@@ -1831,7 +1844,8 @@ class Symbols {
 	}
 
 	public needsIndirectExportCheck(symbol: ts.Symbol): boolean {
-		return Symbols.isProperty(symbol) || Symbols.isFunction(symbol) || Symbols.isMethodSymbol(symbol) || Symbols.isTypeAlias(symbol);
+		return Symbols.isProperty(symbol) || Symbols.isFunction(symbol) || Symbols.isMethodSymbol(symbol) || Symbols.isTypeAlias(symbol)
+			|| Symbols.isVariableDeclaration(symbol);
 	}
 
 	public isTopLevelSymbol(symbol: ts.Symbol): boolean {
@@ -1864,6 +1878,35 @@ class Symbols {
 			node = node.parent;
 		}
 		return true;
+	}
+
+	public storeSymbolInitializationData(symbol: ts.Symbol, visibility: SymbolDataVisibility): void {
+		const key = this.getSymbolId(symbol);
+		this.symbolInitializationData.set(key, visibility);
+	}
+
+	public getSymbolInitializationData(symbol: ts.Symbol): [string | undefined, ModuleSystemKind, SymbolDataVisibility, boolean] {
+		const [exportPath, moduleSystem, ] = this.getCachedSymbolInformation(symbol);
+		const visibility = this.getVisibility(symbol, exportPath);
+		return [exportPath === null ? undefined : exportPath, moduleSystem, visibility, !Symbols.isInternal(symbol)];
+	}
+
+	private getVisibility(symbol: ts.Symbol, exportPath: string | undefined | null): SymbolDataVisibility {
+		const id = this.getSymbolId(symbol);
+		const initVisibility = this.symbolInitializationData.get(id);
+		if (initVisibility !== undefined) {
+			this.symbolInitializationData.delete(id);
+		}
+
+		// The symbol is exported.
+		if (exportPath === null || exportPath !== undefined) {
+			return SymbolDataVisibility.exported;
+		}
+		if (Symbols.isTransient(symbol)) {
+			return SymbolDataVisibility.transient;
+		}
+
+		return initVisibility ?? SymbolDataVisibility.unknown;
 	}
 }
 
@@ -1918,24 +1961,6 @@ abstract class SymbolDataFactory {
 		return [undefined, undefined];
 	}
 
-	protected getSymbolInitializationData(symbol: ts.Symbol): [ModuleSystemKind, string | undefined, SymbolDataVisibility, boolean] {
-		const [exportPath, moduleSystem, ] = this.symbols.getCachedSymbolInformation(symbol);
-		const visibility = this.getVisibility(symbol, exportPath);
-		return [moduleSystem, exportPath === null ? undefined : exportPath, visibility, !Symbols.isInternal(symbol)];
-	}
-
-	private getVisibility(symbol: ts.Symbol, exportPath: string | undefined | null): SymbolDataVisibility {
-		// The symbol is exported.
-		if (exportPath === null || exportPath !== undefined) {
-			return SymbolDataVisibility.exported;
-		}
-		if (Symbols.isTransient(symbol)) {
-			return SymbolDataVisibility.transient;
-		}
-
-		return SymbolDataVisibility.unknown;
-	}
-
 	public abstract create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult;
 }
 
@@ -1946,7 +1971,7 @@ class StandardSymbolDataFactory extends SymbolDataFactory {
 	}
 
 	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, _projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult {
-		const [moduleSystem, exportPath, visibility, isNamed] = this.getSymbolInitializationData(symbol);
+		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		return {
 			symbolData: new StandardSymbolData(this.symbolDataContext, projectId, symbolId, moduleSystem, visibility, isNamed, next),
 			exportPath, moduleSystem,
@@ -1962,7 +1987,7 @@ class AliasFactory extends SymbolDataFactory {
 	}
 
 	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, declarationSourceFiles: ts.SourceFile[] | undefined, _projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult {
-		const [moduleSystem, exportPath, visibility, isNamed] = this.getSymbolInitializationData(symbol);
+		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		const aliased = this.typeChecker.getAliasedSymbol(symbol);
 		let symbolData: SymbolData | undefined;
 		if (aliased !== undefined) {
@@ -1997,7 +2022,7 @@ class MethodFactory extends SymbolDataFactory {
 		const documentData = this.symbolDataContext.getDocumentData(declarationSourceFiles[0].fileName);
 		const shard = documentData !== undefined ? documentData.document : projectDataManager.getProjectData().project;
 
-		const [moduleSystem, exportPath, visibility, isNamed] = this.getSymbolInitializationData(symbol);
+		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		const container = tss.Symbol.getParent(symbol);
 		if (container === undefined) {
 			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
@@ -2030,7 +2055,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 	}
 
 	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, _declarationSourceFiles: ts.SourceFile[] | undefined, projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult {
-		const [moduleSystem,,visibility, isNamed] = this.getSymbolInitializationData(symbol);
+		const [, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		const shard = projectDataManager.getProjectData().project;
 
 		const roots = this.typeChecker.getRootSymbols(symbol);
@@ -2075,7 +2100,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 				};
 			}
 		} else {
-			const [moduleSystem, exportPath] = this.getSymbolInitializationData(symbol);
+			const [exportPath, moduleSystem] = this.symbols.getSymbolInitializationData(symbol);
 			return {
 				symbolData: new SymbolDataWithRoots(this.symbolDataContext, projectId, symbolId, shard, symbolDataItems, moduleSystem, visibility, isNamed, next),
 				moduleSystem, exportPath
@@ -2102,7 +2127,7 @@ class TransientFactory extends SymbolDataFactory {
 	}
 
 	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, _declarationSourceFiles: ts.SourceFile[] | undefined, _projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult {
-		const [moduleSystem, exportPath, visibility, isNamed] = this.getSymbolInitializationData(symbol);
+		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		return { symbolData: new TransientSymbolData(this.symbolDataContext, projectId, symbolId, moduleSystem, visibility, isNamed, next), moduleSystem, exportPath, validateVisibilityOn: undefined };
 	}
 }
@@ -2515,7 +2540,7 @@ class TSProject {
 	}
 
 	public getSymbolId(symbol: ts.Symbol): SymbolId {
-		return tss.Symbol.createKey(this.typeChecker, symbol);
+		return this.symbols.getSymbolId(symbol);
 	}
 
 	public getRootFileNames(): ReadonlyArray<string> {
@@ -2554,7 +2579,7 @@ class TSProject {
 	}
 
 	public getTypeAtLocation(node: ts.Node): ts.Type {
-		return this.typeChecker.getTypeAtLocation(node);
+		return this.symbols.getTypeAtLocation(node);
 	}
 
 	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
