@@ -73,10 +73,10 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 51);
+		assert.deepEqual(emitter.lastId, 43);
 		const validate: Element[] = [
 			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -93,7 +93,7 @@ suite('Global Module Tests', () => {
 		]), { });
 		const validate: Element[] = [
 			JSON.parse('{"id":11,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -136,16 +136,8 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 427);
+		assert.deepEqual(emitter.lastId, 385);
 		const validate: Element[] = [
-			JSON.parse('{"id":131,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":132,"type":"edge","label":"attach","outV":131,"inV":30}'),
-			JSON.parse('{"id":133,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":134,"type":"edge","label":"attach","outV":133,"inV":93}'),
-			JSON.parse('{"id":135,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":136,"type":"edge","label":"attach","outV":135,"inV":106}'),
-			JSON.parse('{"id":137,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Thenable.then.TResult","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":138,"type":"edge","label":"attach","outV":137,"inV":119}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -163,9 +155,9 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 52);
+		assert.deepEqual(emitter.lastId, 50);
 		const validate: Element[] = [
-			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":applicationinsights.ApplicationInsights","unique":"group","kind":"export"}')
+			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":applicationinsights.export=","unique":"group","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -191,15 +183,15 @@ suite('Global Module Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 85);
+		assert.deepEqual(emitter.lastId, 84);
 		const validate: Element[] = [
 			JSON.parse('{"id":24,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":25,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"qKuKQk2vMciItiwlUxWfVg==","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":26,"type":"edge","label":"moniker","outV":24,"inV":25}'),
 			JSON.parse('{"id":27,"type":"vertex","label":"range","start":{"line":2,"character":13},"end":{"line":2,"character":21},"tag":{"type":"definition","text":"onDetach","kind":7,"fullRange":{"start":{"line":2,"character":13},"end":{"line":2,"character":29}}}}'),
 			JSON.parse('{"id":28,"type":"edge","label":"next","outV":27,"inV":24}'),
-			JSON.parse('{"id":41,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":chrome.debugger.onDetach","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":42,"type":"edge","label":"attach","outV":41,"inV":25}')
+			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:debugger.onDetach","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":25}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -212,14 +204,16 @@ suite('Global Module Tests', () => {
 				[
 					'interface TestConstructor { new <K, V>(): [K, V] }'
 				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'let t = new TestConstructor<number, string>();'
+				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 74);
+		assert.deepEqual(emitter.lastId, 81);
 		const validate: Element[] = [
-			JSON.parse('{"id":40,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":TestConstructor.K","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":41,"type":"edge","label":"attach","outV":40,"inV":18}'),
-			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":TestConstructor.V","unique":"group","kind":"export"}'),
-			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":25}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
