@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id, V
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder } from './graph';
@@ -1137,17 +1137,20 @@ abstract class SymbolWalker {
 	protected result: [SymbolData, string][];
 	protected readonly context: SymbolWalkerContext;
 	protected readonly symbols: Symbols;
-	private readonly visitedSymbols: Set<ts.Symbol>;
-	private readonly visitedTypes: Set<ts.Type>;
 	private readonly walkSymbolFromTopLevelType: boolean;
 
-	public constructor(context: SymbolWalkerContext, symbols: Symbols, walkSymbolFromTopLevelType: boolean) {
+	private readonly visitedSymbols: Set<ts.Symbol>;
+	private readonly visitedTypes: Set<ts.Type>;
+	private readonly locationNodes: (ts.Node | undefined)[];
+
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, walkSymbolFromTopLevelType: boolean) {
 		this.result = [];
 		this.context = context;
 		this.symbols = symbols;
+		this.walkSymbolFromTopLevelType = walkSymbolFromTopLevelType;
 		this.visitedSymbols = new Set();
 		this.visitedTypes = new Set();
-		this.walkSymbolFromTopLevelType = walkSymbolFromTopLevelType;
+		this.locationNodes = [locationNode];
 	}
 
 	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): [SymbolData, string][] {
@@ -1170,6 +1173,7 @@ abstract class SymbolWalker {
 			return;
 		}
 
+		this.visitedTypes.add(type);
 		let walkSymbol: boolean = this.walkSymbolFromTopLevelType || level > 0;
 		// We have a call signature
 		if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
@@ -1257,9 +1261,17 @@ abstract class SymbolWalker {
 			return;
 		}
 		this.visitedSymbols.add(symbol);
+		this.locationNodes.push(symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined);
 		const newPath = this.visitSymbol(symbol, markOnly, path);
 		if (newPath !== undefined) {
-			const type = this.symbols.getTypeOfSymbol(symbol);
+			const type = this.symbols.getTypeOfSymbol(symbol, () => {
+				for (let i = this.locationNodes.length - 1; i >= 0; i--) {
+					if (this.locationNodes[i] !== undefined) {
+						return this.locationNodes[i];
+					}
+				}
+				return undefined;
+			});
 			// First walk the type to handle unnamed types correctly
 			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), path, level +1);
 			if (symbol.exports !== undefined) {
@@ -1275,6 +1287,7 @@ abstract class SymbolWalker {
 				}
 			}
 		}
+		this.locationNodes.pop();
 	}
 
 	protected changeVisibility(symbol: ts.Symbol, symbolData?: SymbolData): void {
@@ -1302,8 +1315,8 @@ class IndirectExportWalker extends SymbolWalker {
 
 	private force: boolean;
 
-	public constructor(context: SymbolWalkerContext, symbols: Symbols, walkSymbolFromTopLevelType: boolean, force: boolean) {
-		super(context, symbols, walkSymbolFromTopLevelType);
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined,  walkSymbolFromTopLevelType: boolean, force: boolean) {
+		super(context, symbols, locationNode, walkSymbolFromTopLevelType);
 		this.force = force;
 	}
 
@@ -1388,7 +1401,7 @@ class ExportSymbolWalker {
 		// This is a leave symbol. Check if we have a type and try to walk for indirect exports
 		if (!hasChildren && this.symbols.needsIndirectExportCheck(symbol)) {
 			const type = this.symbols.getTypeOfSymbol(symbol);
-			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, symbol !== type.getSymbol(), true);
+			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, Symbols.getFirstDeclarationNode(symbol), symbol !== type.getSymbol(), true);
 			this.result.push(...indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported));
 
 		}
@@ -1563,6 +1576,10 @@ class Symbols {
 		return true;
 	}
 
+	public static getFirstDeclarationNode(symbol: ts.Symbol): ts.Node | undefined {
+		return symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined;
+	}
+
 	public readonly types: Types;
 
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
@@ -1601,16 +1618,21 @@ class Symbols {
 		return this.typeChecker.getTypeAtLocation(node);
 	}
 
-	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node): ts.Type {
-		const node = location !== undefined
-			? location
-			: this.inferLocationNode(symbol);
+	public getTypeOfSymbol(symbol: ts.Symbol, location?: ts.Node | (() => ts.Node | undefined)): ts.Type {
+		if (Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)) {
+			return this.typeChecker.getDeclaredTypeOfSymbol(symbol);
+		}
+		let node: ts.Node | undefined;
+		if (location === undefined || typeof location === 'function') {
+			node = this.inferLocationNode(symbol);
+		}
+		if (node === undefined) {
+			node = typeof location === 'function' ? location() : location;
+		}
 		if (node === undefined) {
 			throw new Error(`No location provided when querying types of a symbol ${symbol.name}`);
 		}
-		return Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)
-			? this.typeChecker.getDeclaredTypeOfSymbol(symbol)
-			: this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
+		return this.typeChecker.getTypeOfSymbolAtLocation(symbol, node);
 	}
 
 	private inferLocationNode(symbol: ts.Symbol): ts.Node | undefined {
@@ -2860,7 +2882,7 @@ class TSProject {
 	}
 
 	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): [SymbolData, string][] {
-		const walker = new IndirectExportWalker(this.context, this.symbols, walkSymbolFromTopLevelType, false);
+		const walker = new IndirectExportWalker(this.context, this.symbols, undefined, walkSymbolFromTopLevelType, false);
 		return walker.walk(start, moduleSystem, exportName);
 	}
 
