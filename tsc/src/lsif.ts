@@ -2731,7 +2731,7 @@ class TSProject {
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
 		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
 		// Make sure all referenced document data for the source files containing declarations exist
-		if (declarationSourceFiles !== undefined) {
+		if (declarationSourceFiles !== undefined && !Symbols.mayBeSourceFile(symbol)) {
 			for (const sourceFile of declarationSourceFiles) {
 				this.context.getOrCreateDocumentData(sourceFile);
 			}

@@ -439,10 +439,6 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		return !config.options.disableSourceOfProjectReferenceRedirect;
 	});
 
-	(host as any).useSourceOfProjectReferenceRedirect = () => {
-		return true;
-	};
-
 	const languageService = ts.createLanguageService(host);
 	const program = languageService.getProgram();
 	if (program === undefined) {
