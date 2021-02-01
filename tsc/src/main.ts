@@ -423,8 +423,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 			// We need to return the path since the language service needs
 			// to know the full path and not only the name which is return
 			// from ts.getDefaultLibFileName
-			const path = ts.getDefaultLibFilePath(options);
-			return path;
+			return ts.getDefaultLibFilePath(options);
 		},
 		directoryExists: ts.sys.directoryExists,
 		getDirectories: ts.sys.getDirectories,

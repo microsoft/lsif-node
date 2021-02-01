@@ -1411,29 +1411,17 @@ class ExportSymbolWalker {
 		symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 		// We are at the first level. If path is not empty we take the path for the first symbol. This
 		// support cases were we rename the top level symbol during export.
-		if (parent === undefined) {
-			if (path.length !== 0) {
-				this.result.push([symbolData, path]);
-				return path;
-			} else {
-				const exportPath = this.symbols.getExportSymbolName(symbol);
-				this.result.push([symbolData, exportPath]);
-				return exportPath;
-			}
-		} else {
-			let exportPath: string;
-			if (Symbols.isClass(parent) && kind === ChildKind.exports) {
-				// This is either a constructor or a static method.
-				exportPath = Symbols.isPrototype(symbol)
-					? `${path}.${this.symbols.getExportSymbolName(symbol)}`
-					: `${path}.__static__.${this.symbols.getExportSymbolName(symbol)}`;
+		const symbolName = parent === undefined || kind !== ChildKind.exports
+			? this.symbols.getExportSymbolName(symbol)
+			: Symbols.isClass(parent)
+				? Symbols.isPrototype(symbol)
+					? this.symbols.getExportSymbolName(symbol)
+					: `__static__.${this.symbols.getExportSymbolName(symbol)}`
+				: this.symbols.getExportSymbolName(symbol);
 
-			} else {
-				exportPath = `${path}.${this.symbols.getExportSymbolName(symbol)}`;
-			}
-			this.result.push([symbolData, exportPath]);
-			return exportPath;
-		}
+		const exportName = path.length === 0 ? symbolName : `${path}.${symbolName}`;
+		this.result.push([symbolData, exportName]);
+		return exportName;
 	}
 }
 
@@ -1537,6 +1525,10 @@ class Symbols {
 
 	public static isPrototype(symbol: ts.Symbol): boolean {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.Prototype) !== 0;
+	}
+
+	public static isExportStar(symbol: ts.Symbol): boolean {
+		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ExportStar) !== 0;
 	}
 
 	public static isVariableDeclaration(symbol: ts.Symbol): boolean {
@@ -2583,6 +2575,10 @@ class TSProject {
 		return this.symbols.getSymbolId(symbol);
 	}
 
+	public getExportSymbolName(symbol: ts.Symbol): string {
+		return this.symbols.getExportSymbolName(symbol);
+	}
+
 	public getRootFileNames(): ReadonlyArray<string> {
 		return this.getProgram().getRootFileNames();
 	}
@@ -2888,7 +2884,7 @@ class TSProject {
 
 	public exportSymbol(symbol: ts.Symbol, monikerPath: string, newName?: string): void {
 		const walker = new ExportSymbolWalker(this.context, this.symbols, true);
-		const result = walker.walk(symbol, newName || symbol.escapedName as string);
+		const result = walker.walk(symbol, newName ?? symbol.escapedName as string);
 		this.emitAttachedMonikers(monikerPath, result);
 	}
 
@@ -3676,7 +3672,7 @@ class Visitor {
 			return;
 		}
 		aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, symbol.escapedName as string);
+		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol));
 	}
 
 	private visitExportDeclaration(_node: ts.ExportDeclaration): boolean {
@@ -3692,12 +3688,12 @@ class Visitor {
 				if (symbol === undefined) {
 					continue;
 				}
-				// Make sure we have a symbol data;
-				this.dataManager.getOrCreateSymbolData(symbol);
 				const monikerPath = this.currentDocumentData.monikerPath;
 				if (monikerPath === undefined) {
 					return;
 				}
+				// Make sure we have a symbol data;
+				this.dataManager.getOrCreateSymbolData(symbol);
 				const aliasedSymbol = Symbols.isAliasSymbol(symbol)
 					? this.tsProject.getAliasedSymbol(symbol)
 					: element.propertyName !== undefined
@@ -3711,8 +3707,24 @@ class Visitor {
 					return;
 				}
 				aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-				this.tsProject.exportSymbol(aliasedSymbol, monikerPath, symbol.escapedName as string);
+				this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol));
 			}
+		} else if (node.moduleSpecifier !== undefined) {
+			const symbol = this.tsProject.getSymbolAtLocation(node);
+			if (symbol === undefined || !Symbols.isExportStar(symbol)) {
+				return;
+			}
+			const monikerPath = this.currentDocumentData.monikerPath;
+			if (monikerPath === undefined) {
+				return;
+			}
+			this.dataManager.getOrCreateSymbolData(symbol);
+			const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.moduleSpecifier);
+			if (aliasedSymbol === undefined || !Symbols.isSourceFile(aliasedSymbol)) {
+				return;
+			}
+			this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '');
 		}
 	}
 
