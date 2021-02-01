@@ -420,27 +420,27 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 			}
 		},
 		getDefaultLibFileName: (options) => {
-			const result = ts.getDefaultLibFilePath(options);
-			return result;
+			// We need to return the path since the language service needs
+			// to know the full path and not only the name which is return
+			// from ts.getDefaultLibFileName
+			const path = ts.getDefaultLibFilePath(options);
+			return path;
 		},
-		directoryExists: (path) => {
-			const result = ts.sys.directoryExists(path);
-			return result;
-		},
+		directoryExists: ts.sys.directoryExists,
 		getDirectories: ts.sys.getDirectories,
 		fileExists: ts.sys.fileExists,
-		readFile: (path: string, encoding?: string): string | undefined => {
-			const result = ts.sys.readFile(path, encoding);
-			return result;
-		},
+		readFile: ts.sys.readFile,
 		readDirectory: ts.sys.readDirectory,
+		// this is necessary to make source references work.
+		realpath: ts.sys.realpath
 	};
+
 	tss.LanguageServiceHost.useSourceOfProjectReferenceRedirect(host, () => {
 		return !config.options.disableSourceOfProjectReferenceRedirect;
 	});
 
 	const languageService = ts.createLanguageService(host);
-	const program = languageService.getProgram();
+	let program = languageService.getProgram();
 	if (program === undefined) {
 		console.error('Couldn\'t create language service with underlying program.');
 		process.exitCode = -1;
@@ -463,6 +463,9 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		console.error(`No input files specified.`);
 		return 1;
 	}
+	// Re-fetch the program to synchronize host data after the dependent project
+	// has been processed.
+	program = languageService.getProgram()!;
 	program.getTypeChecker();
 	const level: number = options.processed.size;
 	let projectName: string | undefined;
