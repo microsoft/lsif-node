@@ -1203,7 +1203,7 @@ abstract class SymbolWalker {
 					}
 				}
 				for (const parameter of signature.getParameters()) {
-					const parameterType = this.symbols.getTypeOfSymbol(parameter);
+					const parameterType = this.symbols.getTypeOfSymbol(parameter, () => { return this.getLocationNode(); });
 					const exportIdentifier = `${path}.__arg.${this.symbols.getExportSymbolName(parameter)}`;
 					const newMode = tss.Type.hasCallSignature(parameterType) ? FlowMode.reverse(mode) : mode;
 					this.walkType(parameterType, newMode, markOnly, moduleSystem, exportIdentifier, level + 1);
@@ -1279,14 +1279,7 @@ abstract class SymbolWalker {
 		const newPath = this.visitSymbol(symbol, markOnly, path);
 		if (newPath !== undefined) {
 			if (!this.walkedSymbolsFromType.has(symbol)) {
-				const type = this.symbols.getTypeOfSymbol(symbol, () => {
-					for (let i = this.locationNodes.length - 1; i >= 0; i--) {
-						if (this.locationNodes[i] !== undefined) {
-							return this.locationNodes[i];
-						}
-					}
-					return undefined;
-				});
+				const type = this.symbols.getTypeOfSymbol(symbol, () => { return this.getLocationNode(); });
 				// First walk the type to handle unnamed types correctly
 				this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), newPath, level +1);
 			}
@@ -1304,6 +1297,15 @@ abstract class SymbolWalker {
 			}
 		}
 		this.locationNodes.pop();
+	}
+
+	private getLocationNode(): ts.Node | undefined {
+		for (let i = this.locationNodes.length - 1; i >= 0; i--) {
+			if (this.locationNodes[i] !== undefined) {
+				return this.locationNodes[i];
+			}
+		}
+		return undefined;
 	}
 
 	protected changeVisibility(symbol: ts.Symbol, symbolData?: SymbolData): void {
@@ -1381,14 +1383,16 @@ class ExportSymbolWalker {
 	private readonly _result: LinkedMap<SymbolData, string>;
 	private readonly context: SymbolWalkerContext;
 	private readonly symbols: Symbols;
+	private readonly locationNode: ts.Node | undefined;
 	private readonly skipRoot: boolean;
 
 	private readonly visitedSymbol: Set<ts.Symbol>;
 
-	constructor(context: SymbolWalkerContext, symbols: Symbols, skipRoot: boolean = false) {
+	constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, skipRoot: boolean = false) {
 		this._result = new LinkedMap();
 		this.context = context;
 		this.symbols = symbols;
+		this.locationNode = locationNode;
 		this.skipRoot = skipRoot;
 		this.visitedSymbol = new Set();
 	}
@@ -1429,8 +1433,8 @@ class ExportSymbolWalker {
 		}
 		// This is a leave symbol. Check if we have a type and try to walk for indirect exports
 		if (!hasChildren && this.symbols.needsIndirectExportCheck(symbol)) {
-			const type = this.symbols.getTypeOfSymbol(symbol);
-			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, Symbols.getFirstDeclarationNode(symbol), symbol !== type.getSymbol(), true);
+			const type = this.symbols.getTypeOfSymbol(symbol, this.locationNode);
+			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, Symbols.getFirstDeclarationNode(symbol) ?? this.locationNode, symbol !== type.getSymbol(), true);
 			const indirect = indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported);
 			for (const entry of indirect) {
 				this.addResult(entry[0], entry[1]);
@@ -1645,10 +1649,7 @@ class Symbols {
 		if (Symbols.isTypeAlias(symbol) || Symbols.isInterface(symbol)) {
 			return this.typeChecker.getDeclaredTypeOfSymbol(symbol);
 		}
-		let node: ts.Node | undefined;
-		if (location === undefined || typeof location === 'function') {
-			node = this.inferLocationNode(symbol);
-		}
+		let node: ts.Node | undefined = this.inferLocationNode(symbol);
 		if (node === undefined) {
 			node = typeof location === 'function' ? location() : location;
 		}
@@ -2913,8 +2914,8 @@ class TSProject {
 		return walker.walk(start, moduleSystem, exportName);
 	}
 
-	public exportSymbol(symbol: ts.Symbol, monikerPath: string, newName?: string): void {
-		const walker = new ExportSymbolWalker(this.context, this.symbols, true);
+	public exportSymbol(symbol: ts.Symbol, monikerPath: string, newName: string | undefined, locationNode: ts.Node | undefined): void {
+		const walker = new ExportSymbolWalker(this.context, this.symbols, locationNode, true);
 		const result = walker.walk(symbol, newName ?? symbol.escapedName as string);
 		this.emitAttachedMonikers(monikerPath, result);
 	}
@@ -3704,7 +3705,7 @@ class Visitor {
 			return;
 		}
 		aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol));
+		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 	}
 
 	private visitExportDeclaration(_node: ts.ExportDeclaration): boolean {
@@ -3739,7 +3740,7 @@ class Visitor {
 					return;
 				}
 				aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-				this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol));
+				this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 			}
 		} else if (node.moduleSpecifier !== undefined) {
 			const symbol = this.tsProject.getSymbolAtLocation(node);
@@ -3756,7 +3757,7 @@ class Visitor {
 				return;
 			}
 			this.dataManager.getOrCreateSymbolData(aliasedSymbol);
-			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '');
+			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '', this.currentSourceFile);
 		}
 	}
 
