@@ -1,12 +1,14 @@
 {
 	"compilerOptions": {
 		"module": "commonjs",
+		"esModuleInterop": true,
 		"outDir": "lib"
 	},
 	"typeAcquisition": {
 		"enable": false
 	},
 	"include": [
-		"./index.ts"
+		"./index.ts",
+		"./provide.ts"
 	]
 }

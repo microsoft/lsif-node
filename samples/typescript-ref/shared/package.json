@@ -1,0 +1,8 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./out/provide.js",
+  "author": "MS",
+  "license": "MIT"
+}
