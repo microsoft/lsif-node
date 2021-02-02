@@ -8,7 +8,7 @@ import * as os from 'os';
 
 import { lsif } from './lsifs';
 import * as ts from 'typescript';
-import { Element } from 'lsif-protocol';
+import { Element, ElementTypes, VertexLabels } from 'lsif-protocol';
 
 suite('Export Tests', () => {
 	const compilerOptions: ts.CompilerOptions = {
@@ -873,6 +873,49 @@ suite('Export use cases', () => {
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test('Export default RAL with merged nested declarations', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'interface RAL {',
+					'    readonly console: {',
+					'        info(message?: any, ...optionalParams: any[]): void;',
+					'        log(message?: any, ...optionalParams: any[]): void;',
+					'    }',
+					'}',
+					'',
+					'let _ral: RAL | undefined;',
+					'',
+					'function RAL(): RAL {',
+					'	return _ral;',
+					'}',
+					'namespace RAL {',
+					'	export function install(ral: RAL): void {',
+					'		_ral = ral;',
+					'	}',
+					'}',
+					'export default RAL;'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import RAL from "./a";',
+					'let r: RAL;',
+					'r.console.warn();'
+				].join(os.EOL)
+			]
+		]), Object.assign<ts.CompilerOptions, ts.CompilerOptions, ts.CompilerOptions>({}, compilerOptions, { 'lib': [ 'es2017' ] }));
+		assert.deepEqual(emitter.lastId, 254);
+		for (const elem of emitter.sequence) {
+			if (elem.type === ElementTypes.vertex && elem.label === VertexLabels.moniker) {
+				if (elem.identifier.indexOf('__arg') !== -1 || elem.identifier.indexOf('__rt') !== -1) {
+					throw new Error(`Attached moniker with arg or return type detected.\n${JSON.stringify(elem, undefined, 0)}`);
+				}
+			}
 		}
 	});
 	test('Export default RAL with nested public declarations', async () => {

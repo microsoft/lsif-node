@@ -19,7 +19,7 @@ import {
 
 import { VertexBuilder, EdgeBuilder } from './graph';
 
-import { LRUCache } from './utils/linkedMap';
+import { LRUCache, LinkedMap } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
 import { TscMoniker } from './utils/moniker';
@@ -1134,7 +1134,8 @@ interface SymbolWalkerContext {
 
 abstract class SymbolWalker {
 
-	protected result: [SymbolData, string][];
+	// Use a linked map to keep the order.
+	protected _result: LinkedMap<SymbolData, string>;
 	protected readonly context: SymbolWalkerContext;
 	protected readonly symbols: Symbols;
 	private readonly walkSymbolFromTopLevelType: boolean;
@@ -1144,7 +1145,7 @@ abstract class SymbolWalker {
 	private readonly locationNodes: (ts.Node | undefined)[];
 
 	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, walkSymbolFromTopLevelType: boolean) {
-		this.result = [];
+		this._result = new LinkedMap();
 		this.context = context;
 		this.symbols = symbols;
 		this.walkSymbolFromTopLevelType = walkSymbolFromTopLevelType;
@@ -1153,8 +1154,15 @@ abstract class SymbolWalker {
 		this.locationNodes = [locationNode];
 	}
 
-	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): [SymbolData, string][] {
-		this.result = [];
+	protected addResult(symbolData: SymbolData, exportPath: string): void {
+		const current = this._result.get(symbolData);
+		if (current === undefined || current.length > exportPath.length) {
+			this._result.set(symbolData, exportPath);
+		}
+	}
+
+	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): Map<SymbolData, string> {
+		this._result.clear();
 		if (tss.Symbol.is(start)) {
 			this.walkSymbol(start, mode, false, path, 0);
 			// If the symbol is not exported now mark it at least as indirect exported.
@@ -1165,7 +1173,7 @@ abstract class SymbolWalker {
 		} else {
 			this.walkType(start, mode, false, moduleSystem, path, 0);
 		}
-		return this.result;
+		return this._result;
 	}
 
 	protected walkType(type: ts.Type, mode: FlowMode, markOnly: boolean, moduleSystem: ModuleSystemKind, path: string, level: number): void {
@@ -1273,7 +1281,7 @@ abstract class SymbolWalker {
 				return undefined;
 			});
 			// First walk the type to handle unnamed types correctly
-			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), path, level +1);
+			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), newPath, level +1);
 			if (symbol.exports !== undefined) {
 				const iterator = symbol.exports.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
@@ -1313,34 +1321,39 @@ abstract class SymbolWalker {
  */
 class IndirectExportWalker extends SymbolWalker {
 
-	private force: boolean;
+	private continueOnIndirectExport: boolean;
 
-	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined,  walkSymbolFromTopLevelType: boolean, force: boolean) {
+	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined,  walkSymbolFromTopLevelType: boolean, continueOnIndirectExport: boolean) {
 		super(context, symbols, locationNode, walkSymbolFromTopLevelType);
-		this.force = force;
+		this.continueOnIndirectExport = continueOnIndirectExport;
 	}
 
 	protected visitSymbol(symbol: ts.Symbol, markOnly: boolean, path: string): string | undefined {
 		let symbolData: SymbolData | undefined = this.context.getSymbolData(symbol);
-		const isExported: boolean = symbolData?.isAtLeastIndirectExported() ?? this.symbols.isExported(symbol);
-		if (!this.force && isExported) {
+		const isExported: boolean = symbolData?.isExported() ?? this.symbols.isExported(symbol);
+		if (isExported) {
+			return undefined;
+		}
+		if (!this.continueOnIndirectExport && symbolData?.isAtLeastIndirectExported() === true) {
 			return undefined;
 		}
 		this.changeVisibility(symbol, symbolData);
 
+		const isInternal = Symbols.isInternal(symbol);
+		const newPath = isInternal ? path : `${path}.${this.symbols.getExportSymbolName(symbol)}`;
+
 		if (markOnly) {
-			return path;
+			return newPath;
 		}
 
-		if (!Symbols.isInternal(symbol)) {
+		if (!isInternal) {
 			// we actually need to create the symbol data since we need to attach a
 			// moniker to it.
 			symbolData = symbolData ?? this.context.getOrCreateSymbolData(symbol);
-			const identifier = `${path}.${this.symbols.getExportSymbolName(symbol)}`;
-			this.result.push([symbolData, identifier]);
-			return identifier;
+			this.addResult(symbolData, newPath);
+			return newPath;
 		} else {
-			return path;
+			return newPath;
 		}
 	}
 }
@@ -1357,7 +1370,7 @@ enum ChildKind {
 
 class ExportSymbolWalker {
 
-	private readonly result: [SymbolData, string][];
+	private readonly _result: LinkedMap<SymbolData, string>;
 	private readonly context: SymbolWalkerContext;
 	private readonly symbols: Symbols;
 	private readonly skipRoot: boolean;
@@ -1365,16 +1378,24 @@ class ExportSymbolWalker {
 	private readonly visitedSymbol: Set<ts.Symbol>;
 
 	constructor(context: SymbolWalkerContext, symbols: Symbols, skipRoot: boolean = false) {
-		this.result = [];
+		this._result = new LinkedMap();
 		this.context = context;
 		this.symbols = symbols;
 		this.skipRoot = skipRoot;
 		this.visitedSymbol = new Set();
 	}
 
-	public walk(symbol: ts.Symbol, path: string): [SymbolData, string][] {
+	public walk(symbol: ts.Symbol, path: string): Map<SymbolData, string> {
+		this._result.clear();
 		this.walkSymbol(undefined, symbol, ChildKind.unknown, path, 0);
-		return this.result;
+		return this._result;
+	}
+
+	protected addResult(symbolData: SymbolData, exportPath: string): void {
+		const current = this._result.get(symbolData);
+		if (current === undefined || current.length > exportPath.length) {
+			this._result.set(symbolData, exportPath);
+		}
 	}
 
 	protected walkSymbol(parent: ts.Symbol | undefined, symbol: ts.Symbol, kind: ChildKind, path: string, level: number): void {
@@ -1402,8 +1423,10 @@ class ExportSymbolWalker {
 		if (!hasChildren && this.symbols.needsIndirectExportCheck(symbol)) {
 			const type = this.symbols.getTypeOfSymbol(symbol);
 			const indirectExportWalker = new IndirectExportWalker(this.context, this.symbols, Symbols.getFirstDeclarationNode(symbol), symbol !== type.getSymbol(), true);
-			this.result.push(...indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported));
-
+			const indirect = indirectExportWalker.walk(type, symbolData.moduleSystem, newPath, FlowMode.exported);
+			for (const entry of indirect) {
+				this.addResult(entry[0], entry[1]);
+			}
 		}
 	}
 
@@ -1420,7 +1443,7 @@ class ExportSymbolWalker {
 				: this.symbols.getExportSymbolName(symbol);
 
 		const exportName = path.length === 0 ? symbolName : `${path}.${symbolName}`;
-		this.result.push([symbolData, exportName]);
+		this.addResult(symbolData, exportName);
 		return exportName;
 	}
 }
@@ -2801,7 +2824,7 @@ class TSProject {
 				const tscMoniker = TscMoniker.parse(moniker.identifier);
 				const type = this.getTypeOfSymbol(symbol);
 				const result  = this.computeIndirectExports(type || symbol, tscMoniker.name, symbolData.moduleSystem, symbol !== type.getSymbol());
-				if (result.length > 0) {
+				if (result.size > 0) {
 					this.emitAttachedMonikers(tscMoniker.path, result);
 				}
 			}
@@ -2877,7 +2900,7 @@ class TSProject {
 		}
 	}
 
-	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): [SymbolData, string][] {
+	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): Map<SymbolData, string> {
 		const walker = new IndirectExportWalker(this.context, this.symbols, undefined, walkSymbolFromTopLevelType, false);
 		return walker.walk(start, moduleSystem, exportName);
 	}
@@ -2888,10 +2911,10 @@ class TSProject {
 		this.emitAttachedMonikers(monikerPath, result);
 	}
 
-	private emitAttachedMonikers(monikerPath: string | undefined, exports: [SymbolData, string][]): void {
-		for (const item of exports) {
-			const symbolData = item[0];
-			const identifier = tss.createMonikerIdentifier(monikerPath, item[1]);
+	private emitAttachedMonikers(monikerPath: string | undefined, exports: Map<SymbolData, string>): void {
+		for (const entry of exports) {
+			const symbolData = entry[0];
+			const identifier = tss.createMonikerIdentifier(monikerPath, entry[1]);
 			// We don't have a moniker yet
 			if (symbolData.getPrimaryMoniker() === undefined) {
 				symbolData.addMoniker(identifier, MonikerKind.export);
