@@ -749,6 +749,58 @@ suite('Export Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export * from', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export function foo(): void {};',
+					'export function bar(): { value: number; } { return { value: 10 }; };'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'export * from "./a";'
+				].join(os.EOL)
+			],
+			[
+				'/@test/c.ts',
+				[
+					'import { foo, bar } from "./b";',
+					'foo();',
+					'bar();'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 149);
+		const validate: Element[] = [
+			JSON.parse('{"id":15,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":16,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":17,"type":"edge","label":"moniker","outV":15,"inV":16}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:bar","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":24,"type":"edge","label":"moniker","outV":22,"inV":23}'),
+			JSON.parse('{"id":30,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"F2J3JxC7HxVdRqlV9CVRfQ==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":36,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:bar.__rt.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":37,"type":"edge","label":"attach","outV":36,"inV":30}'),
+			JSON.parse('{"id":60,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":61,"type":"edge","label":"textDocument/references","outV":15,"inV":60}'),
+			JSON.parse('{"id":66,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":67,"type":"edge","label":"textDocument/references","outV":22,"inV":66}'),
+			JSON.parse('{"id":93,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:foo","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":94,"type":"edge","label":"attach","outV":93,"inV":16}'),
+			JSON.parse('{"id":95,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:bar","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":96,"type":"edge","label":"attach","outV":95,"inV":23}'),
+			JSON.parse('{"id":97,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:bar.__rt.value","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":98,"type":"edge","label":"attach","outV":97,"inV":30}'),
+			JSON.parse('{"id":143,"type":"edge","label":"item","outV":60,"inVs":[119,133],"shard":108,"property":"references"}'),
+			JSON.parse('{"id":144,"type":"edge","label":"item","outV":66,"inVs":[127,135],"shard":108,"property":"references"}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
 suite('Export use cases', () => {
