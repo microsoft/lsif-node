@@ -1,4 +1,3 @@
-// import * as provide from '../../shared/out/provide';
-import * as provide from 'shared/provide';
+import * as provide from 'shared';
 
-console.log(provide.add(10, 20));
+provide.add(10, 20);

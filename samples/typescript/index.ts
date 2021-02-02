@@ -1,6 +1,18 @@
-export interface Func {
-	(callback: (entry: { key: string; value: number; }) => void);
-}
+// namespace N {
+// 	export function foo(): void { }
+// 	function bar(): void { }
+// }
 
-let f: Func;
-f(e => { e.key; e.value; });
+				// export interface I {
+				// 	// field: { key: number; }
+				// 	foo(): { key: number };
+				// 	// "123": number;
+				// 	// __bar: string;
+				// }
+
+// interface Func {
+// 	(arg: number): { key: number };
+// 	arg: string;
+// }
+
+export * from './provide';

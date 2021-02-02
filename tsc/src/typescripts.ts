@@ -221,6 +221,10 @@ export namespace Type {
 		return (type.flags & ts.TypeFlags.Conditional) !== 0;
 	}
 
+	export function isAnonymous(type: ts.ObjectType): type is ts.ObjectType {
+		return (type.objectFlags & ts.ObjectFlags.Anonymous) !== 0;
+	}
+
 	export function isClassOrInterface(type: ts.Type): boolean {
 		const symbol = type.getSymbol();
 		if (symbol !== undefined) {
@@ -275,19 +279,21 @@ export namespace SourceFile {
 
 export interface DefinitionInfo {
 	file: string;
+	kind: ts.SyntaxKind;
 	start: number;
 	end: number
 }
 
 export namespace DefinitionInfo {
-	export function equals(a: DefinitionInfo, b: DefinitionInfo): boolean {
-		return a.file === b.file && a.start === b.start && a.end === b.end;
+	export function equals(a: DefinitionInfo, sourceFile: ts.SourceFile, node: ts.Node): boolean {
+		return a.file === sourceFile.fileName && a.kind === node.kind && a.start === node.getStart() && a.end === node.getEnd();
 	}
 }
 
 export function createDefinitionInfo(sourceFile: ts.SourceFile, node: ts.Node): DefinitionInfo {
 	return {
 		file: sourceFile.fileName,
+		kind: node.kind,
 		start: node.getStart(),
 		end: node.getEnd()
 	};
