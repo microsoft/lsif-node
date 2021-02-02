@@ -26,5 +26,6 @@
 		"loglevel",
 		"postpublish",
 		"uinteger"
-	]
+	],
+	"typescript.tsdk": "./node_modules/typescript/lib"
 }

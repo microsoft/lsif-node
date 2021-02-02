@@ -241,7 +241,7 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 				if (element.label === 'item') {
 					properties = { };
 					if (element.property !== undefined) {
-						properties.property = [ { id: idGenerator(), value: element.property } ]
+						properties.property = [ { id: idGenerator(), value: element.property } ];
 					}
 				}
 
@@ -291,5 +291,5 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}
 		}
-	}
-}
+	};
+};

@@ -82,7 +82,7 @@ export const create: Create = (writer: Writer): Emitter => {
 				let node: VisNode = {
 					id: element.id as number,
 					label: label
-				}
+				};
 				data.nodes.push(node);
 			} else if (element.type === 'edge') {
 				if (Edge.is11(element)) {
@@ -105,5 +105,5 @@ export const create: Create = (writer: Writer): Emitter => {
 		end: () => {
 			writer.write(JSON.stringify(data, undefined, 4));
 		}
-	}
-}
+	};
+};

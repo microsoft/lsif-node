@@ -16,7 +16,7 @@ export const create: Create = (writer: Writer): Emitter => {
 			if (!isFirst) {
 				writer.writeln(',');
 			}
-			writer.write('\t', JSON.stringify(element, undefined, 0))
+			writer.write('\t', JSON.stringify(element, undefined, 0));
 			isFirst = false;
 		},
 		end: () => {
@@ -25,5 +25,5 @@ export const create: Create = (writer: Writer): Emitter => {
 			}
 			writer.writeln(']');
 		}
-	}
-}
+	};
+};
