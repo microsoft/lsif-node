@@ -691,6 +691,38 @@ suite('Export Tests', () => {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
 		}
 	});
+	test('Export computed property name', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export class Foo {',
+					'	get [Symbol.toStringTag](): string {',
+					'		return "Foo";',
+					'	}',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { Foo } from "./a"',
+					'let foo: Foo = new Foo();'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 100);
+		const validate: Element[] = [
+			JSON.parse('{"id":22,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.__@toStringTag","unique":"group","kind":"export"}'),
+			JSON.parse('{"id":24,"type":"edge","label":"moniker","outV":22,"inV":23}'),
+			JSON.parse('{"id":25,"type":"vertex","label":"range","start":{"line":1,"character":5},"end":{"line":1,"character":25},"tag":{"type":"definition","text":"[Symbol.toStringTag]","kind":7,"fullRange":{"start":{"line":1,"character":1},"end":{"line":3,"character":2}}}}'),
+			JSON.parse('{"id":26,"type":"edge","label":"next","outV":25,"inV":22}')
+		];
+		for (const elem of validate) {
+			assert.deepEqual(emitter.elements.get(elem.id), elem);
+		}
+	});
 	test('Class constructor', async () => {
 		const emitter = await lsif('/@test', new Map([
 			[

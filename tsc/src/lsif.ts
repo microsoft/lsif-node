@@ -3429,12 +3429,13 @@ class Visitor {
 				this.doVisit(this.visitArrayType, this.endVisitArrayType, node as ts.ArrayTypeNode);
 				break;
 			case ts.SyntaxKind.Identifier:
-				let identifier = node as ts.Identifier;
-				this.visitIdentifier(identifier);
+				this.visitIdentifier(node as ts.Identifier);
 				break;
 			case ts.SyntaxKind.StringLiteral:
-				let literal = node as ts.StringLiteral;
-				this.visitStringLiteral(literal);
+				this.visitStringLiteral(node as ts.StringLiteral);
+				break;
+			case ts.SyntaxKind.ComputedPropertyName:
+				this.visitComputedPropertyName(node as ts.ComputedPropertyName);
 				break;
 			default:
 				this.doVisit(this.visitGeneric, this.endVisitGeneric, node);
@@ -3773,6 +3774,10 @@ class Visitor {
 	}
 
 	private visitStringLiteral(node: ts.StringLiteral): void {
+		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
+	}
+
+	private visitComputedPropertyName(node: ts.ComputedPropertyName): void {
 		this.handleSymbol(this.tsProject.getSymbolAtLocation(node), node);
 	}
 
