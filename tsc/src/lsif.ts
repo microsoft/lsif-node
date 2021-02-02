@@ -1142,6 +1142,7 @@ abstract class SymbolWalker {
 
 	private readonly visitedSymbols: Set<ts.Symbol>;
 	private readonly visitedTypes: Set<ts.Type>;
+	private readonly walkedSymbolsFromType: Set<ts.Symbol>;
 	private readonly locationNodes: (ts.Node | undefined)[];
 
 	public constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, walkSymbolFromTopLevelType: boolean) {
@@ -1151,6 +1152,7 @@ abstract class SymbolWalker {
 		this.walkSymbolFromTopLevelType = walkSymbolFromTopLevelType;
 		this.visitedSymbols = new Set();
 		this.visitedTypes = new Set();
+		this.walkedSymbolsFromType = new Set();
 		this.locationNodes = [locationNode];
 	}
 
@@ -1260,7 +1262,11 @@ abstract class SymbolWalker {
 
 		const symbol = type.getSymbol();
 		if (symbol !== undefined && walkSymbol) {
+			// We don't need a stack or a counter since we guard
+			// against double visit with the visitedSymbols and visitedTypes
+			this.walkedSymbolsFromType.add(symbol);
 			this.walkSymbol(symbol, mode, !Symbols.isInternal(symbol), path, level + 1);
+			this.walkedSymbolsFromType.delete(symbol);
 		}
 	}
 
@@ -1272,16 +1278,18 @@ abstract class SymbolWalker {
 		this.locationNodes.push(symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined);
 		const newPath = this.visitSymbol(symbol, markOnly, path);
 		if (newPath !== undefined) {
-			const type = this.symbols.getTypeOfSymbol(symbol, () => {
-				for (let i = this.locationNodes.length - 1; i >= 0; i--) {
-					if (this.locationNodes[i] !== undefined) {
-						return this.locationNodes[i];
+			if (!this.walkedSymbolsFromType.has(symbol)) {
+				const type = this.symbols.getTypeOfSymbol(symbol, () => {
+					for (let i = this.locationNodes.length - 1; i >= 0; i--) {
+						if (this.locationNodes[i] !== undefined) {
+							return this.locationNodes[i];
+						}
 					}
-				}
-				return undefined;
-			});
-			// First walk the type to handle unnamed types correctly
-			this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), newPath, level +1);
+					return undefined;
+				});
+				// First walk the type to handle unnamed types correctly
+				this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), newPath, level +1);
+			}
 			if (symbol.exports !== undefined) {
 				const iterator = symbol.exports.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
