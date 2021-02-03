@@ -353,7 +353,6 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
 	private static EMPTY_MAP= Object.freeze(new Map()) as unknown as Map<any, any>;
 
-	public readonly projectId: ProjectId;
 	private readonly symbolData: SymbolData;
 	private readonly shard: Shard;
 	private definitionRanges: DefinitionRange[];
@@ -362,11 +361,9 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 	private referenceRanges: Map<ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references, Range[]>;
 	private referenceResults: ReferenceResult[];
 	private referenceCascades: Moniker[];
-	private _next: SymbolDataPartition | undefined;
 
-	public constructor(projectId: ProjectId, context: EmitterContext, symbolData: SymbolData, shard: Shard, next: SymbolDataPartition | undefined) {
+	public constructor(context: EmitterContext, symbolData: SymbolData, shard: Shard) {
 		super(context);
-		this.projectId = projectId;
 		this.symbolData = symbolData;
 		this.shard = shard;
 		this.definitionRanges = SymbolDataPartition.EMPTY_ARRAY;
@@ -374,15 +371,6 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 		this.referenceRanges = SymbolDataPartition.EMPTY_MAP;
 		this.referenceResults = SymbolDataPartition.EMPTY_ARRAY;
 		this.referenceCascades = SymbolDataPartition.EMPTY_ARRAY;
-		this._next = next;
-	}
-
-	public get next(): SymbolDataPartition | undefined {
-		return this._next;
-	}
-
-	public setNext(next: SymbolDataPartition | undefined): void {
-		this._next = next;
 	}
 
 	public begin(): void {
@@ -673,23 +661,23 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
 
-	public abstract addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void;
-	public abstract findDefinition(projectId: ProjectId, shard: Shard, range: lsp.Range): DefinitionRange | undefined;
+	public abstract addDefinition(shard: Shard, definition: DefinitionRange): void;
+	public abstract findDefinition(shard: Shard, range: lsp.Range): DefinitionRange | undefined;
 
 	public abstract getOrCreateReferenceResult(): ReferenceResult;
 
-	public abstract addReference(projectId: ProjectId, shard: Shard, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
-	public abstract addReference(projectId: ProjectId, shard: Shard, reference: ReferenceResult): void;
+	public abstract addReference(shard: Shard, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public abstract addReference(shard: Shard, reference: ReferenceResult): void;
 
 	public abstract getOrCreateTypeDefinitionResult(): TypeDefinitionResult;
 
-	public abstract addTypeDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void;
+	public abstract addTypeDefinition(shard: Shard, definition: DefinitionRange): void;
 
-	public abstract getOrCreatePartition(projectId: ProjectId, shard: Shard): SymbolDataPartition;
+	public abstract getOrCreatePartition(shard: Shard): SymbolDataPartition;
 
-	public abstract endPartition(projectId: ProjectId, shard: Shard): void;
+	public abstract endPartition(shard: Shard): void;
 
-	public abstract endPartitions(projectId: ProjectId, shards: Set<Shard>): void;
+	public abstract endPartitions(shards: Set<Shard>): void;
 
 	public abstract end(forceSingle?: boolean): void;
 }
@@ -700,40 +688,39 @@ class StandardSymbolData extends SymbolData {
 	private referenceResult: ReferenceResult | undefined;
 	private typeDefinitionResult: TypeDefinitionResult | undefined;
 
-	private clearedPartitions: Map<Id /* Document | Project */, Set<ProjectId>> | undefined;
-
 	private partitions: Map<Id /* Document | Project */, SymbolDataPartition> | null | undefined;
+	private clearedPartitions: Set<Id /* Document | Project */> | undefined;
 
 	public constructor(context: SymbolDataContext, projectId: ProjectId, symbolId: SymbolId, moduleSystem: ModuleSystemKind, visibility: SymbolDataVisibility, isNamed: boolean, next: SymbolData | undefined) {
 		super(context, projectId, symbolId, moduleSystem, visibility, isNamed, next);
 	}
 
-	public addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange, recordAsReference: boolean = true): void {
+	public addDefinition(shard: Shard, definition: DefinitionRange, recordAsReference: boolean = true): void {
 		this.emit(this.edge.next(definition, this.resultSet));
-		this.getOrCreatePartition(projectId, shard).addDefinition(definition, recordAsReference);
+		this.getOrCreatePartition(shard).addDefinition(definition, recordAsReference);
 	}
 
-	public findDefinition(projectId: ProjectId, shard: Shard, range: lsp.Range): DefinitionRange | undefined {
-		const [partition, ] = this.getPartition(projectId, shard);
+	public findDefinition(shard: Shard, range: lsp.Range): DefinitionRange | undefined {
+		const partition = this.getPartition(shard);
 		if (partition === undefined) {
 			return undefined;
 		}
 		return partition.findDefinition(range);
 	}
 
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
-	public addReference(projectId: ProjectId, shard: Shard, reference: ReferenceResult): void;
-	public addReference(projectId: ProjectId, shard: Shard, reference: Moniker): void;
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+	public addReference(shard: Shard, reference: Range, property: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public addReference(shard: Shard, reference: ReferenceResult): void;
+	public addReference(shard: Shard, reference: Moniker): void;
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void;
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (reference.label === VertexLabels.range) {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
-		this.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
+		this.getOrCreatePartition(shard).addReference(reference as any, property as any);
 	}
 
-	public addTypeDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void {
-		this.getOrCreatePartition(projectId, shard).addTypeDefinition(definition);
+	public addTypeDefinition(shard: Shard, definition: DefinitionRange): void {
+		this.getOrCreatePartition(shard).addTypeDefinition(definition);
 	}
 
 	public getOrCreateDefinitionResult(): DefinitionResult {
@@ -763,38 +750,30 @@ class StandardSymbolData extends SymbolData {
 		return this.typeDefinitionResult;
 	}
 
-	private getPartition(projectId: ProjectId, shard: Shard): [SymbolDataPartition | undefined, SymbolDataPartition | undefined] {
+	private getPartition(shard: Shard): SymbolDataPartition | undefined {
 		if (this.partitions === null) {
 			throw new Error (`The partitions for symbol ${this.symbolId} have already been cleared.`);
 		}
 		if (this.partitions === undefined) {
 			this.partitions = new Map();
 		}
-		const current = this.partitions.get(shard.id);
-		let candidate = current;
-		while(candidate !== undefined) {
-			if (candidate.projectId === projectId) {
-				return [candidate, undefined];
-			}
-			candidate = candidate.next;
-		}
+		const partition = this.partitions.get(shard.id);
 		// It is not active. See if it got cleared.
 		if (this.clearedPartitions !== undefined) {
-			const cleared = this.clearedPartitions.get(shard.id);
-			if (cleared !== undefined && cleared.has(projectId)) {
+			if (this.clearedPartitions.has(shard.id)) {
 				throw new Error(`Symbol data ${this.symbolId} already cleared the partition for shard ${JSON.stringify(shard, undefined, 0)}.`);
 			}
 		}
-		return [undefined, current];
+		return partition;
 	}
 
-	public getOrCreatePartition(projectId: ProjectId, shard: Shard): SymbolDataPartition {
-		let [result, current] = this.getPartition(projectId, shard);
+	public getOrCreatePartition(shard: Shard): SymbolDataPartition {
+		let result = this.getPartition(shard);
 		if (result !== undefined) {
 			return result;
 		}
 
-		result = new SymbolDataPartition(projectId, this.context, this, shard, current);
+		result = new SymbolDataPartition(this.context, this, shard);
 		this.context.managePartitionLifeCycle(shard, this);
 		result.begin();
 		// Get either throws or creates the map.
@@ -802,58 +781,28 @@ class StandardSymbolData extends SymbolData {
 		return result;
 	}
 
-	public endPartition(projectId: ProjectId, shard: Shard): void {
+	public endPartition(shard: Shard): void {
 		if (this.partitions === null) {
 			throw new Error (`The partitions for symbol ${this.symbolId} have already been cleared.`);
 		}
 		if (this.partitions === undefined) {
 			return;
 		}
-		const current = this.partitions.get(shard.id);
-		let partition = current;
-		while(partition !== undefined) {
-			if (partition.projectId === projectId) {
-				break;
-			}
-			partition = partition.next;
-		}
+		const partition = this.partitions.get(shard.id);
 		if (partition === undefined) {
 			return;
 		}
+		this.partitions.delete(shard.id);
 		partition.end();
-		if (partition === current) {
-			if (current.next === undefined) {
-				this.partitions!.delete(shard.id);
-			} else {
-				this.partitions!.set(shard.id, current.next);
-			}
-		} else {
-			let previous = current;
-			while (previous !== undefined && previous.next !== partition) {
-				previous = previous.next;
-			}
-			if (previous !== undefined) {
-				previous.setNext(partition.next);
-			}
-
-		}
-		partition.setNext(undefined);
 		if (this.clearedPartitions === undefined) {
-			this.clearedPartitions = new Map();
-			this.clearedPartitions.set(shard.id, new Set([projectId]));
-		} else {
-			let cleared = this.clearedPartitions.get(shard.id);
-			if (cleared === undefined) {
-				cleared = new Set();
-				this.clearedPartitions.set(shard.id, cleared);
-			}
-			cleared.add(projectId);
+			this.clearedPartitions = new Set();
 		}
+		this.clearedPartitions.add(shard.id);
 	}
 
-	public endPartitions(projectId: ProjectId, shards: Set<Shard>): void {
+	public endPartitions(shards: Set<Shard>): void {
 		for (const shard of shards) {
-			this.endPartition(projectId, shard);
+			this.endPartition(shard);
 		}
 	}
 
@@ -897,18 +846,18 @@ class AliasSymbolData extends StandardSymbolData {
 		}
 	}
 
-	public addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void {
-		this.checkInitialized(projectId, shard);
+	public addDefinition(shard: Shard, definition: DefinitionRange): void {
+		this.checkInitialized(shard);
 		// import { foo as bar } from './provide'
 		// This renames the symbol, however go to declaration on bar should move to
 		// the real declaration of foo. This is why even on rename declarations of
 		// bar is recorded as a reference of foo.
 		this.emit(this.edge.next(definition, this.resultSet));
-		this.aliased.getOrCreatePartition(projectId, shard).addReference(definition, ItemEdgeProperties.references);
+		this.aliased.getOrCreatePartition(shard).addReference(definition, ItemEdgeProperties.references);
 	}
 
-	public findDefinition(projectId: ProjectId, shard: Shard, _range: lsp.Range): DefinitionRange | undefined {
-		this.checkInitialized(projectId, shard);
+	public findDefinition(shard: Shard, _range: lsp.Range): DefinitionRange | undefined {
+		this.checkInitialized(shard);
 		// Aliased symbols don't record own definitions. Find definition is only used
 		// for document outline. Since aliases aren't outlined we return undefined. If
 		// this needs to change we need to collect definitions in its own property to find
@@ -916,15 +865,15 @@ class AliasSymbolData extends StandardSymbolData {
 		return undefined;
 	}
 
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		this.checkInitialized(projectId, shard);
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		this.checkInitialized(shard);
 		if (this.ownReferences) {
-			super.addReference(projectId, shard, reference, property);
+			super.addReference(shard, reference, property);
 		} else {
 			if (reference.label === 'range') {
 				this.emit(this.edge.next(reference, this.resultSet));
 			}
-			this.aliased.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
+			this.aliased.getOrCreatePartition(shard).addReference(reference as any, property as any);
 		}
 	}
 
@@ -936,13 +885,13 @@ class AliasSymbolData extends StandardSymbolData {
 		}
 	}
 
-	private checkInitialized(projectId: ProjectId, shard: Shard): void {
+	private checkInitialized(shard: Shard): void {
 		if (this.initialized) {
 			return;
 		}
 		if (this.ownReferences) {
 			const referenceResult = super.getOrCreateReferenceResult();
-			this.aliased.addReference(projectId, shard, referenceResult);
+			this.aliased.addReference(shard, referenceResult);
 		}
 		this.initialized = true;
 	}
@@ -969,35 +918,35 @@ class MethodSymbolData extends StandardSymbolData {
 		// file that has already changed to make the diff minimal.
 		if (this.rootSymbolData !== undefined) {
 			for (let root of this.rootSymbolData) {
-				super.addReference(this.projectId, this.shard!, root.getOrCreateReferenceResult());
+				super.addReference(this.shard!, root.getOrCreateReferenceResult());
 				const moniker = root.getMostUniqueMoniker();
 				if (moniker !== undefined && moniker.scheme !== 'local') {
-					super.addReference(this.projectId, this.shard!, moniker);
+					super.addReference(this.shard!, moniker);
 				}
 			}
 		}
 		this.shard = undefined;
 	}
 
-	public addDefinition(projectId: ProjectId, shard: Shard, definition: DefinitionRange): void {
-		super.addDefinition(projectId, shard, definition, this.rootSymbolData === undefined);
+	public addDefinition(shard: Shard, definition: DefinitionRange): void {
+		super.addDefinition(shard, definition, this.rootSymbolData === undefined);
 		if (this.rootSymbolData !== undefined) {
 			for (let base of this.rootSymbolData) {
-				base.getOrCreatePartition(projectId, shard).addReference(definition, ItemEdgeProperties.definitions);
+				base.getOrCreatePartition(shard).addReference(definition, ItemEdgeProperties.definitions);
 			}
 		}
 	}
 
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (this.rootSymbolData !== undefined) {
 			if (reference.label === 'range') {
 				this.emit(this.edge.next(reference, this.resultSet));
 			}
 			for (let root of this.rootSymbolData) {
-				root.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
+				root.getOrCreatePartition(shard).addReference(reference as any, property as any);
 			}
 		} else {
-			super.addReference(projectId, shard, reference, property);
+			super.addReference(shard, reference, property);
 		}
 	}
 }
@@ -1017,9 +966,9 @@ class SymbolDataWithRoots extends StandardSymbolData {
 		super.begin();
 		for (let element of this.elements) {
 			const moniker = element.getMostUniqueMoniker();
-			super.addReference(this.projectId, this.shard!, element.getOrCreateReferenceResult());
+			super.addReference(this.shard!, element.getOrCreateReferenceResult());
 			if (moniker !== undefined && moniker.scheme !== 'local') {
-				super.addReference(this.projectId, this.shard!, moniker);
+				super.addReference(this.shard!, moniker);
 			}
 		}
 		this.shard = undefined;
@@ -1028,16 +977,16 @@ class SymbolDataWithRoots extends StandardSymbolData {
 	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
 	}
 
-	public addDefinition(_projectId: ProjectId, _shard: Shard, _definition: DefinitionRange): void {
+	public addDefinition(_shard: Shard, _definition: DefinitionRange): void {
 		// We don't do anything for definitions since they a transient anyways.
 	}
 
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
 		if (reference.label === 'range') {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
 		for (let element of this.elements) {
-			element.getOrCreatePartition(projectId, shard).addReference(reference as any, property as any);
+			element.getOrCreatePartition(shard).addReference(reference as any, property as any);
 		}
 	}
 }
@@ -1055,12 +1004,12 @@ class TransientSymbolData extends StandardSymbolData {
 	public recordDefinitionInfo(_info: tss.DefinitionInfo): void {
 	}
 
-	public addDefinition(_projectId: ProjectId, _shard: Shard, _definition: DefinitionRange): void {
+	public addDefinition(_shard: Shard, _definition: DefinitionRange): void {
 		// We don't do anything for definitions since they a transient anyways.
 	}
 
-	public addReference(projectId: ProjectId, shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
-		super.addReference(projectId, shard, reference, property);
+	public addReference(shard: Shard, reference: Range | ReferenceResult | Moniker, property?: ItemEdgeProperties.declarations | ItemEdgeProperties.definitions | ItemEdgeProperties.references): void {
+		super.addReference(shard, reference, property);
 	}
 }
 
@@ -2293,7 +2242,7 @@ abstract class ProjectDataManager {
 
 	public endPartitions(documents: Set<Document>): void {
 		for (const symbolData of this.managedSymbolDataItems) {
-			symbolData.endPartitions(this.id, documents);
+			symbolData.endPartitions(documents);
 		}
 	}
 
@@ -2304,7 +2253,7 @@ abstract class ProjectDataManager {
 			if (documents === undefined) {
 				symbolData.end();
 			} else {
-				symbolData.endPartitions(this.id, documents);
+				symbolData.endPartitions(documents);
 			}
 		}
 		for (const data of this.documentDataItems) {
@@ -2819,7 +2768,7 @@ class TSProject {
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
 				});
 				documentData.addRange(definition);
-				symbolData.addDefinition(manager.id, documentData.document, definition);
+				symbolData.addDefinition(documentData.document, definition);
 				symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
 				if (hover === undefined && tss.Node.isNamedDeclaration(declaration)) {
 					// let start = Date.now();
@@ -3095,10 +3044,6 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public getProjectId(sourceFile: ts.SourceFile): ProjectId {
-		return this.getProjectDataManager(sourceFile).id;
-	}
-
 	private getProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager {
 		if (this.currentTSProject !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentTSProject.getProgram(), sourceFile)) {
 			return this.defaultLibsPDM;
@@ -3157,7 +3102,7 @@ export class DataManager implements SymbolDataContext {
 		if (items !== undefined) {
 			for (const symbolData of items) {
 				if (!handledSymbolData.has(symbolData.symbolId)) {
-					symbolData.endPartition(this.getProjectId(sourceFile), data.document);
+					symbolData.endPartition(data.document);
 				}
 			}
 		}
@@ -3203,7 +3148,7 @@ export class DataManager implements SymbolDataContext {
 
 		const reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
 		documentData.addRange(reference);
-		symbolData.addReference(this.getProjectId(sourceFile), documentData.document, reference, ItemEdgeProperties.references);
+		symbolData.addReference(documentData.document, reference, ItemEdgeProperties.references);
 	}
 
 	public getSymbolData(symbol: SymbolId | ts.Symbol): SymbolData | undefined {
@@ -3818,8 +3763,7 @@ class Visitor {
 		}
 		const sourceFile = this.currentSourceFile!;
 		const symbolData = this.dataManager.getOrCreateSymbolData(symbol);
-		const projectId = this.dataManager.getProjectId(sourceFile);
-		const definition = symbolData.findDefinition(projectId, this.currentDocumentData.document, Converter.rangeFromNode(sourceFile, rangeNode));
+		const definition = symbolData.findDefinition(this.currentDocumentData.document, Converter.rangeFromNode(sourceFile, rangeNode));
 		if (definition === undefined) {
 			return false;
 		}

@@ -50,6 +50,7 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				"-p", "tsconfig.json",
+				"--noContents",
 				"--outputFormat", "line",
 				"--stdout"
 			],

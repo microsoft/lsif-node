@@ -15,4 +15,8 @@
 // 	arg: string;
 // }
 
-export * from './provide';
+export class Foo {
+	get [Symbol.toStringTag](): string {
+		return "Foo";
+	}
+}
