@@ -2256,6 +2256,14 @@ abstract class ProjectDataManager {
 		this.managedSymbolDataItems.push(symbolData);
 	}
 
+	public getDocuments(): Set<Document> {
+		const result = new Set<Document>();
+		for (const data of this.documentDataItems) {
+			result.add(data.document);
+		}
+		return result;
+	}
+
 	public begin(): void {
 		this.startTime = Date.now();
 		this.projectData.begin();
@@ -2281,6 +2289,12 @@ abstract class ProjectDataManager {
 		}
 		this.symbolStats++;
 		return result;
+	}
+
+	public endPartitions(documents: Set<Document>): void {
+		for (const symbolData of this.managedSymbolDataItems) {
+			symbolData.endPartitions(this.id, documents);
+		}
 	}
 
 	public abstract end(): void;
@@ -3035,9 +3049,15 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	public end(): void {
-		this.globalPDM.end();
-		this.defaultLibsPDM.end();
-		this.groupPDM.end();
+		const managers: ProjectDataManager[] = [this.groupPDM, this.defaultLibsPDM, this.globalPDM];
+		for (let i = 0; i < managers.length; i++) {
+			const manager = managers[i];
+			const documents = manager.getDocuments();
+			for (let y = i + 1; y < managers.length; y++) {
+				managers[y].endPartitions(documents);
+			}
+			manager.end();
+		}
 	}
 
 	public getDocumentData(stringOrSourceFile: ts.SourceFile | string): DocumentData | undefined {
