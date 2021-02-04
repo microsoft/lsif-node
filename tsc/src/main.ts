@@ -20,25 +20,7 @@ import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager,
 import { Writer, StdoutWriter, FileWriter } from './utils/writer';
 import { Builder } from './graph';
 import * as tss from './typescripts';
-
-interface CommonOptions {
-	help: boolean;
-	version: boolean;
-	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
-	id: 'number' | 'uuid';
-	noContents: boolean;
-	noProjectReferences: boolean;
-	typeAcquisition: boolean;
-	moniker: 'strict' | 'lenient'
-	out: string | undefined;
-	log: string | boolean;
-	stdout: boolean;
-}
-
-interface Options extends CommonOptions {
-	group: string | undefined;
-	projectName: string | undefined;
-}
+import { Options, builder } from './args';
 
 interface GroupConfig {
 	uri?: string;
@@ -50,24 +32,6 @@ interface GroupConfig {
 		type: string;
 		url: string;
 	}
-}
-
-namespace Options {
-	export const defaults: Options = {
-		help: false,
-		version: false,
-		outputFormat: 'line',
-		id: 'number',
-		group: undefined,
-		projectName: undefined,
-		noContents: false,
-		noProjectReferences: false,
-		typeAcquisition: false,
-		moniker: 'lenient',
-		out: undefined,
-		log: '',
-		stdout: false
-	};
 }
 
 interface ResolvedGroupConfig extends GroupConfig {
@@ -503,74 +467,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 	return result;
 }
 
-async function run(this: void, args: string[]): Promise<void> {
-
-	yargs.parserConfiguration({ 'camel-case-expansion': false });
-	const options: Options = Object.assign(Options.defaults,
-		yargs.
-			exitProcess(false).
-			usage(`Language Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
-			example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
-			version(false).
-			option('v', {
-				alias: 'version',
-				description: 'Output the version number',
-				boolean: true
-			}).
-			option('h', {
-				alias: 'help',
-				description: 'Output usage information',
-				boolean: true
-			}).
-			option('outputFormat', {
-				 description: 'Specifies the output format.',
-				 choices: ['line', 'json'],
-				 default: 'line'
-			}).
-			option('id', {
-				description: 'Specifies the id format.',
-				choices: ['number', 'uuid'],
-				default: 'number'
-			}).
-			option('group', {
-				description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.',
-				string: true
-			}).
-			option('projectName', {
-				description: 'Specifies the project name. Defaults to the last directory segment of the tsconfig.json file.',
-				string: true
-			}).
-			option('noContents', {
-				description: 'File contents will not be embedded into the dump.',
-				boolean: true
-			}).
-			option('noProjectReferences', {
-				description: 'Project references will not be follow and embedded into the dump.',
-				boolean: true
-			}).
-			option('typeAcquisition', {
-				description: 'Run automatic type acquisition for JavaScript npm modules.',
-				boolean: true
-			}).
-			option('moniker', {
-				description: 'Monikers are use to relate symbols across repositories. In lenient mode the tool will proceed if a moniker was not generated for a visible symbol. In strict mode it will throw an exception.',
-				choices: ['strict', 'lenient'],
-				default: 'lenient'
-			}).
-			option('out', {
-				description: 'The output file the dump is save to.',
-				string: true
-			}).
-			option('stdout', {
-				description: 'Writes the dump to stdout.',
-				boolean: true
-			}).
-			option('log', {
-				description: 'If provided without a file name then the name of the output file is used with an additional \'.log\' extension.',
-				skipValidation: true
-			}).
-			argv
-	);
+export async function runWithOptions(this: void, options: Options): Promise<void> {
 
 	if (options.help) {
 		return;
@@ -626,7 +523,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	}
 
 
-	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
+	const config: ts.ParsedCommandLine = ts.parseCommandLine(ts.sys.args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
 	emitter.start();
@@ -692,12 +589,25 @@ async function run(this: void, args: string[]): Promise<void> {
 	reporter.end();
 }
 
+async function run(this: void): Promise<void> {
+	yargs.parserConfiguration({ 'camel-case-expansion': false });
+	const options: Options = Object.assign({}, Options.defaults,
+		builder(yargs.
+			exitProcess(false).
+			usage(`Language Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
+			example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
+			version(false)
+		).argv
+	);
+	return runWithOptions(options);
+}
+
 export async function main(): Promise<void> {
-	return run(ts.sys.args);
+	return run();
 }
 
 if (require.main === module) {
-	run(ts.sys.args).then(undefined, (error) => {
+	run().then(undefined, (error) => {
 		console.error(error);
 		process.exitCode = 1;
 	});

@@ -45,6 +45,18 @@ try {
 	}
 	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
 
+	const lsif = path.join(root, 'lsif', 'node_modules')
+	fs.mkdirSync(lsif, { recursive: true });
+	process.chdir(lsif);
+	if (fs.existsSync('lsif-tsc')) {
+		shell.rm('-rf', 'lsif-tsc');
+	}
+	shell.ln('-s', path.join('..', '..', 'tsc'), 'lsif-tsc');
+	if (fs.existsSync('lsif-npm')) {
+		shell.rm('-rf', 'lsif-npm');
+	}
+	shell.ln('-s', path.join('..', '..', 'npm'), 'lsif-npm');
+
 } finally {
 	process.chdir(current);
 }

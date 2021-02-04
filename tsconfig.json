@@ -10,6 +10,7 @@
 		{ "path": "./tsc/tsconfig.json" },
 		{ "path": "./npm/tsconfig.json" },
 		{ "path": "./sqlite/tsconfig.json" },
-		{ "path": "./util/tsconfig.json" }
+		{ "path": "./util/tsconfig.json" },
+		{ "path": "./lsif/tsconfig.json" }
 	]
 }

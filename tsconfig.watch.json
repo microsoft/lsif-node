@@ -10,6 +10,7 @@
 		{ "path": "./tsc/tsconfig.watch.json" },
 		{ "path": "./npm/tsconfig.watch.json" },
 		{ "path": "./sqlite/tsconfig.watch.json" },
-		{ "path": "./util/tsconfig.watch.json" }
+		{ "path": "./util/tsconfig.watch.json" },
+		{ "path": "./lsif/tsconfig.watch.json" }
 	]
 }

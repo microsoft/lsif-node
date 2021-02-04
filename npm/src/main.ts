@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 
-import * as minimist from 'minimist';
+import * as yargs from 'yargs';
 import * as uuid from 'uuid';
 import { URI } from 'vscode-uri';
 
@@ -17,52 +17,10 @@ import {
 	MonikerAttachEvent, EventScope, EventKind, Event, Group, GroupEvent
 } from 'lsif-protocol';
 
-import * as Is from 'lsif-tsc/lib/utils/is';
-import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
-import { StdoutWriter, FileWriter, Writer } from 'lsif-tsc/lib/utils/writer';
+import { TscMoniker, NpmMoniker } from './common/moniker';
+import { StdoutWriter, FileWriter, Writer } from './common/writer';
 
-
-interface Options {
-	help: boolean;
-	version: boolean;
-	package?: string;
-	projectRoot?: string;
-	in?: string;
-	stdin: boolean;
-	out?: string;
-	stdout: boolean;
-}
-
-interface OptionDescription {
-	id: keyof Options;
-	type: 'boolean' | 'string';
-	alias?: string;
-	default: any;
-	values?: string[];
-	description: string;
-}
-
-namespace Options {
-	export const defaults: Options = {
-		help: false,
-		version: false,
-		package: undefined,
-		projectRoot: undefined,
-		in: undefined,
-		stdin: false,
-		out: undefined,
-		stdout: false
-	};
-	export const descriptions: OptionDescription[] = [
-		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
-		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
-		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
-		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
-		{ id: 'out', type: 'string', default: undefined, description: 'The output file the converted dump is saved to.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout'},
-	];
-}
+import { Options, builder } from './args';
 
 class AttachQueue {
 	private _idGenerator: (() => Id) | undefined;
@@ -368,51 +326,16 @@ class ImportLinker {
 	}
 }
 
-export function main(): void {
+export function runWithOptions(options: Options): void {
 
-	let minOpts: minimist.Opts = {
-		string: [],
-		boolean: [],
-		default: Object.create(null),
-		alias: Object.create(null)
-	};
-
-	let longestId: number = 0;
-	for (let description of Options.descriptions) {
-		longestId = Math.max(longestId, description.id.length);
-		(minOpts[description.type] as string[]).push(description.id);
-		minOpts.default![description.id] = description.default;
-		if (description.alias !== undefined) {
-			minOpts.alias![description.id] = [description.alias];
-		}
+	if (options.help) {
+		return;
 	}
-
-	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
 
 	if (options.version) {
 		console.log(require('../package.json').version);
 		return;
 	}
-
-	let buffer: string[] = [];
-	if (options.help) {
-		buffer.push(`Languag Server Index Format tool for NPM`);
-		buffer.push(`Version: ${require('../package.json').version}`);
-		buffer.push('');
-		buffer.push(`Usage: lsif-npm [options]`);
-		buffer.push('');
-		buffer.push(`Options`);
-		for (let description of Options.descriptions) {
-			if (description.alias !== undefined) {
-				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			} else {
-				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			}
-		}
-		console.log(buffer.join('\n'));
-		return;
-	}
-
 
 	let packageFile: string | undefined = options.package;
 	if (packageFile === undefined) {
@@ -453,7 +376,7 @@ export function main(): void {
 
 	let writer: Writer = new StdoutWriter();
 	function emit(value: string | Edge | Vertex): void {
-		if (Is.string(value)) {
+		if (typeof value === 'string') {
 			writer.writeln(value);
 		} else {
 			writer.writeln(JSON.stringify(value, undefined, 0));
@@ -515,6 +438,21 @@ export function main(): void {
 			queue.flush(lastId);
 		}
 	});
+}
+
+export function main(): void {
+
+	yargs.parserConfiguration({ 'camel-case-expansion': false });
+	const options: Options = Object.assign({}, Options.defaults,
+		builder(yargs.
+			exitProcess(false).
+			usage(`Language Server Index Format tool for NPM monikers\nVersion: ${require('../package.json').version}\nUsage: lsif-npm [options][tsc options]`).
+			example(`lsif-npm --package package.json --stdin --stdout`, `Reads an LSIF dump from stdin and transforms tsc monikers into npm monikers and prints the result to stdout.`).
+			version(false).
+			wrap(yargs.terminalWidth())
+		).argv
+	);
+	return runWithOptions(options);
 }
 
 if (require.main === module) {
