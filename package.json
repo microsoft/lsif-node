@@ -26,7 +26,7 @@
 		"typescript": "^3.9.7"
 	},
 	"scripts": {
-		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../tooling && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
+		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../tooling && npm install && cd ../util && npm install && cd ../lsif && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
 		"compile": "tsc -b ./tsconfig.json",
 		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",

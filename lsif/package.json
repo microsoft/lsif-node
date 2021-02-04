@@ -21,8 +21,7 @@
 		"lsif-tsc": "0.5.0-next.5",
 		"lsif-npm": "0.5.0-next.3"
 	},
-	"devDependencies": {
-	},
+	"devDependencies": {},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
 		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",

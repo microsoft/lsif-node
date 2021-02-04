@@ -48,6 +48,10 @@ try {
 	const lsif = path.join(root, 'lsif', 'node_modules')
 	fs.mkdirSync(lsif, { recursive: true });
 	process.chdir(lsif);
+	if (fs.existsSync('lsif-protocol')) {
+		shell.rm('-rf', 'lsif-protocol');
+	}
+	shell.ln('-s', path.join('..', '..', 'protocol'), 'lsif-protocol');
 	if (fs.existsSync('lsif-tsc')) {
 		shell.rm('-rf', 'lsif-tsc');
 	}
