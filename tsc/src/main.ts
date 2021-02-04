@@ -467,7 +467,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 	return result;
 }
 
-export async function runWithOptions(this: void, options: Options): Promise<void> {
+export async function run(this: void, options: Options): Promise<void> {
 
 	if (options.help) {
 		return;
@@ -589,25 +589,20 @@ export async function runWithOptions(this: void, options: Options): Promise<void
 	reporter.end();
 }
 
-async function run(this: void): Promise<void> {
-	yargs.parserConfiguration({ 'camel-case-expansion': false });
-	const options: Options = Object.assign({}, Options.defaults,
-		builder(yargs.
-			exitProcess(false).
-			usage(`Language Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
-			example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
-			version(false)
-		).argv
-	);
-	return runWithOptions(options);
-}
-
-export async function main(): Promise<void> {
-	return run();
+async function main(this: void): Promise<void> {
+	yargs.
+		parserConfiguration({ 'camel-case-expansion': false }).
+		exitProcess(false).
+		usage(`Language Server Index Format tool for TypeScript\nVersion: ${require('../package.json').version}\nUsage: lsif-tsc [options][tsc options]`).
+		example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
+		version(false).
+		wrap(Math.min(100, yargs.terminalWidth()));
+	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv );
+	return run(options);
 }
 
 if (require.main === module) {
-	run().then(undefined, (error) => {
+	main().then(undefined, (error) => {
 		console.error(error);
 		process.exitCode = 1;
 	});

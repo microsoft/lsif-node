@@ -7,24 +7,8 @@ import { Edge, Vertex, ElementTypes } from 'lsif-protocol';
 
 import * as yargs from 'yargs';
 import { DiagnosticReporter } from './command';
-
 import { ValidateCommand } from './validate';
-
-interface Options {
-	help: boolean;
-	version: boolean;
-	stdin: boolean;
-	in: string | undefined;
-}
-
-namespace Options {
-	export const defaults: Options = {
-		help: false,
-		version: false,
-		stdin: false,
-		in: undefined
-	};
-}
+import { Options, builder } from './args';
 
 class ConsoleDiagnosticReporter implements DiagnosticReporter {
 	error(element: Edge | Vertex, message?: string): void {
@@ -46,35 +30,7 @@ class ConsoleDiagnosticReporter implements DiagnosticReporter {
 	}
 }
 
-export async function main(): Promise<void> {
-
-	yargs.parserConfiguration({ 'camel-case-expansion': false });
-	const options: Options = Object.assign(Options.defaults,
-		yargs.
-			exitProcess(false).
-			usage(`Language Server Index Format tool to validate LSIF dumps\nVersion: ${require('../package.json').version}\nUsage: lsif-tooling [options]`).
-			example(`lsif-tooling --stdin`, `Reads a LSIF dump from stdin and validates it.`).
-			version(false).
-			option('v', {
-				alias: 'version',
-				description: 'Output the version number',
-				boolean: true
-			}).
-			option('h', {
-				alias: 'help',
-				description: 'Output usage information',
-				boolean: true
-			}).
-			option('stdin', {
-				description: 'Reads the dump from stdin.',
-				boolean: true
-			}).
-			options('in', {
-				description: 'Specifies the file that contains a LSIF dump.',
-				string: true
-			}).
-			argv
-	);
+export async function run(options: Options): Promise<void> {
 	if (options.help) {
 		return;
 	}
@@ -87,6 +43,19 @@ export async function main(): Promise<void> {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
 	await new ValidateCommand(input, {}, new ConsoleDiagnosticReporter()).run();
+}
+
+export async function main(): Promise<void> {
+	yargs.
+		parserConfiguration({ 'camel-case-expansion': false }).
+		exitProcess(false).
+		usage(`Language Server Index Format tool to validate LSIF dumps\nVersion: ${require('../package.json').version}\nUsage: lsif-tooling [options]`).
+		example(`lsif-tooling --stdin`, `Reads a LSIF dump from stdin and validates it.`).
+		version(false).
+		wrap(Math.min(100, yargs.terminalWidth()));
+
+	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv);
+	run(options);
 }
 
 if (require.main === module) {

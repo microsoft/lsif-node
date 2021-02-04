@@ -6,6 +6,8 @@ import * as yargs from 'yargs';
 
 export const command: string = 'tsc';
 
+export const describe: string = 'Language Server Index Format tool for TypeScript';
+
 export interface CommonOptions {
 	help: boolean;
 	version: boolean;

@@ -4,31 +4,38 @@
  * ------------------------------------------------------------------------------------------ */
 import * as yargs from 'yargs';
 
-export const command: string = 'npm';
+export const command: string = 'sqlite';
 
-export const describe: string = 'Language Server Index Format tool for NPM monikers';
+export const describe: string = 'SQLite database importer';
+
+export type Mode = 'create' | 'import';
 
 export interface Options {
 	help: boolean;
 	version: boolean;
-	package?: string;
-	projectRoot?: string;
+	compressOnly: boolean;
+	format: 'graph' | 'blob';
+	projectVersion?: string;
+	delete: boolean,
 	in?: string;
 	stdin: boolean;
 	out?: string;
+	mode: Mode
 	stdout: boolean;
 }
-
 
 export namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		package: undefined,
-		projectRoot: undefined,
+		compressOnly: false,
+		format: 'graph',
+		projectVersion: undefined,
+		delete: false,
 		in: undefined,
 		stdin: false,
 		out: undefined,
+		mode: 'create',
 		stdout: false
 	};
 }
@@ -45,8 +52,23 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			description: 'Output usage information',
 			boolean: true
 		}).
-		option('package', {
-			description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.',
+		option('compressOnly', {
+			description: 'Only does compression. No SQLite DB generation.',
+			boolean: true,
+			default: false
+		}).
+		option('format', {
+			description: 'The SQLite format. Currently only graph is supported.',
+			choices: ['graph'],
+			default: 'graph'
+		}).
+		option('delete', {
+			description: 'Deletes an old version of the DB. Only valid with blob format.',
+			boolean: true,
+			default: false
+		}).
+		option('projectVersion', {
+			description: 'The imported project version. Only valid with blob format.',
 			string: true
 		}).
 		option('in', {
@@ -55,15 +77,16 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 		}).
 		option('stdin', {
 			description: 'Reads the dump from stdin.',
-			default: false,
-			boolean: true
+			boolean: true,
+			default: false
 		}).
 		option('out', {
-			description: 'The output file the converted dump is saved to.',
+			description: 'The name of the SQLite DB.',
 			string: true
 		}).
-		option('stdout', {
-			description: 'Writes the dump to stdout.',
-			boolean: true
+		option('mode', {
+			description: 'Whether to create a new DB or import into an existing one.',
+			choices: ['create', 'import'],
+			default: 'create'
 		});
 }

@@ -24,7 +24,6 @@
 		"uuid": "^8.3.0"
 	},
 	"devDependencies": {
-		"@types/minimist": "^1.2.0",
 		"@types/uuid": "^8.3.0",
 		"@types/better-sqlite3": "^5.4.0"
 	},

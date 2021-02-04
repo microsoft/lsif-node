@@ -4,32 +4,23 @@
  * ------------------------------------------------------------------------------------------ */
 import * as yargs from 'yargs';
 
-export const command: string = 'npm';
+export const command: string = 'validate';
 
-export const describe: string = 'Language Server Index Format tool for NPM monikers';
+export const describe: string = 'Language Server Index Format tool to validate LSIF dumps';
 
 export interface Options {
 	help: boolean;
 	version: boolean;
-	package?: string;
-	projectRoot?: string;
-	in?: string;
 	stdin: boolean;
-	out?: string;
-	stdout: boolean;
+	in: string | undefined;
 }
-
 
 export namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		package: undefined,
-		projectRoot: undefined,
-		in: undefined,
 		stdin: false,
-		out: undefined,
-		stdout: false
+		in: undefined
 	};
 }
 
@@ -45,25 +36,12 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			description: 'Output usage information',
 			boolean: true
 		}).
-		option('package', {
-			description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.',
-			string: true
-		}).
-		option('in', {
-			description: 'Specifies the file that contains a LSIF dump.',
-			string: true
-		}).
 		option('stdin', {
 			description: 'Reads the dump from stdin.',
-			default: false,
 			boolean: true
 		}).
-		option('out', {
-			description: 'The output file the converted dump is saved to.',
+		options('in', {
+			description: 'Specifies the file that contains a LSIF dump.',
 			string: true
-		}).
-		option('stdout', {
-			description: 'Writes the dump to stdout.',
-			boolean: true
 		});
 }

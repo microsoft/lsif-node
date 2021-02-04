@@ -326,7 +326,7 @@ class ImportLinker {
 	}
 }
 
-export function runWithOptions(options: Options): void {
+export function run(options: Options): void {
 
 	if (options.help) {
 		return;
@@ -441,18 +441,15 @@ export function runWithOptions(options: Options): void {
 }
 
 export function main(): void {
-
-	yargs.parserConfiguration({ 'camel-case-expansion': false });
-	const options: Options = Object.assign({}, Options.defaults,
-		builder(yargs.
-			exitProcess(false).
-			usage(`Language Server Index Format tool for NPM monikers\nVersion: ${require('../package.json').version}\nUsage: lsif-npm [options][tsc options]`).
-			example(`lsif-npm --package package.json --stdin --stdout`, `Reads an LSIF dump from stdin and transforms tsc monikers into npm monikers and prints the result to stdout.`).
-			version(false).
-			wrap(yargs.terminalWidth())
-		).argv
-	);
-	return runWithOptions(options);
+	yargs.
+		parserConfiguration({ 'camel-case-expansion': false }).
+		exitProcess(false).
+		usage(`Language Server Index Format tool for NPM monikers\nVersion: ${require('../package.json').version}\nUsage: lsif-npm [options][tsc options]`).
+		example(`lsif-npm --package package.json --stdin --stdout`, `Reads an LSIF dump from stdin and transforms tsc monikers into npm monikers and prints the result to stdout.`).
+		version(false).
+		wrap(Math.min(100, yargs.terminalWidth()));
+	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv);
+	return run(options);
 }
 
 if (require.main === module) {

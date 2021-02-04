@@ -21,7 +21,6 @@
 		"yargs": "16.2.0"
 	},
 	"devDependencies": {
-		"@types/yargs": "^15.0.5",
 		"@types/mocha": "^8.0.3"
 	},
 	"scripts": {

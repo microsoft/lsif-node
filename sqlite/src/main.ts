@@ -4,66 +4,12 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 
-import * as minimist from 'minimist';
+import * as yargs from 'yargs';
 
+import { Options, Mode, builder } from './args';
 import {GraphStore } from './graphStore';
 import {BlobStore } from './blobStore';
 import { CompressStore } from './compressStore';
-
-type Mode = 'create' | 'import';
-
-interface Options {
-	help: boolean;
-	version: boolean;
-	compressOnly: boolean;
-	format: 'graph' | 'blob';
-	projectVersion?: string;
-	delete: boolean,
-	in?: string;
-	stdin: boolean;
-	out?: string;
-	mode: Mode
-	stdout: boolean;
-}
-
-interface OptionDescription {
-	id: keyof Options;
-	type: 'boolean' | 'string';
-	alias?: string;
-	default: any;
-	values?: string[];
-	description: string;
-}
-
-export namespace Options {
-	export const defaults: Options = {
-		help: false,
-		version: false,
-		compressOnly: false,
-		format: 'graph',
-		projectVersion: undefined,
-		delete: false,
-		in: undefined,
-		stdin: false,
-		out: undefined,
-		mode: 'create',
-		stdout: false
-	};
-
-	export const descriptions: OptionDescription[] = [
-		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
-		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'compressOnly', type: 'boolean', default: false, description: 'Only does compression. No SQLite DB generation.'},
-		{ id: 'format', type: 'string', default: 'graph', description: 'The SQLite format. Currently only graph is supported.'},
-		{ id: 'delete', type: 'boolean', default: false, description: 'Deletes an old version of the DB. Only valid with blob format.'},
-		{ id: 'projectVersion', type: 'string', default: undefined, description: 'The imported project version. Only valid with blob format.'},
-		{ id: 'in', type: 'string', default: undefined, description: 'Specifies the file that contains a LSIF dump.'},
-		{ id: 'stdin', type: 'boolean', default: false, description: 'Reads the dump from stdin'},
-		{ id: 'out', type: 'string', default: undefined, description: 'The name of the SQLite DB.'},
-		{ id: 'mode', type: 'string', default: 'create', description: 'Whether to create a new DB or import into an existing one. Either create (default) or import.'},
-		{ id: 'stdout', type: 'boolean', default: false, description: 'Writes the dump to stdout'},
-	];
-}
 
 export class RunError extends Error {
 	private _exitCode: number;
@@ -88,7 +34,7 @@ export interface RunOptions {
 	mode: Mode
 }
 
-export async function run(options: RunOptions): Promise<void> {
+async function execute(options: RunOptions): Promise<void> {
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
@@ -119,50 +65,16 @@ export async function run(options: RunOptions): Promise<void> {
 	return store.run();
 }
 
-export async function main(): Promise<void> {
-
-	let minOpts: minimist.Opts = {
-		string: [],
-		boolean: [],
-		default: Object.create(null),
-		alias: Object.create(null)
-	};
-
-	let longestId: number = 0;
-	for (let description of Options.descriptions) {
-		longestId = Math.max(longestId, description.id.length);
-		(minOpts[description.type] as string[]).push(description.id);
-		minOpts.default![description.id] = description.default;
-		if (description.alias !== undefined) {
-			minOpts.alias![description.id] = [description.alias];
-		}
+export async function run(this: void, options: Options): Promise<void> {
+	if (options.help) {
+		return;
 	}
-
-	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
 
 	if (options.version) {
 		console.log(require('../package.json').version);
 		return;
 	}
 
-	let buffer: string[] = [];
-	if (options.help) {
-		buffer.push(`Tool to convert a LSIF dump into a SQLite DB`);
-		buffer.push(`Version: ${require('../package.json').version}`);
-		buffer.push('');
-		buffer.push(`Usage: lsif-sqlite [options][tsc options]`);
-		buffer.push('');
-		buffer.push(`Options`);
-		for (let description of Options.descriptions) {
-			if (description.alias !== undefined) {
-				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			} else {
-				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
-			}
-		}
-		console.log(buffer.join('\n'));
-		return;
-	}
 
 	if (!options.stdin && options.in === undefined) {
 		console.error(`Either a input file using --in or --stdin must be specified.`);
@@ -195,7 +107,7 @@ export async function main(): Promise<void> {
 	}
 
 	try {
-		await run(options);
+		await execute(options);
 	} catch (error) {
 		if (error instanceof RunError) {
 			console.error(error.message);
@@ -205,6 +117,19 @@ export async function main(): Promise<void> {
 			throw error;
 		}
 	}
+}
+
+export async function main(): Promise<void> {
+	yargs.
+		parserConfiguration({ 'camel-case-expansion': false }).
+		exitProcess(false).
+		usage(`SQLite database importer\nVersion: ${require('../package.json').version}\nUsage: lsif-sqlite [options]`).
+		example(`lsif-sqlite --in dump.lsif --out dump.db`, `Imports the dump into the SQLite database.`).
+		version(false).
+		wrap(Math.min(100, yargs.terminalWidth()));
+
+	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv);
+	return run(options);
 }
 
 if (require.main === module) {
