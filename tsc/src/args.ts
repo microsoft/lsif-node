@@ -8,40 +8,48 @@ export const command: string = 'tsc';
 
 export const describe: string = 'Language Server Index Format tool for TypeScript';
 
-export interface CommonOptions {
+export type NpmOptions = {
+	project: string;
+	package?: string;
+}
+
+export type Options = {
 	help: boolean;
 	version: boolean;
-	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
+	args: string | undefined;
+	p: string | undefined;
 	id: 'number' | 'uuid';
+	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
+	stdout: boolean;
+	out: string | undefined;
 	noContents: boolean;
 	noProjectReferences: boolean;
 	typeAcquisition: boolean;
 	moniker: 'strict' | 'lenient'
-	out: string | undefined;
-	log: string | boolean;
-	stdout: boolean;
-}
-
-export interface Options extends CommonOptions {
 	group: string | undefined;
 	projectName: string | undefined;
+	npm: NpmOptions[] | undefined;
+	log: string | boolean;
 }
 
 export namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		outputFormat: 'line',
+		args: undefined,
+		p: undefined,
 		id: 'number',
-		group: undefined,
-		projectName: undefined,
+		outputFormat: 'line',
+		stdout: false,
+		out: undefined,
 		noContents: false,
 		noProjectReferences: false,
 		typeAcquisition: false,
 		moniker: 'lenient',
-		out: undefined,
-		log: '',
-		stdout: false
+		group: undefined,
+		projectName: undefined,
+		npm: undefined,
+		log: ''
 	};
 }
 
@@ -56,6 +64,10 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			alias: 'help',
 			description: 'Output usage information',
 			boolean: true
+		}).
+		option('args', {
+			description: 'Specifies a JSON file to read the options from',
+			string: true
 		}).
 		option('outputFormat', {
 			description: 'Specifies the output format.',

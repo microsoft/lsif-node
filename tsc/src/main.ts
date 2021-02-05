@@ -2,9 +2,16 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
+import { promisify } from 'util';
+import * as fs from 'fs';
+
+namespace pfs {
+	export const stat = promisify(fs.stat);
+	export const readFile = promisify(fs.readFile);
+}
+
 import * as path from 'path';
 import * as uuid from 'uuid';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
 
@@ -55,6 +62,24 @@ namespace ResolvedGroupConfig {
 			repository: groupConfig.repository
 		};
 	}
+}
+
+type ArgsFileFormat = Partial<Options>;
+
+async function resolveOptions(options: Options): Promise<Options> {
+	if (options.args === undefined || path.extname(options.args) !== '.json') {
+		return options;
+	}
+	const stat = await pfs.stat(options.args);
+	if (!stat.isFile()) {
+		return options;
+	}
+	try {
+		const json: ArgsFileFormat = JSON.parse(await pfs.readFile(options.args, { encoding: 'utf8' }));
+	} catch (err) {
+		return options;
+	}
+
 }
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
@@ -152,11 +177,11 @@ async function readGroupConfig(options: Options): Promise<GroupConfig | undefine
 	} else {
 		const filePath = group !== undefined ? group : process.cwd();
 		try {
-			const stat = fs.statSync(filePath);
+			const stat = await pfs.stat(filePath);
 			if (stat.isFile()) {
 				let groupConfig: GroupConfig | undefined;
 				try {
-					groupConfig = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf8'}));
+					groupConfig = JSON.parse(await pfs.readFile(filePath, { encoding: 'utf8'}));
 				} catch (err) {
 					console.error(`Reading group config file ${options.group} failed.`);
 					if (err) {
@@ -477,6 +502,10 @@ export async function run(this: void, options: Options): Promise<void> {
 	if (options.version) {
 		console.log(require('../package.json').version);
 		return;
+	}
+
+	if (options.args !== undefined) {
+		options = await Options.resolve(options.args);
 	}
 
 	let writer: Writer | undefined;
