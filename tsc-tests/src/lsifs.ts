@@ -7,17 +7,19 @@ import * as assert from 'assert';
 import * as os from 'os';
 import * as path from 'path';
 
-import * as ts from 'typescript';
+import { URI } from 'vscode-uri';
 
 import { Vertex, Edge, Id, ElementTypes } from 'lsif-protocol';
 
 import { DiagnosticReporter } from 'lsif-tooling/lib/command';
 import { ValidateCommand } from 'lsif-tooling/lib/validate';
 
-import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode, Reporter } from '../lsif';
-import { Emitter } from '../emitters/emitter';
-import { Builder } from '../graph';
-import { URI } from 'vscode-uri';
+import * as ts from 'lsif-tsc/node_modules/typescript';
+import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode, Reporter } from 'lsif-tsc/lib/lsif';
+import { Emitter } from 'lsif-tsc/lib/emitters/emitter';
+import { Builder } from 'lsif-tsc/lib/graph';
+
+export { ts };
 
 class TestDiagnosticReporter implements DiagnosticReporter {
 	public readonly buffer: string[] = [];

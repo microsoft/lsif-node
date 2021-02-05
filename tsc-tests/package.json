@@ -1,6 +1,7 @@
 {
-	"name": "lsif-sqlite",
-	"description": "Tool to convert a LSIF dump into a SQLite DB",
+	"name": "lsif-tsc-tests",
+	"private": true,
+	"description": "Tests for the LSIF TSC tool",
 	"version": "0.5.1",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
@@ -11,30 +12,21 @@
 	"bugs": {
 		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
-	"bin": {
-		"lsif-sqlite": "./bin/lsif-sqlite"
-	},
 	"dependencies": {
 		"lsif-protocol": "0.5.1",
-		"yargs": "16.2.0",
-		"vscode-uri": "^3.0.2",
-		"better-sqlite3": "^7.1.2",
-		"uuid": "^8.3.2"
+		"lsif-tooling": "0.5.1",
+		"lsif-tsc": "0.5.1",
+		"vscode-uri": "^3.0.2"
 	},
 	"devDependencies": {
-		"@types/uuid": "^8.3.0",
-		"@types/better-sqlite3": "^5.4.1"
+		"@types/mocha": "^8.2.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
-		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
 		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
 		"clean:all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
 		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
-		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
-		"postpublish": "node ../build/bin/post-publish.js"
+		"test": "node ../node_modules/mocha/bin/_mocha"
 	}
 }

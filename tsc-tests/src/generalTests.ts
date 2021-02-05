@@ -6,9 +6,7 @@
 import * as assert from 'assert';
 import * as os from 'os';
 
-import * as ts from 'typescript';
-
-import { lsif } from './lsifs';
+import { lsif, ts } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('General Tests', () => {
