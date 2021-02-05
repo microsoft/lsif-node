@@ -17,7 +17,7 @@ import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-pr
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager, DataMode, Reporter } from './lsif';
-import { Writer, StdoutWriter, FileWriter } from './utils/writer';
+import { Writer, StdoutWriter, FileWriter } from './common/writer';
 import { Builder } from './graph';
 import * as tss from './typescripts';
 import { Options, builder } from './args';
@@ -455,6 +455,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		groupRoot: options.groupRoot,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
+		packageJson: undefined,
 		stdout: options.stdout,
 		reporter: options.reporter,
 		dataMode: options.dataMode,

@@ -8,7 +8,7 @@ import { URI } from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge, VertexLabels } from 'lsif-protocol';
-import { Writer } from '../utils/writer';
+import { Writer } from '../common/writer';
 
 interface VisNode {
 	id: number;

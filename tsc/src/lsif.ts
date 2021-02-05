@@ -22,7 +22,7 @@ import { VertexBuilder, EdgeBuilder } from './graph';
 import { LRUCache, LinkedMap } from './utils/linkedMap';
 
 import * as paths from './utils/paths';
-import { TscMoniker } from './utils/moniker';
+import { TscMoniker } from './common/moniker';
 
 interface Disposable {
 	(): void;
@@ -165,7 +165,6 @@ namespace ProjectId {
 		return counter++;
 	}
 }
-
 
 export interface EmitterContext {
 	vertex: VertexBuilder;
@@ -2162,6 +2161,7 @@ export interface Options {
 	groupRoot: string;
 	projectName: string;
 	tsConfigFile: string | undefined;
+	packageJson: string | undefined;
 	stdout: boolean;
 	dataMode: DataMode;
 	reporter: Reporter;
