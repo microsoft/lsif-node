@@ -17,12 +17,14 @@ import {
 	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
 } from 'lsif-protocol';
 
-import { VertexBuilder, EdgeBuilder } from './graph';
+import { VertexBuilder, EdgeBuilder, EmitterContext } from './common/graph';
 
-import { LRUCache, LinkedMap } from './utils/linkedMap';
+import { LRUCache, LinkedMap } from './common/linkedMap';
 
-import * as paths from './utils/paths';
+import * as paths from './common/paths';
 import { TscMoniker } from './common/moniker';
+import { ExportLinker } from './npm/exportLinker';
+import PackageJson from './npm/package';
 
 interface Disposable {
 	(): void;
@@ -164,12 +166,6 @@ namespace ProjectId {
 	export function next(): ProjectId {
 		return counter++;
 	}
-}
-
-export interface EmitterContext {
-	vertex: VertexBuilder;
-	edge: EdgeBuilder;
-	emit(element: Vertex | Edge): void;
 }
 
 interface SymbolDataContext extends EmitterContext {
@@ -604,7 +600,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		this.emit(this.edge.hover(this.resultSet, hr));
 	}
 
-	public addMoniker(identifier: string, kind: MonikerKind): void {
+	public addMoniker(identifier: string, kind: MonikerKind): Moniker {
 		if (this._moniker !== undefined) {
 			throw new Error(`Symbol data ${this.symbolId} already has a primary moniker`);
 		}
@@ -613,9 +609,10 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
 		this._moniker = moniker;
+		return moniker;
 	}
 
-	public attachMoniker(identifier: string, unique: UniquenessLevel, kind: MonikerKind): void {
+	public attachMoniker(identifier: string, unique: UniquenessLevel, kind: MonikerKind): Moniker {
 		const primary = this.getPrimaryMoniker();
 		if (primary === undefined) {
 			throw new Error(`Symbol data ${this.symbolId} has no primary moniker attached`);
@@ -628,6 +625,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		} else {
 			this._moniker = [primary, moniker];
 		}
+		return moniker;
 	}
 
 	public getPrimaryMoniker(): Moniker | undefined {
@@ -1925,7 +1923,7 @@ class Symbols {
 
 interface FactoryResult {
 	readonly symbolData: SymbolData;
-	readonly exportPath?: string;
+	readonly exportParts?: string | string[];
 	readonly moduleSystem?: ModuleSystemKind;
 	readonly validateVisibilityOn?: ts.SourceFile[];
 }
@@ -1986,7 +1984,7 @@ class StandardSymbolDataFactory extends SymbolDataFactory {
 		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		return {
 			symbolData: new StandardSymbolData(this.symbolDataContext, projectId, symbolId, moduleSystem, visibility, isNamed, next),
-			exportPath, moduleSystem,
+			exportParts: exportPath, moduleSystem,
 			validateVisibilityOn: declarationSourceFiles
 		};
 	}
@@ -2014,7 +2012,7 @@ class AliasFactory extends SymbolDataFactory {
 		}
 		return {
 			symbolData,
-			moduleSystem, exportPath,
+			moduleSystem, exportParts: exportPath,
 			validateVisibilityOn: declarationSourceFiles,
 		};
 	}
@@ -2037,19 +2035,19 @@ class MethodFactory extends SymbolDataFactory {
 		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
 		const container = tss.Symbol.getParent(symbol);
 		if (container === undefined) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportParts: exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractMembers = this.symbols.findRootMembers(container, symbol.getName());
 		// No abstract members found
 		if (mostAbstractMembers === undefined || mostAbstractMembers.length === 0) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportParts: exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		// It is the symbol itself
 		if (mostAbstractMembers.length === 1 && mostAbstractMembers[0] === symbol) {
-			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
+			return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, undefined, moduleSystem, visibility, isNamed, next), exportParts: exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 		}
 		const mostAbstractSymbolData = mostAbstractMembers.map(member => this.factoryContext.getOrCreateSymbolData(member));
-		return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, mostAbstractSymbolData, moduleSystem, visibility, isNamed, next), exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
+		return { symbolData: new MethodSymbolData(this.symbolDataContext, projectId, symbolId, shard, mostAbstractSymbolData, moduleSystem, visibility, isNamed, next), exportParts: exportPath, moduleSystem, validateVisibilityOn: declarationSourceFiles };
 	}
 }
 
@@ -2098,13 +2096,13 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 				}
 			}
 			if (monikerIds.size > 0) {
-				const exportPath: string = monikerIds.size === 1
+				const exportPath: string | string[] = monikerIds.size === 1
 					? monikerIds.values().next().value
-					: `[${Array.from(monikerIds).sort().join(',')}]`;
+					: Array.from(monikerIds).sort();
 				return {
 					symbolData: new SymbolDataWithRoots(this.symbolDataContext, projectId, symbolId, shard, symbolDataItems, moduleSystem, visibility, isNamed, next),
 					moduleSystem: ModuleSystemKind.global,
-					exportPath: exportPath
+					exportParts: exportPath
 				};
 			} else {
 				return {
@@ -2115,7 +2113,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 			const [exportPath, moduleSystem] = this.symbols.getSymbolInitializationData(symbol);
 			return {
 				symbolData: new SymbolDataWithRoots(this.symbolDataContext, projectId, symbolId, shard, symbolDataItems, moduleSystem, visibility, isNamed, next),
-				moduleSystem, exportPath
+				moduleSystem, exportParts: exportPath
 			};
 		}
 	}
@@ -2140,7 +2138,7 @@ class TransientFactory extends SymbolDataFactory {
 
 	public create(projectId: ProjectId, symbol: ts.Symbol, symbolId: SymbolId, _declarationSourceFiles: ts.SourceFile[] | undefined, _projectDataManager: ProjectDataManager, next: SymbolData | undefined): FactoryResult {
 		const [exportPath, moduleSystem, visibility, isNamed] = this.symbols.getSymbolInitializationData(symbol);
-		return { symbolData: new TransientSymbolData(this.symbolDataContext, projectId, symbolId, moduleSystem, visibility, isNamed, next), moduleSystem, exportPath, validateVisibilityOn: undefined };
+		return { symbolData: new TransientSymbolData(this.symbolDataContext, projectId, symbolId, moduleSystem, visibility, isNamed, next), moduleSystem, exportParts: exportPath, validateVisibilityOn: undefined };
 	}
 }
 
@@ -2158,10 +2156,10 @@ export interface Reporter {
 
 export interface Options {
 	group: Group;
-	groupRoot: string;
+	workspaceFolder: string;
 	projectName: string;
 	tsConfigFile: string | undefined;
-	packageJson: string | undefined;
+	packageJsonFile: string | undefined;
 	stdout: boolean;
 	dataMode: DataMode;
 	reporter: Reporter;
@@ -2376,17 +2374,17 @@ class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 class GroupProjectDataManager extends LazyProjectDataManager {
 
 	private readonly groupName: string;
-	private readonly groupRoot: string;
+	private readonly workspaceFolder: string;
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, groupRoot: string, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, workspaceFolder: string, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 		this.groupName = group.name;
-		this.groupRoot = groupRoot;
+		this.workspaceFolder = workspaceFolder;
 	}
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
-		return paths.isParent(this.groupRoot, fileName);
+		return paths.isParent(this.workspaceFolder, fileName);
 	}
 
 	protected getName(): string {
@@ -2427,7 +2425,7 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 }
 
 interface TSProjectConfig {
-	groupRoot: string;
+	workspaceFolder: string;
 	configLocation: string | undefined;
 	sourceRoot: string;
 	outDir: string;
@@ -2448,6 +2446,7 @@ class TSProject {
 	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
 	public readonly references: ProjectInfo[];
+	private readonly exportLinker: ExportLinker | undefined;
 
 	private config: TSProjectConfig;
 	private referencedProjectIds: Set<ProjectId>;
@@ -2472,6 +2471,13 @@ class TSProject {
 		const program = languageService.getProgram()!;
 		const typeChecker = program.getTypeChecker();
 		this.typeChecker = typeChecker;
+
+		if (options.packageJsonFile !== undefined) {
+			const packageJson = PackageJson.read(options.packageJsonFile);
+			if (packageJson !== undefined) {
+				this.exportLinker = new ExportLinker(this.context, options.workspaceFolder, packageJson);
+			}
+		}
 
 		let dependentOutDirs = [];
 		for (const info of references) {
@@ -2499,7 +2505,7 @@ class TSProject {
 		}
 
 		this.config = {
-			groupRoot: options.groupRoot,
+			workspaceFolder: options.workspaceFolder,
 			configLocation,
 			sourceRoot,
 			outDir,
@@ -2585,7 +2591,7 @@ class TSProject {
 		this.sourceFilesToIndex = [];
 		const program = this.getProgram();
 		for (const sourceFile of program.getSourceFiles()) {
-			if (tss.Program.isSourceFileFromExternalLibrary(program, sourceFile) || tss.Program.isSourceFileDefaultLibrary(program, sourceFile)) {
+			if (program.isSourceFileFromExternalLibrary(sourceFile) || program.isSourceFileDefaultLibrary(sourceFile)) {
 				continue;
 			}
 			const documentData = this.context.getDocumentData(sourceFile);
@@ -2630,11 +2636,11 @@ class TSProject {
 	}
 
 	public isSourceFileDefaultLibrary(sourceFile: ts.SourceFile): boolean {
-		return tss.Program.isSourceFileDefaultLibrary(this.getProgram(), sourceFile);
+		return this.getProgram().isSourceFileDefaultLibrary(sourceFile);
 	}
 
 	public isSourceFileFromExternalLibrary(sourceFile: ts.SourceFile): boolean {
-		return tss.Program.isSourceFileFromExternalLibrary(this.getProgram(), sourceFile);
+		return this.getProgram().isSourceFileFromExternalLibrary(sourceFile);
 	}
 
 	public getCommonSourceDirectory(): string {
@@ -2663,14 +2669,10 @@ class TSProject {
 	}
 
 	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile, next: DocumentData | undefined): [DocumentData, ts.Symbol | undefined] {
-		const groupRoot = this.config.groupRoot;
+		const workspaceFolder = this.config.workspaceFolder;
 		const sourceRoot = this.config.sourceRoot;
 		const outDir = this.config.outDir;
 		const dependentOutDirs = this.config.dependentOutDirs;
-
-		const isFromExternalLibrary = (sourceFile: ts.SourceFile): boolean => {
-			return tss.Program.isSourceFileFromExternalLibrary(this.languageService.getProgram()!, sourceFile);
-		};
 
 		const isFromProjectSources = (sourceFile: ts.SourceFile): boolean => {
 			const fileName = sourceFile.fileName;
@@ -2690,8 +2692,8 @@ class TSProject {
 			return false;
 		};
 
-		const isFromGroupRoot = (sourceFile: ts.SourceFile): boolean => {
-			return paths.isParent(groupRoot, sourceFile.fileName);
+		const isFromWorkspaceFolder = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(workspaceFolder, sourceFile.fileName);
 		};
 
 		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
@@ -2699,17 +2701,17 @@ class TSProject {
 
 		let monikerPath: string | undefined;
 		let external: boolean = false;
-		if (isFromExternalLibrary(sourceFile)) {
+		if (this.isSourceFileFromExternalLibrary(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
+			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
 		} else if (isFromProjectSources(sourceFile)) {
-			monikerPath = tss.computeMonikerPath(groupRoot, tss.toOutLocation(fileName, sourceRoot, outDir));
+			monikerPath = tss.computeMonikerPath(workspaceFolder, tss.toOutLocation(fileName, sourceRoot, outDir));
 		} else if (isFromDependentProject(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
-		} else if (isFromGroupRoot(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+		} else if (isFromWorkspaceFolder(sourceFile)) {
 			external = sourceFile.isDeclarationFile;
-			monikerPath = tss.computeMonikerPath(groupRoot, fileName);
+			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
 		}
 
 		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
@@ -2733,17 +2735,29 @@ class TSProject {
 			created(result.symbolData);
 			return result;
 		});
-		const { symbolData, moduleSystem, exportPath, validateVisibilityOn } = result;
+		const { symbolData, moduleSystem, exportParts, validateVisibilityOn } = result;
+		const [fileParts, external] = this.getMonikerFileParts(declarationSourceFiles);
+		const monikerIdentifer = this.createMonikerIdentifier(fileParts, exportParts, Symbols.isSourceFile(symbol), moduleSystem);
 
-		const [monikerIdentifer, external] = this.getMonikerIdentifier(declarationSourceFiles, Symbols.isSourceFile(symbol), moduleSystem, exportPath);
 
 		if (monikerIdentifer === undefined) {
 			symbolData.addMoniker(symbolId, MonikerKind.local);
 		} else {
 			if (external === true) {
 				symbolData.addMoniker(monikerIdentifer, MonikerKind.import);
+				// If it comes from an external package from node_modules then the symbol can only
+				// have on declaration file. Merging with external modules is not possible.
+				if (declarationSourceFiles !== undefined && declarationSourceFiles.length === 1) {
+					const sourceFile = declarationSourceFiles[0];
+					const packageName = tss.Program.sourceFileToPackageName(this.getProgram(), sourceFile);
+					if (packageName !== undefined) {
+					}
+				}
 			} else {
-				symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
+				const exportMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
+				if (this.exportLinker !== undefined) {
+					this.exportLinker.handleMoniker(exportMoniker);
+				}
 			}
 		}
 
@@ -2805,12 +2819,11 @@ class TSProject {
 		return { symbolData, validateVisibilityOn };
 	}
 
-	private getMonikerIdentifier(sourceFiles: ts.SourceFile[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined, exportPath: string | undefined): [string | undefined, boolean | undefined] {
+	private getMonikerFileParts(sourceFiles: ts.SourceFile[] | undefined): [string | string[] | undefined, boolean | undefined] {
 		const documentDataItems: DocumentData[] | undefined = sourceFiles !== undefined
 			? sourceFiles.map((sourceFile) => this.context.getOrCreateDocumentData(sourceFile))
 			: undefined;
 
-		let monikerIdentifer: string | undefined;
 		const monikerFilePaths: Set<string> = new Set();
 		let external: boolean | undefined;
 		if (documentDataItems !== undefined) {
@@ -2825,24 +2838,35 @@ class TSProject {
 				}
 			}
 		}
-		const monikerFilePath: string | undefined = monikerFilePaths.size === 0
+		const monikerFilePath: string | string[] |undefined = monikerFilePaths.size === 0
 			? undefined
 			: monikerFilePaths.size === 1
 				? monikerFilePaths.values().next().value
-				: `[${Array.from(monikerFilePaths.values()).join(',')}]`;
+				: Array.from(monikerFilePaths.values()).sort();
 
-		if (isSourceFile && monikerFilePath !== undefined) {
-			monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, undefined);
+		return [monikerFilePath, external];
+	}
+
+	private createMonikerIdentifier(fileParts: string | string[] | undefined, exportParts: string | string[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined): string | undefined {
+		const filePath: string | undefined = fileParts === undefined || typeof fileParts === 'string'
+			? undefined
+			: `[${fileParts.join(',')}]`;
+		const exportPath: string | undefined = exportParts === undefined || typeof exportParts === 'string'
+			? undefined
+			: `[${exportParts.join(',')}]`;
+
+		if (isSourceFile && filePath !== undefined) {
+			return tss.createMonikerIdentifier(filePath, undefined);
 		}
-		if (monikerIdentifer === undefined && exportPath !== undefined) {
+		if (exportPath !== undefined) {
 			if (moduleSystem === undefined || moduleSystem === ModuleSystemKind.global) {
-				monikerIdentifer = tss.createMonikerIdentifier(undefined, exportPath);
+				return tss.createMonikerIdentifier(undefined, exportPath);
 			}
-			if (monikerIdentifer === undefined && monikerFilePath !== undefined) {
-				monikerIdentifer = tss.createMonikerIdentifier(monikerFilePath, exportPath);
+			if (filePath !== undefined) {
+				return tss.createMonikerIdentifier(filePath, exportPath);
 			}
 		}
-		return [monikerIdentifer, external];
+		return undefined;
 	}
 
 	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
@@ -2887,11 +2911,11 @@ class TSProject {
 		for (const entry of exports) {
 			const symbolData = entry[0];
 			const identifier = tss.createMonikerIdentifier(monikerPath, entry[1]);
-			// We don't have a moniker yet
-			if (symbolData.getPrimaryMoniker() === undefined) {
-				symbolData.addMoniker(identifier, MonikerKind.export);
-			} else {
-				symbolData.attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
+			const moniker = symbolData.getPrimaryMoniker() === undefined
+				? symbolData.addMoniker(identifier, MonikerKind.export)
+				: symbolData.attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
+			if (this.exportLinker !== undefined) {
+				this.exportLinker.handleMoniker(moniker);
 			}
 		}
 	}
@@ -2926,7 +2950,7 @@ export class DataManager implements SymbolDataContext {
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>
 
-	public constructor(context: EmitterContext, group: Group, groupRoot: string, reporter: Reporter, dataMode: DataMode) {
+	public constructor(context: EmitterContext, group: Group, workspaceFolder: string, reporter: Reporter, dataMode: DataMode) {
 		this.context = context;
 		this.group = group;
 		this.reporter = reporter;
@@ -2940,7 +2964,7 @@ export class DataManager implements SymbolDataContext {
 
 		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
 		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
-		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), groupRoot, reporter);
+		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), workspaceFolder, reporter);
 	}
 
 	public get vertex(): VertexBuilder {
@@ -3045,7 +3069,7 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	private getProjectDataManager(sourceFile: ts.SourceFile): ProjectDataManager {
-		if (this.currentTSProject !== undefined && tss.Program.isSourceFileDefaultLibrary(this.currentTSProject.getProgram(), sourceFile)) {
+		if (this.currentTSProject !== undefined && this.currentTSProject.isSourceFileDefaultLibrary(sourceFile)) {
 			return this.defaultLibsPDM;
 		} else if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
 			return this.currentPDM;

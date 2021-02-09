@@ -2,21 +2,42 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
+import * as path from 'path';
+
 import * as yargs from 'yargs';
 
 export const command: string = 'tsc';
 
 export const describe: string = 'Language Server Index Format tool for TypeScript';
 
-export type NpmOptions = {
+export type PackageOptions = {
 	project: string;
 	package?: string;
+}
+
+export namespace PackageOptions {
+	export function is(value: any): value is PackageOptions {
+		const candidate = value as PackageOptions;
+		return candidate && typeof candidate.project === 'string' && (candidate.package === undefined || typeof candidate.package === 'string');
+	}
+}
+
+export interface GroupOptions {
+	uri?: string;
+	conflictResolution?: 'takeDump' | 'takeDB';
+	name?: string;
+	rootUri?: string;
+	description? : string;
+	repository?: {
+		type: string;
+		url: string;
+	}
 }
 
 export type Options = {
 	help: boolean;
 	version: boolean;
-	args: string | undefined;
+	config: string | undefined;
 	p: string | undefined;
 	id: 'number' | 'uuid';
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
@@ -26,9 +47,9 @@ export type Options = {
 	noProjectReferences: boolean;
 	typeAcquisition: boolean;
 	moniker: 'strict' | 'lenient'
-	group: string | undefined;
+	group: string | GroupOptions | undefined;
 	projectName: string | undefined;
-	npm: NpmOptions[] | undefined;
+	package: string | PackageOptions[] | undefined;
 	log: string | boolean;
 }
 
@@ -36,7 +57,7 @@ export namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		args: undefined,
+		config: undefined,
 		p: undefined,
 		id: 'number',
 		outputFormat: 'line',
@@ -48,9 +69,80 @@ export namespace Options {
 		moniker: 'lenient',
 		group: undefined,
 		projectName: undefined,
-		npm: undefined,
+		package: undefined,
 		log: ''
 	};
+
+	export function sanitize(options: Options): Options {
+		const result = Object.assign({}, options);
+		if (result.package === undefined || typeof result.package === 'string') {
+			return result;
+		}
+		if (!Array.isArray(result.package)) {
+			result.package = undefined;
+			return result;
+		}
+		for (let i = 0; i < result.package.length; ) {
+			if (!PackageOptions.is(result.package[i])) {
+				result.package.splice(i, 1);
+			} else {
+				i++;
+			}
+		}
+		if (result.group === undefined || typeof result.group === 'string') {
+			return result;
+		}
+		const group: GroupOptions = {};
+		if (typeof result.group.name === 'string') {
+			group.name = result.group.name;
+		}
+		if (typeof result.group.uri === 'string') {
+			group.uri = result.group.uri;
+		}
+		if (result.group.conflictResolution === 'takeDB' || result.group.conflictResolution === 'takeDump') {
+			group.conflictResolution = result.group.conflictResolution;
+		}
+		if (typeof result.group.rootUri === 'string') {
+			group.rootUri = result.group.rootUri;
+		}
+		if (typeof result.group.description === 'string') {
+			group.description = result.group.description;
+		}
+		if (typeof result.group.repository?.type === 'string' && typeof result.group.repository?.url === 'string') {
+			group.repository = { url: result.group.repository.url, type: result.group.repository.type };
+		}
+		return result;
+	}
+
+	export function resolvePathToConfig(options: Options): Options {
+		if (options.config === undefined) {
+			return options;
+		}
+		const configDirectory = path.isAbsolute(options.config) ? path.dirname(options.config) : path.dirname(path.join(process.cwd(), options.config));
+		function makeAbsolute(value: string): string {
+			return path.isAbsolute(value) ? value : path.join(configDirectory, value);
+		}
+
+		const result: Options = Object.assign({}, options);
+		if (typeof options.group === 'string' && options.group !== 'stdin') {
+			result.group = makeAbsolute(options.group);
+		}
+		if (typeof options.package === 'string') {
+			result.package = makeAbsolute(options.package);
+		} else if (Array.isArray(options.package)) {
+			result.package = [];
+			for (const item of options.package) {
+				const newItem: PackageOptions = {
+					project: makeAbsolute(item.project)
+				};
+				if (item.package !== undefined) {
+					newItem.package = makeAbsolute(item.package);
+				}
+				result.package.push(newItem);
+			}
+		}
+		return result;
+	}
 }
 
 export function builder(yargs: yargs.Argv): yargs.Argv {
@@ -65,8 +157,9 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			description: 'Output usage information',
 			boolean: true
 		}).
-		option('args', {
-			description: 'Specifies a JSON file to read the options from',
+		options('p', {
+			alias: 'project',
+			description: 'The TypeScript project file',
 			string: true
 		}).
 		option('outputFormat', {
@@ -76,7 +169,7 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 		}).
 		option('id', {
 			description: 'Specifies the id format.',
-			choices: ['number', 'uuid'],
+			choices:['number', 'uuid'],
 			default: 'number'
 		}).
 		option('group', {
@@ -112,8 +205,13 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			description: 'Writes the dump to stdout.',
 			boolean: true
 		}).
+		option('package', {
+			description: 'Provides a mapping of project to package.json files to generate NPM monikers.',
+			skipValidation: true
+		}).
 		option('log', {
 			description: 'If provided without a file name then the name of the output file is used with an additional \'.log\' extension.',
 			skipValidation: true
-		});
+		}).
+		config('config', 'Specifies a JSON file to read the LSIF configuration from.');
 }

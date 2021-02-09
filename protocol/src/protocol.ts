@@ -940,7 +940,9 @@ export interface Group extends V {
 	name: string;
 
 	/**
-	 * The group root folder uri
+	 * The root folder uri pointing to the file system that contained the source
+	 * when creating the dump. This is usually a TS project rootDir or a
+	 * workspace folder on disk.
 	 */
 	rootUri: Uri;
 
