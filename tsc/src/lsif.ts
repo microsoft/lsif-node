@@ -23,7 +23,7 @@ import { LRUCache, LinkedMap } from './common/linkedMap';
 
 import * as paths from './common/paths';
 import { TscMoniker } from './common/moniker';
-import { ExportLinker } from './npm/exportLinker';
+import { ExportMonikers } from './npm/exportMonikers';
 import PackageJson from './npm/package';
 
 interface Disposable {
@@ -2446,7 +2446,7 @@ class TSProject {
 	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
 	public readonly references: ProjectInfo[];
-	private readonly exportLinker: ExportLinker | undefined;
+	private readonly exportMonikers: ExportMonikers | undefined;
 
 	private config: TSProjectConfig;
 	private referencedProjectIds: Set<ProjectId>;
@@ -2475,7 +2475,7 @@ class TSProject {
 		if (options.packageJsonFile !== undefined) {
 			const packageJson = PackageJson.read(options.packageJsonFile);
 			if (packageJson !== undefined) {
-				this.exportLinker = new ExportLinker(this.context, options.workspaceFolder, packageJson);
+				this.exportMonikers = new ExportMonikers(this.context, options.workspaceFolder, packageJson);
 			}
 		}
 
@@ -2754,9 +2754,9 @@ class TSProject {
 					}
 				}
 			} else {
-				const exportMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
-				if (this.exportLinker !== undefined) {
-					this.exportLinker.handleMoniker(exportMoniker);
+				const tscMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
+				if (this.exportMonikers !== undefined && typeof exportParts === 'string' && typeof fileParts === 'string') {
+					this.exportMonikers.attachMoniker(tscMoniker, fileParts, exportParts);
 				}
 			}
 		}
@@ -2914,8 +2914,8 @@ class TSProject {
 			const moniker = symbolData.getPrimaryMoniker() === undefined
 				? symbolData.addMoniker(identifier, MonikerKind.export)
 				: symbolData.attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
-			if (this.exportLinker !== undefined) {
-				this.exportLinker.handleMoniker(moniker);
+			if (this.exportMonikers !== undefined && monikerPath !== undefined) {
+				this.exportMonikers.attachMoniker(moniker, monikerPath, entry[1]);
 			}
 		}
 	}
