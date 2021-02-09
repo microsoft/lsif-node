@@ -8,6 +8,7 @@
 		{ "path": "./protocol/tsconfig.watch.json" },
 		{ "path": "./tooling/tsconfig.watch.json" },
 		{ "path": "./tsc/tsconfig.watch.json" },
+		{ "path": "./tsc-tests/tsconfig.watch.json" },
 		{ "path": "./npm/tsconfig.watch.json" },
 		{ "path": "./sqlite/tsconfig.watch.json" },
 		{ "path": "./util/tsconfig.watch.json" },

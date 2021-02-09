@@ -15,9 +15,9 @@ import { DiagnosticReporter } from 'lsif-tooling/lib/command';
 import { ValidateCommand } from 'lsif-tooling/lib/validate';
 
 import * as ts from 'lsif-tsc/node_modules/typescript';
-import { lsif as _lsif, EmitterContext, Options as LSIFOptions, DataManager, DataMode, Reporter } from 'lsif-tsc/lib/lsif';
+import { lsif as _lsif, Options as LSIFOptions, DataManager, DataMode, Reporter } from 'lsif-tsc/lib/lsif';
+import { Builder, EmitterContext } from 'lsif-tsc/lib/common/graph';
 import { Emitter } from 'lsif-tsc/lib/emitters/emitter';
-import { Builder } from 'lsif-tsc/lib/graph';
 
 export { ts };
 
@@ -197,7 +197,7 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
 	emitterContext.emit(group);
-	const lsifOptions: LSIFOptions = { stdout: true, groupRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, reporter, dataMode: DataMode.free };
+	const lsifOptions: LSIFOptions = { stdout: true, workspaceFolder: cwd, projectName: cwd, group: group, tsConfigFile: undefined, packageJsonFile: undefined, reporter, dataMode: DataMode.free };
 	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();

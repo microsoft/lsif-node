@@ -2849,10 +2849,10 @@ class TSProject {
 
 	private createMonikerIdentifier(fileParts: string | string[] | undefined, exportParts: string | string[] | undefined, isSourceFile: boolean, moduleSystem: ModuleSystemKind | undefined): string | undefined {
 		const filePath: string | undefined = fileParts === undefined || typeof fileParts === 'string'
-			? undefined
+			? fileParts
 			: `[${fileParts.join(',')}]`;
 		const exportPath: string | undefined = exportParts === undefined || typeof exportParts === 'string'
-			? undefined
+			? exportParts
 			: `[${exportParts.join(',')}]`;
 
 		if (isSourceFile && filePath !== undefined) {

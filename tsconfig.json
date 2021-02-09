@@ -8,6 +8,7 @@
 		{ "path": "./protocol/tsconfig.json" },
 		{ "path": "./tooling/tsconfig.json" },
 		{ "path": "./tsc/tsconfig.json" },
+		{ "path": "./tsc-tests/tsconfig.json" },
 		{ "path": "./npm/tsconfig.json" },
 		{ "path": "./sqlite/tsconfig.json" },
 		{ "path": "./util/tsconfig.json" },
