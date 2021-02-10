@@ -12,7 +12,7 @@ import { EmitterContext } from '../common/graph';
 import { NpmMoniker } from '../common/moniker';
 import * as paths from '../common/paths';
 
-import PackageJson from './package';
+import { PackageJson } from './package';
 
 export class ExportMonikers {
 
@@ -33,10 +33,13 @@ export class ExportMonikers {
 		}
 	}
 
-	public attachMoniker(tscMoniker: Moniker, filePath: string, exportPath: string): void {
+	public attachMoniker(tscMoniker: Moniker, filePath: string, exportParts: string | string[]): void {
 		if (!this.isPackaged(path.join(this.workspaceFolder, filePath))) {
 			return undefined;
 		}
+		const exportPath: string = typeof exportParts === 'string'
+			? exportParts
+			: `[${exportParts.join(',')}]`;
 		const npmFilePath = this.getNpmFilePath(this.workspaceFolder, filePath);
 		let npmIdentifier: string;
 		if (this.packageJson.main === npmFilePath || this.packageJson.typings === npmFilePath) {

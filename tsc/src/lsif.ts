@@ -24,7 +24,7 @@ import { LRUCache, LinkedMap } from './common/linkedMap';
 import * as paths from './common/paths';
 import { TscMoniker } from './common/moniker';
 import { ExportMonikers } from './npm/exportMonikers';
-import PackageJson from './npm/package';
+import { ImportMonikers } from './npm/importMonikers';
 
 interface Disposable {
 	(): void;
@@ -2447,6 +2447,7 @@ class TSProject {
 	private typeChecker: ts.TypeChecker;
 	public readonly references: ProjectInfo[];
 	private readonly exportMonikers: ExportMonikers | undefined;
+	private readonly importMonikers: ImportMonikers;
 
 	private config: TSProjectConfig;
 	private referencedProjectIds: Set<ProjectId>;
@@ -2463,21 +2464,17 @@ class TSProject {
 		typeAlias: TypeAliasFactory;
 	};
 
-	constructor(context: TSProjectContext, languageService: ts.LanguageService, references: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
+	constructor(context: TSProjectContext, languageService: ts.LanguageService, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, references: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
 		this.id = ProjectId.next();
 		this.context = context;
 		this.languageService = languageService;
+		this.importMonikers = importMonikers;
+		this.exportMonikers = exportMonikers;
 		this.references = references;
 		const program = languageService.getProgram()!;
 		const typeChecker = program.getTypeChecker();
 		this.typeChecker = typeChecker;
 
-		if (options.packageJsonFile !== undefined) {
-			const packageJson = PackageJson.read(options.packageJsonFile);
-			if (packageJson !== undefined) {
-				this.exportMonikers = new ExportMonikers(this.context, options.workspaceFolder, packageJson);
-			}
-		}
 
 		let dependentOutDirs = [];
 		for (const info of references) {
@@ -2744,18 +2741,19 @@ class TSProject {
 			symbolData.addMoniker(symbolId, MonikerKind.local);
 		} else {
 			if (external === true) {
-				symbolData.addMoniker(monikerIdentifer, MonikerKind.import);
+				const tscMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.import);
 				// If it comes from an external package from node_modules then the symbol can only
 				// have on declaration file. Merging with external modules is not possible.
 				if (declarationSourceFiles !== undefined && declarationSourceFiles.length === 1) {
 					const sourceFile = declarationSourceFiles[0];
 					const packageName = tss.Program.sourceFileToPackageName(this.getProgram(), sourceFile);
-					if (packageName !== undefined) {
+					if (packageName !== undefined && typeof fileParts === 'string' && exportParts !== undefined) {
+						this.importMonikers.attachMoniker(tscMoniker, sourceFile.fileName, packageName, fileParts, exportParts);
 					}
 				}
 			} else {
 				const tscMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
-				if (this.exportMonikers !== undefined && typeof exportParts === 'string' && typeof fileParts === 'string') {
+				if (this.exportMonikers !== undefined && typeof fileParts === 'string' && exportParts !== undefined) {
 					this.exportMonikers.attachMoniker(tscMoniker, fileParts, exportParts);
 				}
 			}
@@ -3321,13 +3319,13 @@ class Visitor {
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
 
-	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], private options: Options) {
+	constructor(private emitter: EmitterContext, private languageService: ts.LanguageService, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, dependsOn: ProjectInfo[], private options: Options) {
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
 		this.project = this.vertex.project(options.projectName);
 		this.project.resource = options.tsConfigFile !== undefined ? URI.file(options.tsConfigFile).toString(true) : undefined;
 		this.dataManager = dataManager;
-		this.tsProject = new TSProject(this.dataManager, languageService, dependsOn, options, this.dataManager);
+		this.tsProject = new TSProject(this.dataManager, languageService, importMonikers, exportMonikers, dependsOn, options, this.dataManager);
 
 		this.dataManager.beginProject(this.tsProject, this.project);
 		this.disposables = new Map();
@@ -3842,8 +3840,8 @@ class Visitor {
 	}
 }
 
-export function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
-	let visitor = new Visitor(emitter, languageService, dataManager, dependsOn, options);
+export function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+	let visitor = new Visitor(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, options);
 	let result = visitor.visitProgram();
 	visitor.endVisitProgram();
 	return result;

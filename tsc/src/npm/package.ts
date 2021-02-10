@@ -18,7 +18,7 @@ namespace Is {
 	}
 }
 
-class PackageJson {
+export class PackageJson {
 	static read(filename: string): PackageJson | undefined {
 		try {
 			if (fs.existsSync(filename)) {
@@ -37,7 +37,9 @@ class PackageJson {
 
 	public name: string;
 	public main: string;
+	public $absoluteMain: string;
 	public typings: string;
+	public $absoluteTypings: string;
 	public version?: string;
 	public repository?: {
 		type: string;
@@ -52,13 +54,17 @@ class PackageJson {
 		this.repository = json.repository;
 		if (Is.string(json.main)) {
 			this.main = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.main)));
+			this.$absoluteMain = path.isAbsolute(this.main) ? this.main : path.posix.join(this.$location, this.main);
 		} else {
-			this.main= 'index';
+			this.main = 'index';
+			this.$absoluteMain = path.posix.join(this.$location, 'index');
 		}
 		if (Is.string(json.typings)) {
 			this.typings = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.typings)));
+			this.$absoluteTypings = path.isAbsolute(this.typings) ? this.typings : path.posix.join(this.$location, this.typings);
 		} else {
 			this.typings = 'index';
+			this.$absoluteTypings = path.posix.join(this.$location, 'index');
 		}
 	}
 
@@ -70,5 +76,3 @@ class PackageJson {
 		return this.repository !== undefined && Is.string(this.repository.url) && Is.string(this.repository.url);
 	}
 }
-
-export default PackageJson;

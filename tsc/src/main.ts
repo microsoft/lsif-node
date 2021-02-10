@@ -33,6 +33,9 @@ import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
 import * as tss from './typescripts';
 import { Options, builder, GroupOptions } from './args';
+import { ImportMonikers } from './npm/importMonikers';
+import { ExportMonikers } from './npm/exportMonikers';
+import { PackageJson } from './npm/package';
 
 interface ResolvedGroupConfig extends GroupOptions {
 	uri: string;
@@ -314,14 +317,14 @@ interface ProcessProjectOptions {
 	projectName?:string;
 	typeAcquisition: boolean;
 	noProjectReferences: boolean;
-	packageInfo?: string | Map<string /* tsConfig */, string /* packageJson */>;
+	packageInfo?: Map<string /* tsConfig */, string /* packageJson */>;
 	stdout: boolean;
 	dataMode: DataMode;
 	reporter: Reporter;
 	processed: Map<String, ProjectInfo>;
 }
 
-async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
+async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined,  options: ProcessProjectOptions): Promise<ProjectInfo | number> {
 	const configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
 	const key = configFilePath ?? makeKey(config);
 	if (options.processed.has(key)) {
@@ -332,12 +335,12 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		return 1;
 	}
 
-
 	// we have a config file path that came from a -p option. Load the file.
 	if (configFilePath && config.options.project) {
 		config = loadConfigFile(configFilePath);
 	}
 
+	// Check if we need to do type acquisition
 	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
 		const projectRoot = options.workspaceFolder;
 		if (config.options.types !== undefined) {
@@ -345,6 +348,17 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
 		} else {
 			await typingsInstaller.guessTypings(projectRoot, configFilePath !== undefined ? path.dirname(configFilePath) : process.cwd());
+		}
+	}
+
+	// See if we need to setup a new Export moniker manager.
+	if (configFilePath !== undefined && options.packageInfo !== undefined) {
+		const packageFile = options.packageInfo.get(configFilePath);
+		if (packageFile !== undefined) {
+			const packageJson = PackageJson.read(packageFile);
+			if (packageJson !== undefined) {
+				exportMonikers = new ExportMonikers(emitter, options.workspaceFolder, packageJson);
+			}
 		}
 	}
 
@@ -419,10 +433,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const newOptions = typeof options.packageInfo === 'string'
-					? Object.assign({}, options, { package: undefined })
-					: options;
-				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, newOptions);
+				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, importMonikers, exportMonikers, options);
 				if (typeof result === 'number') {
 					return result;
 				}
@@ -475,7 +486,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		dataMode: options.dataMode,
 	};
 
-	const result = lsif(emitter, languageService, dataManager, dependsOn, lsifOptions);
+	const result = lsif(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, lsifOptions);
 	if (typeof result !== 'number') {
 		options.processed.set(key, result);
 	}
@@ -560,7 +571,29 @@ export async function run(this: void, options: Options): Promise<void> {
 		return;
 	}
 
-	const config: ts.ParsedCommandLine = ts.parseCommandLine(ts.sys.args);
+	// We have read the config from file. See if we need to put back a -p to successfully
+	// parse the command line.
+	const args: string[] = [];
+	let needsProject: boolean = true;
+	for (let i = 0; i < ts.sys.args.length; i++) {
+		const arg = ts.sys.args[i];
+		if (arg === '-p' || arg === '--project' || arg.startsWith('-p=') || arg.startsWith('--project=')) {
+			needsProject = false;
+		}
+		if (arg === '--config') {
+			i++;
+			continue;
+		}
+		if (arg.startsWith('--config=')) {
+			continue;
+		}
+		args.push(arg);
+	}
+	if (needsProject && options.p !== undefined) {
+		args.push('-p', options.p);
+	}
+
+	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
 	emitter.start();
@@ -621,9 +654,18 @@ export async function run(this: void, options: Options): Promise<void> {
 			packageInfo.set(projectPath, packagePath);
 		}
 	}
+	const workspaceFolder =  tss.normalizePath(URI.parse(group.rootUri).fsPath);
+	let exportMonikers: ExportMonikers | undefined;
+	if (typeof packageInfo === 'string') {
+		const packageJson = PackageJson.read(packageInfo);
+		if (packageJson !== undefined) {
+			exportMonikers = new ExportMonikers(emitterContext, workspaceFolder, packageJson);
+		}
+		packageInfo = undefined;
+	}
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
-		workspaceFolder: tss.normalizePath(URI.parse(group.rootUri).fsPath),
+		workspaceFolder: workspaceFolder,
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
 		noProjectReferences: options.noProjectReferences,
@@ -634,8 +676,9 @@ export async function run(this: void, options: Options): Promise<void> {
 		processed: new Map()
 	};
 	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.workspaceFolder, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceFolder);
 	dataManager.begin();
-	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
+	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();

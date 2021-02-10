@@ -18,6 +18,7 @@ import * as ts from 'lsif-tsc/node_modules/typescript';
 import { lsif as _lsif, Options as LSIFOptions, DataManager, DataMode, Reporter } from 'lsif-tsc/lib/lsif';
 import { Builder, EmitterContext } from 'lsif-tsc/lib/common/graph';
 import { Emitter } from 'lsif-tsc/lib/emitters/emitter';
+import { ImportMonikers } from 'lsif-tsc/lib/npm/importMonikers';
 
 export { ts };
 
@@ -201,7 +202,7 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();
-		_lsif(emitterContext, languageService, dataManager, [], lsifOptions);
+		_lsif(emitterContext, languageService, dataManager, new ImportMonikers(emitterContext, lsifOptions.workspaceFolder), undefined, [], lsifOptions);
 	} finally {
 		dataManager.end();
 	}
