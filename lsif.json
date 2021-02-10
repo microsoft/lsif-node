@@ -1,0 +1,13 @@
+{
+	"p": "./tsconfig.json",
+	"out": "lsif.lsif",
+	"package": [
+		{ "project": "./protocol/tsconfig.json", "package": "./protocol/package.json" },
+		{ "project": "./tsc/tsconfig.json", "package": "./tsc/package.json" },
+		{ "project": "./npm/tsconfig.json", "package": "./npm/package.json" },
+		{ "project": "./sqlite/tsconfig.json", "package": "./sqlite/package.json" },
+		{ "project": "./tooling/tsconfig.json", "package": "./tooling/package.json" },
+		{ "project": "./lsif/tsconfig.json", "package": "./lsif/package.json" },
+		{ "project": "./tsc-tests/tsconfig.json", "package": "./tsc-tests/package.json" }
+	]
+}

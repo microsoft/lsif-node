@@ -7,5 +7,4 @@ npm-debug.log
 *.db
 tsc-lsif/src/shared
 npm-lsif/src/shared
-lsif.json
 util/junit.xml
