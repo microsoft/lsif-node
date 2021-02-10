@@ -1,7 +1,7 @@
 {
 	"name": "lsif-protocol",
 	"description": "Typescript implementation of the LSIF protocol",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
