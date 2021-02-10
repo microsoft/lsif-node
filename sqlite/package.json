@@ -1,7 +1,7 @@
 {
 	"name": "lsif-sqlite",
 	"description": "Tool to convert a LSIF dump into a SQLite DB",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -17,7 +17,7 @@
 		"lsif-sqlite": "./bin/lsif-sqlite"
 	},
 	"dependencies": {
-		"lsif-protocol": "0.5.1",
+		"lsif-protocol": "0.5.2",
 		"yargs": "16.2.0",
 		"vscode-uri": "^3.0.2",
 		"better-sqlite3": "^7.1.2",
