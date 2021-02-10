@@ -693,7 +693,12 @@ async function main(this: void): Promise<void> {
 		example(`lsif-tsc -p tsconfig.json --stdout`, `Create a LSIF dump for the tsconfig.json file and print it to stdout.`).
 		version(false).
 		wrap(Math.min(100, yargs.terminalWidth()));
-	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv );
+	const parsed = builder(yargs).argv;
+	if (typeof parsed.exitCode === 'number') {
+		process.exitCode = parsed.exitCode;
+		return;
+	}
+	const options: Options = Object.assign({}, Options.defaults, parsed);
 	return run(Options.sanitize(options));
 }
 

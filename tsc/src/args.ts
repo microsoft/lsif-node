@@ -239,6 +239,15 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			skipValidation: true
 		}).
 		config('config', 'Specifies a JSON file to read the LSIF configuration from.', (configPath) => {
-			return JSON.parse(stripComments(fs.readFileSync(configPath, { encoding: 'utf8'})));
+			try {
+				return JSON.parse(stripComments(fs.readFileSync(configPath, { encoding: 'utf8'})));
+			} catch (error) {
+				if (typeof error.message === 'string') {
+					console.log(error.message);
+				} else {
+					console.log(`Can't read config from file ${configPath}.`);
+				}
+				return { exitCode: -1 };
+			}
 		});
 }
