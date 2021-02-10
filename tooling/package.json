@@ -1,7 +1,7 @@
 {
 	"name": "lsif-tooling",
 	"description": "Tooling to validate LSIF dumps",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -17,7 +17,7 @@
 		"lsif-tooling": "./bin/lsif-tooling"
 	},
 	"dependencies": {
-		"lsif-protocol": "0.5.1",
+		"lsif-protocol": "0.5.2",
 		"yargs": "16.2.0"
 	},
 	"scripts": {
