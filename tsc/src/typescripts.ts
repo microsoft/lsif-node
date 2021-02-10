@@ -9,11 +9,11 @@ import * as crypto from 'crypto';
 
 import * as ts from 'typescript';
 
-import * as Is from './utils/is';
+import * as Is from './common/is';
 
 export namespace Node {
 	export type Declaration = ts.ModuleDeclaration | ts.ClassDeclaration | ts.InterfaceDeclaration | ts.TypeParameterDeclaration | ts.FunctionDeclaration | ts.MethodDeclaration |
-		ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
+	ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
 
 	export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
 		let candidate = node as ts.NamedDeclaration;
@@ -41,7 +41,7 @@ export function normalizePath(value: string): string {
 			value = value.charAt(0).toUpperCase() + value.substring(1);
 		}
 	}
-	let result = path.posix.normalize(value);
+	const result = path.posix.normalize(value);
 	return result.length > 0 && result.charAt(result.length - 1) === '/' ? result.substr(0, result.length - 1) : result;
 }
 
@@ -370,33 +370,44 @@ export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined)
 
 interface InternalProgram extends ts.Program {
 	getCommonSourceDirectory(): string;
-	isSourceFileFromExternalLibrary(sourceFile: ts.SourceFile): boolean;
-	isSourceFileDefaultLibrary(sourceFile: ts.SourceFile): boolean;
+	sourceFileToPackageName: ts.ESMap<string, string>;
+	getResolvedModuleWithFailedLookupLocationsFromCache(moduleName: string, containingFile: string): ts.ResolvedModuleWithFailedLookupLocations | undefined;
 }
 
 export namespace Program {
 	export function getCommonSourceDirectory(program: ts.Program): string {
-		let internal: InternalProgram = program as InternalProgram;
+		const internal: InternalProgram = program as InternalProgram;
 		if (typeof internal.getCommonSourceDirectory !== 'function') {
 			throw new Error(`Program is missing getCommonSourceDirectory`);
 		}
 		return internal.getCommonSourceDirectory();
 	}
 
-	export function isSourceFileFromExternalLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
-		let internal: InternalProgram = program as InternalProgram;
-		if (typeof internal.isSourceFileFromExternalLibrary !== 'function') {
-			throw new Error(`Program is missing isSourceFileFromExternalLibrary`);
+	export function sourceFileToPackageName(program: ts.Program, sourceFile: ts.SourceFile): string | undefined {
+		const internal: InternalProgram = program as InternalProgram;
+		if (internal.sourceFileToPackageName === undefined) {
+			throw new Error(`Program is missing sourceFileToPackageName`);
 		}
-		return internal.isSourceFileFromExternalLibrary(sourceFile);
+		// The file names are keyed by lower case. Not sure why
+		return internal.sourceFileToPackageName.get(sourceFile.fileName.toLowerCase());
 	}
 
-	export function isSourceFileDefaultLibrary(program: ts.Program, sourceFile: ts.SourceFile): boolean {
-		let internal: InternalProgram = program as InternalProgram;
-		if (typeof internal.isSourceFileFromExternalLibrary !== 'function') {
-			throw new Error(`Program is missing isSourceFileDefaultLibrary`);
+	export function getResolvedModule(program: ts.Program,  sourceFile: ts.SourceFile): ts.ResolvedModuleFull | undefined {
+		const internal: InternalProgram = program as InternalProgram;
+		if (internal.sourceFileToPackageName === undefined) {
+			throw new Error(`Program is missing sourceFileToPackageName`);
 		}
-		return internal.isSourceFileDefaultLibrary(sourceFile);
+		// The file names are keyed by lower case. Not sure why
+		const moduleName =  internal.sourceFileToPackageName.get(sourceFile.fileName.toLowerCase());
+		if (moduleName === undefined) {
+			return undefined;
+		}
+
+		if (typeof internal.getResolvedModuleWithFailedLookupLocationsFromCache !== 'function') {
+			throw new Error(`Program is missing getResolvedModuleWithFailedLookupLocationsFromCache`);
+		}
+		const value = internal.getResolvedModuleWithFailedLookupLocationsFromCache(moduleName, sourceFile.fileName);
+		return value && value.resolvedModule;
 	}
 }
 
@@ -409,12 +420,13 @@ export namespace CompileOptions {
 		if (options.project) {
 			const projectPath = path.resolve(options.project);
 			if (ts.sys.directoryExists(projectPath)) {
-				return path.join(projectPath, 'tsconfig.json');
+				return normalizePath(path.join(projectPath, 'tsconfig.json'));
 			} else {
-				return projectPath;
+				return normalizePath(projectPath);
 			}
 		}
-		return (options as InternalCompilerOptions).configFilePath;
+		const result = (options as InternalCompilerOptions).configFilePath;
+		return result && makeAbsolute(result);
 	}
 }
 

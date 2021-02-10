@@ -1,7 +1,7 @@
 {
 	"name": "lsif-node",
 	"private": true,
-	"version": "0.4.0",
+	"version": "0.5.2",
 	"description": "",
 	"repository": {
 		"type": "git",
@@ -17,8 +17,8 @@
 		"@types/node": "^12.12.29",
 		"@types/shelljs": "^0.8.8",
 		"@types/yargs": "^16.0.0",
-		"@typescript-eslint/eslint-plugin": "^3.7.0",
-		"@typescript-eslint/parser": "^3.7.0",
+		"@typescript-eslint/eslint-plugin": "^4.15.0",
+		"@typescript-eslint/parser": "^4.15.0",
 		"eslint": "^6.8.0",
 		"mocha": "^8.2.0",
 		"rimraf": "^3.0.2",

@@ -2,9 +2,20 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
+import { promisify } from 'util';
+import * as fs from 'fs';
+
+namespace pfs {
+	export const stat = promisify(fs.stat);
+	export const readFile = promisify(fs.readFile);
+	export async function isFile(path: fs.PathLike): Promise<boolean> {
+		const stat = await pfs.stat(path);
+		return stat.isFile();
+	}
+}
+
 import * as path from 'path';
 import * as uuid from 'uuid';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import * as os from 'os';
 
@@ -14,35 +25,27 @@ import * as ts from 'typescript';
 
 import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-protocol';
 
-import { Emitter, EmitterModule } from './emitters/emitter';
-import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as LSIFOptions, EmitterContext, DataManager, DataMode, Reporter } from './lsif';
 import { Writer, StdoutWriter, FileWriter } from './common/writer';
-import { Builder } from './graph';
+import { Builder, EmitterContext } from './common/graph';
+import { Emitter, EmitterModule } from './emitters/emitter';
+
+import { TypingsInstaller } from './typings';
+import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
 import * as tss from './typescripts';
-import { Options, builder } from './args';
+import { Options, builder, GroupOptions } from './args';
+import { ImportMonikers } from './npm/importMonikers';
+import { ExportMonikers } from './npm/exportMonikers';
+import { PackageJson } from './npm/package';
 
-interface GroupConfig {
-	uri?: string;
-	conflictResolution?: 'takeDump' | 'takeDB';
-	name?: string;
-	rootUri?: string;
-	description? : string;
-	repository?: {
-		type: string;
-		url: string;
-	}
-}
-
-interface ResolvedGroupConfig extends GroupConfig {
+interface ResolvedGroupConfig extends GroupOptions {
 	uri: string;
 	conflictResolution: 'takeDump' | 'takeDB';
 	name: string;
 	rootUri: string;
 }
 
-namespace ResolvedGroupConfig {
-	export function from(groupConfig: GroupConfig): ResolvedGroupConfig | undefined {
+namespace ResolvedGroupOptions {
+	export function from(groupConfig: GroupOptions): ResolvedGroupConfig | undefined {
 		if (groupConfig.uri === undefined || groupConfig.name === undefined || groupConfig.rootUri === undefined) {
 			return undefined;
 		}
@@ -110,11 +113,11 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-async function readGroupConfig(options: Options): Promise<GroupConfig | undefined | number> {
+async function readGroupConfig(options: Options): Promise<GroupOptions | undefined | number> {
 	const group = options.group;
 	if (group === 'stdin') {
 		try {
-			const result: GroupConfig | undefined = await new Promise((resolve, reject) => {
+			const result: GroupOptions | undefined = await new Promise((resolve, reject) => {
 				const stdin = process.stdin;
 				let buffer: Buffer | undefined;
 				stdin.on('data', (data) => {
@@ -149,14 +152,14 @@ async function readGroupConfig(options: Options): Promise<GroupConfig | undefine
 			}
 			return 1;
 		}
-	} else {
+	} else if (typeof group === 'string' || group === undefined) {
 		const filePath = group !== undefined ? group : process.cwd();
 		try {
-			const stat = fs.statSync(filePath);
+			const stat = await pfs.stat(filePath);
 			if (stat.isFile()) {
-				let groupConfig: GroupConfig | undefined;
+				let groupConfig: GroupOptions | undefined;
 				try {
-					groupConfig = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf8'}));
+					groupConfig = JSON.parse(await pfs.readFile(filePath, { encoding: 'utf8'}));
 				} catch (err) {
 					console.error(`Reading group config file ${options.group} failed.`);
 					if (err) {
@@ -183,6 +186,8 @@ async function readGroupConfig(options: Options): Promise<GroupConfig | undefine
 			console.error(`Group config file system path ${options.group} doesn't exist.`);
 			return 1;
 		}
+	} else {
+		return group;
 	}
 }
 
@@ -308,17 +313,18 @@ class FileReporter extends StreamReporter {
 
 interface ProcessProjectOptions {
 	group: Group;
-	groupRoot: string;
+	workspaceFolder: string;
 	projectName?:string;
 	typeAcquisition: boolean;
 	noProjectReferences: boolean;
+	packageInfo?: Map<string /* tsConfig */, string /* packageJson */>;
 	stdout: boolean;
 	dataMode: DataMode;
 	reporter: Reporter;
 	processed: Map<String, ProjectInfo>;
 }
 
-async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
+async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined,  options: ProcessProjectOptions): Promise<ProjectInfo | number> {
 	const configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
 	const key = configFilePath ?? makeKey(config);
 	if (options.processed.has(key)) {
@@ -328,18 +334,31 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		console.error(`Project configuration file ${configFilePath} does not exist`);
 		return 1;
 	}
+
 	// we have a config file path that came from a -p option. Load the file.
 	if (configFilePath && config.options.project) {
 		config = loadConfigFile(configFilePath);
 	}
 
+	// Check if we need to do type acquisition
 	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
-		const projectRoot = options.groupRoot;
+		const projectRoot = options.workspaceFolder;
 		if (config.options.types !== undefined) {
 			const start = configFilePath !== undefined ? configFilePath : process.cwd();
 			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
 		} else {
 			await typingsInstaller.guessTypings(projectRoot, configFilePath !== undefined ? path.dirname(configFilePath) : process.cwd());
+		}
+	}
+
+	// See if we need to setup a new Export moniker manager.
+	if (configFilePath !== undefined && options.packageInfo !== undefined) {
+		const packageFile = options.packageInfo.get(configFilePath);
+		if (packageFile !== undefined) {
+			const packageJson = PackageJson.read(packageFile);
+			if (packageJson !== undefined) {
+				exportMonikers = new ExportMonikers(emitter, options.workspaceFolder, packageJson);
+			}
 		}
 	}
 
@@ -414,7 +433,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, options);
+				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, importMonikers, exportMonikers, options);
 				if (typeof result === 'number') {
 					return result;
 				}
@@ -442,7 +461,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		if (options.projectName !== undefined) {
 			projectName = `${options.projectName}/${level + 1}`;
 		} else {
-			projectName =`${path.basename(options.groupRoot)}/${level + 1}`;
+			projectName =`${path.basename(options.workspaceFolder)}/${level + 1}`;
 		}
 	}
 	if (projectName === undefined) {
@@ -450,18 +469,24 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		return 1;
 	}
 
+	const packageJsonFile: string | undefined = options.packageInfo === undefined
+		? undefined
+		: typeof options.packageInfo === 'string'
+			? options.packageInfo
+			: configFilePath !== undefined ? options.packageInfo.get(configFilePath) : undefined;
+
 	const lsifOptions: LSIFOptions = {
 		group: options.group,
-		groupRoot: options.groupRoot,
+		workspaceFolder: options.workspaceFolder,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
-		packageJson: undefined,
+		packageJsonFile: packageJsonFile,
 		stdout: options.stdout,
 		reporter: options.reporter,
 		dataMode: options.dataMode,
 	};
 
-	const result = lsif(emitter, languageService, dataManager, dependsOn, lsifOptions);
+	const result = lsif(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, lsifOptions);
 	if (typeof result !== 'number') {
 		options.processed.set(key, result);
 	}
@@ -477,6 +502,29 @@ export async function run(this: void, options: Options): Promise<void> {
 	if (options.version) {
 		console.log(require('../package.json').version);
 		return;
+	}
+
+	options = Options.resolvePathToConfig(options);
+	if (typeof options.package === 'string' && !await pfs.isFile(options.package)) {
+		console.log(`The package.json file referenced by the package option doesn't exist. The value is ${options.package}`);
+		process.exitCode = -1;
+		return;
+	} else if (Array.isArray(options.package)) {
+		let failed: boolean = false;
+		for (const item of options.package) {
+			if (!await pfs.isFile(item.project)) {
+				console.log(`The project file referenced by the package options doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+				failed = true;
+			}
+			if (item.package !== undefined && !await pfs.isFile(item.package)) {
+				console.log(`The package.json file referenced by the package option doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+				failed = true;
+			}
+		}
+		if (failed) {
+			process.exitCode = -1;
+			return;
+		}
 	}
 
 	let writer: Writer | undefined;
@@ -515,7 +563,7 @@ export async function run(this: void, options: Options): Promise<void> {
 			process.exitCode = 1;
 			return;
 		}
-		resolvedGroupConfig = ResolvedGroupConfig.from(groupConfig);
+		resolvedGroupConfig = ResolvedGroupOptions.from(groupConfig);
 	}
 	if (resolvedGroupConfig === undefined) {
 		console.error(`Couldn't resolve group configuration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
@@ -523,8 +571,29 @@ export async function run(this: void, options: Options): Promise<void> {
 		return;
 	}
 
+	// We have read the config from file. See if we need to put back a -p to successfully
+	// parse the command line.
+	const args: string[] = [];
+	let needsProject: boolean = true;
+	for (let i = 0; i < ts.sys.args.length; i++) {
+		const arg = ts.sys.args[i];
+		if (arg === '-p' || arg === '--project' || arg.startsWith('-p=') || arg.startsWith('--project=')) {
+			needsProject = false;
+		}
+		if (arg === '--config') {
+			i++;
+			continue;
+		}
+		if (arg.startsWith('--config=')) {
+			continue;
+		}
+		args.push(arg);
+	}
+	if (needsProject && options.p !== undefined) {
+		args.push('-p', options.p);
+	}
 
-	const config: ts.ParsedCommandLine = ts.parseCommandLine(ts.sys.args);
+	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
 	emitter.start();
@@ -570,20 +639,46 @@ export async function run(this: void, options: Options): Promise<void> {
 		reporter = new NullReporter();
 	}
 	reporter.begin();
+
+	let packageInfo: string | Map<string, string> | undefined;
+	if (options.package === undefined || typeof options.package === 'string') {
+		packageInfo = options.package;
+	} else {
+		packageInfo = new Map();
+		for (const item of options.package) {
+			const projectPath = tss.normalizePath(item.project);
+			let packagePath = item.package;
+			if (packagePath === undefined) {
+				packagePath = tss.normalizePath(path.posix.join(path.posix.dirname(projectPath), 'package.json'));
+			}
+			packageInfo.set(projectPath, packagePath);
+		}
+	}
+	const workspaceFolder =  tss.normalizePath(URI.parse(group.rootUri).fsPath);
+	let exportMonikers: ExportMonikers | undefined;
+	if (typeof packageInfo === 'string') {
+		const packageJson = PackageJson.read(packageInfo);
+		if (packageJson !== undefined) {
+			exportMonikers = new ExportMonikers(emitterContext, workspaceFolder, packageJson);
+		}
+		packageInfo = undefined;
+	}
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
-		groupRoot: tss.normalizePath(URI.parse(group.rootUri).fsPath),
+		workspaceFolder: workspaceFolder,
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
 		noProjectReferences: options.noProjectReferences,
 		stdout: options.stdout,
 		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
+		packageInfo: packageInfo,
 		reporter: reporter,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.groupRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.workspaceFolder, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceFolder);
 	dataManager.begin();
-	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, processProjectOptions);
+	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();
 	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
@@ -599,7 +694,7 @@ async function main(this: void): Promise<void> {
 		version(false).
 		wrap(Math.min(100, yargs.terminalWidth()));
 	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv );
-	return run(options);
+	return run(Options.sanitize(options));
 }
 
 if (require.main === module) {

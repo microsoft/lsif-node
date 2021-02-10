@@ -7,7 +7,7 @@
 import { URI } from 'vscode-uri';
 
 import {
-	lsp, Id, Vertex, E,
+	lsp, Id, Vertex, E, Edge,
 	Group, Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
 	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
@@ -537,4 +537,10 @@ export class Builder {
 	public get edge(): EdgeBuilder {
 		return this._edge;
 	}
+}
+
+export interface EmitterContext {
+	vertex: VertexBuilder;
+	edge: EdgeBuilder;
+	emit(element: Vertex | Edge): void;
 }
