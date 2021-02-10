@@ -26,14 +26,14 @@
 		"typescript": "^3.9.7"
 	},
 	"scripts": {
-		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../tooling && npm install && cd ../util && npm install && cd ../lsif && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
+		"postinstall": "node ./build/bin/all.js install && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
 		"compile": "tsc -b ./tsconfig.json",
 		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
-		"lint": "cd protocol && npm run lint && cd ../tsc && npm run lint && cd ../npm && npm run lint && cd ../sqlite && npm run lint && cd ../tooling && npm run lint && cd ../util && npm run lint && cd ..",
-		"clean": "cd protocol && npm run clean && cd ../tooling && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ../sqlite && npm run clean && cd ../tooling && npm run clean && cd ..",
+		"lint": "node ./build/bin/all.js run lint",
+		"clean": "node ./build/bin/all.js run clean",
 		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."
 	}
 }

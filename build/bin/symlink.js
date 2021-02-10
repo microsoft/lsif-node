@@ -1,11 +1,15 @@
 #!/usr/bin/env node
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
 
-let path  = require('path');
-let fs = require('fs');
-let shell = require('shelljs');
+const path  = require('path');
+const fs = require('fs');
+const shell = require('shelljs');
 
-let root = path.dirname(path.dirname(__dirname));
-let current = process.cwd();
+const root = path.dirname(path.dirname(__dirname));
+const current = process.cwd();
 
 /**
  * @param {string} target
