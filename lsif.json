@@ -1,6 +1,8 @@
 {
+	// The TS project file
 	"p": "./tsconfig.json",
 	"out": "lsif.lsif",
+	// The mapping from TS project to package.json to correctly generate NPM export monikers.
 	"package": [
 		{ "project": "./protocol/tsconfig.json", "package": "./protocol/package.json" },
 		{ "project": "./tsc/tsconfig.json", "package": "./tsc/package.json" },
