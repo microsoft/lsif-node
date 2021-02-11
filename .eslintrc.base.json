@@ -9,8 +9,8 @@
 		"node": true
 	},
 	"rules": {
-		"semi": "error",
-		"no-extra-semi": "warn",
+        "semi": "off",
+        "@typescript-eslint/semi": "error",
 		"curly": "warn",
 		"quotes": ["error", "single", { "allowTemplateLiterals": true } ],
 		"eqeqeq": "error",
