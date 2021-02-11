@@ -11,15 +11,15 @@ export const command: string = 'tsc';
 
 export const describe: string = 'Language Server Index Format tool for TypeScript';
 
-export type PackageOptions = {
+export type PublishedPackageOptions = {
+	package: string;
 	project: string;
-	package?: string;
 }
 
-export namespace PackageOptions {
-	export function is(value: any): value is PackageOptions {
-		const candidate = value as PackageOptions;
-		return candidate && typeof candidate.project === 'string' && (candidate.package === undefined || typeof candidate.package === 'string');
+export namespace PublishedPackageOptions {
+	export function is(value: any): value is PublishedPackageOptions {
+		const candidate = value as PublishedPackageOptions;
+		return candidate && typeof candidate.package === 'string' && typeof candidate.project === 'string';
 	}
 }
 
@@ -50,7 +50,8 @@ export type Options = {
 	moniker: 'strict' | 'lenient'
 	group: string | GroupOptions | undefined;
 	projectName: string | undefined;
-	package: string | PackageOptions[] | undefined;
+	package: string | undefined;
+	publishedPackages: PublishedPackageOptions[] | undefined;
 	log: string | boolean;
 }
 
@@ -71,23 +72,22 @@ export namespace Options {
 		group: undefined,
 		projectName: undefined,
 		package: undefined,
+		publishedPackages: undefined,
 		log: ''
 	};
 
 	export function sanitize(options: Options): Options {
 		const result = Object.assign({}, options);
-		if (result.package === undefined || typeof result.package === 'string') {
-			return result;
+		if (!Array.isArray(result.publishedPackages)) {
+			result.publishedPackages = undefined;
 		}
-		if (!Array.isArray(result.package)) {
-			result.package = undefined;
-			return result;
-		}
-		for (let i = 0; i < result.package.length; ) {
-			if (!PackageOptions.is(result.package[i])) {
-				result.package.splice(i, 1);
-			} else {
-				i++;
+		if (result.publishedPackages !== undefined) {
+			for (let i = 0; i < result.publishedPackages.length; ) {
+				if (!PublishedPackageOptions.is(result.publishedPackages[i])) {
+					result.publishedPackages.splice(i, 1);
+				} else {
+					i++;
+				}
 			}
 		}
 		if (result.group === undefined || typeof result.group === 'string') {
@@ -112,6 +112,7 @@ export namespace Options {
 		if (typeof result.group.repository?.type === 'string' && typeof result.group.repository?.url === 'string') {
 			group.repository = { url: result.group.repository.url, type: result.group.repository.type };
 		}
+		Object.keys(group).length > 0 ? result.group = group : result.group = undefined;
 		return result;
 	}
 
@@ -130,16 +131,15 @@ export namespace Options {
 		}
 		if (typeof options.package === 'string') {
 			result.package = makeAbsolute(options.package);
-		} else if (Array.isArray(options.package)) {
-			result.package = [];
-			for (const item of options.package) {
-				const newItem: PackageOptions = {
+		}
+		if (Array.isArray(options.publishedPackages)) {
+			result.publishedPackages = [];
+			for (const item of options.publishedPackages) {
+				const newItem: PublishedPackageOptions = {
+					package: makeAbsolute(item.package),
 					project: makeAbsolute(item.project)
 				};
-				if (item.package !== undefined) {
-					newItem.package = makeAbsolute(item.package);
-				}
-				result.package.push(newItem);
+				result.publishedPackages.push(newItem);
 			}
 		}
 		return result;
@@ -231,8 +231,8 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			boolean: true
 		}).
 		option('package', {
-			description: 'Provides a mapping of project to package.json files to generate NPM monikers.',
-			skipValidation: true
+			description: 'The package.json file used to publish the project to npm.',
+			string: true
 		}).
 		option('log', {
 			description: 'If provided without a file name then the name of the output file is used with an additional \'.log\' extension.',

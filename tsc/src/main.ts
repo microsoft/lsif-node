@@ -504,20 +504,26 @@ export async function run(this: void, options: Options): Promise<void> {
 		return;
 	}
 
+	if (options.package !== undefined && options.publishedPackages !== undefined) {
+		console.log(`Only package or publishedPackages can be set but not both.`);
+		process.exitCode = - 1;
+		return;
+	}
+
 	options = Options.resolvePathToConfig(options);
-	if (typeof options.package === 'string' && !await pfs.isFile(options.package)) {
+	if (options.package && !await pfs.isFile(options.package)) {
 		console.log(`The package.json file referenced by the package option doesn't exist. The value is ${options.package}`);
 		process.exitCode = -1;
 		return;
-	} else if (Array.isArray(options.package)) {
+	} else if (options.publishedPackages !== undefined) {
 		let failed: boolean = false;
-		for (const item of options.package) {
-			if (!await pfs.isFile(item.project)) {
-				console.log(`The project file referenced by the package options doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+		for (const item of options.publishedPackages) {
+			if (!await pfs.isFile(item.package)) {
+				console.log(`The package.json file referenced by the 'publishedPackages' option doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
 				failed = true;
 			}
-			if (item.package !== undefined && !await pfs.isFile(item.package)) {
-				console.log(`The package.json file referenced by the package option doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+			if (!await pfs.isFile(item.project)) {
+				console.log(`The project file referenced by the 'publishedPackages' options doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
 				failed = true;
 			}
 		}
@@ -641,17 +647,16 @@ export async function run(this: void, options: Options): Promise<void> {
 	reporter.begin();
 
 	let packageInfo: string | Map<string, string> | undefined;
-	if (options.package === undefined || typeof options.package === 'string') {
+	if (options.package !== undefined) {
 		packageInfo = options.package;
 	} else {
 		packageInfo = new Map();
-		for (const item of options.package) {
-			const projectPath = tss.normalizePath(item.project);
-			let packagePath = item.package;
-			if (packagePath === undefined) {
-				packagePath = tss.normalizePath(path.posix.join(path.posix.dirname(projectPath), 'package.json'));
+		if (options.publishedPackages !== undefined) {
+			for (const item of options.publishedPackages) {
+				const packagePath = tss.normalizePath(item.package);
+				const projectPath = tss.normalizePath(item.project);
+				packageInfo.set(projectPath, packagePath);
 			}
-			packageInfo.set(projectPath, packagePath);
 		}
 	}
 	const workspaceFolder =  tss.normalizePath(URI.parse(group.rootUri).fsPath);

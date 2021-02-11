@@ -1,15 +1,16 @@
 {
-	// The TS project file
-	"p": "./tsconfig.json",
+	// The root TypeScript project to index
+	"project": "./tsconfig.json",
+	// The name of the output file
 	"out": "lsif.lsif",
-	// The mapping from TS project to package.json to correctly generate NPM export monikers.
-	"package": [
-		{ "project": "./protocol/tsconfig.json", "package": "./protocol/package.json" },
-		{ "project": "./tsc/tsconfig.json", "package": "./tsc/package.json" },
-		{ "project": "./npm/tsconfig.json", "package": "./npm/package.json" },
-		{ "project": "./sqlite/tsconfig.json", "package": "./sqlite/package.json" },
-		{ "project": "./tooling/tsconfig.json", "package": "./tooling/package.json" },
-		{ "project": "./lsif/tsconfig.json", "package": "./lsif/package.json" },
-		{ "project": "./tsc-tests/tsconfig.json", "package": "./tsc-tests/package.json" }
+	// A mapping describing which packages are published to npm and what TS project files is used
+	// to generate the package code.
+	"publishedPackages": [
+		{ "package": "./protocol/package.json", "project": "./protocol/tsconfig.json" },
+		{ "package": "./tsc/package.json", "project": "./tsc/tsconfig.json" },
+		{ "package": "./npm/package.json", "project": "./npm/tsconfig.json" },
+		{ "package": "./sqlite/package.json", "project": "./sqlite/tsconfig.json" },
+		{ "package": "./tooling/package.json", "project": "./tooling/tsconfig.json" },
+		{ "package": "./lsif/package.json", "project": "./lsif/tsconfig.json" }
 	]
 }
