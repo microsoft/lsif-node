@@ -6,6 +6,7 @@
 import { promisify } from 'util';
 import * as path from 'path';
 import * as _fs from 'fs';
+import * as cp from 'child_process';
 
 namespace fs {
 	export const exist = promisify(_fs.exists);
@@ -14,17 +15,14 @@ namespace fs {
 	export const Stats = _fs.Stats;
 }
 
+namespace pcp {
+	export const exec = promisify(cp.exec);
+}
+
+import latestVersion from 'latest-version';
+
 interface Dictionary<T> {
 	[key: string]: T
-}
-
-interface CommandCallback {
-	(err?: Error, result?: any, result2?: any, result3?: any, result4?: any): void;
-}
-
-interface ViewSignature {
-	(args: string[], callback: CommandCallback): void;
-	(args: string[], silent: boolean, callback: CommandCallback): void;
 }
 
 interface PackageJson {
@@ -106,7 +104,6 @@ export class TypingsInstaller {
 				if (typings.length === 0) {
 					return;
 				}
-				await this.loadNpm(packageFile);
 				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
 				this.handledTsConfig.add(key);
 				return;
@@ -136,7 +133,6 @@ export class TypingsInstaller {
 				if (typings.length === 0) {
 					continue;
 				}
-				await this.loadNpm(packageFile);
 				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
 				this.handledPackages.add(packageFile);
 			}
@@ -205,36 +201,14 @@ export class TypingsInstaller {
 		return result;
 	}
 
-	private async loadNpm(packageFile: string): Promise<void> {
-		const prefix = path.dirname(packageFile);
-		let npm = await import('npm');
-		await new Promise((resolve, reject) => {
-			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix, spin: false, loglevel: 'silent', 'progress': false, 'audit': false } as any, (error, config) => {
-				if (error) {
-					reject(error);
-				} else {
-					resolve(config);
-				}
-			});
-		});
-	}
-
 	private async validateTypingsOnNpm(typings: string[]): Promise<string[]> {
 		if (typings.length === 0) {
 			return typings;
 		}
 		const promises: Promise<string | undefined>[] = [];
-		let npm = await import('npm');
 		for (let typing of typings) {
 			try {
-				promises.push(new Promise<string | undefined>((resolve, _reject) => {
-					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, _result: object) => {
-						if (error) {
-							resolve(undefined);
-						}
-						resolve(typing);
-					});
-				}));
+				promises.push(latestVersion(typing).then(() => typing, (_error) => undefined));
 			} catch (error) {
 				// typing doesn't exist. Ignore the error
 			}
@@ -253,20 +227,8 @@ export class TypingsInstaller {
 		if (typings.length === 0) {
 			return;
 		}
-		let npm = await import('npm');
-		return new Promise((resolve, reject) => {
-			// NPM can't be made really silent. So we patch console.log while we are actually
-			// updating. Will not affect outputting LSIF to stdout since we wait until the installer
-			// is finished.
-			const save = console.log;
-			console.log = () => {};
-			npm.commands.install(typings, (error, result) => {
-				console.log = save;
-				if (error) {
-					reject(error);
-				}
-				resolve(result);
-			});
-		});
+		// Need to think about command length. Might be a limit.
+		const command = `npm install --no-save ${typings.join(' ')}`;
+		await pcp.exec(command);
 	}
 }

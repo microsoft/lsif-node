@@ -248,10 +248,10 @@ class DocumentData extends LSIFData<EmitterContext> {
 	private static EMPTY_ARRAY = Object.freeze([]) as unknown as any[];
 
 	public readonly projectId: ProjectId;
-	public readonly document: Document
+	public readonly document: Document;
 	public readonly moduleSystem: ModuleSystemKind;
-	public readonly monikerPath: string | undefined
-	public readonly external: boolean
+	public readonly monikerPath: string | undefined;
+	public readonly external: boolean;
 	public readonly next: DocumentData | undefined;
 	private _isClosed: boolean;
 	private ranges: Range[];
@@ -2946,7 +2946,7 @@ export class DataManager implements SymbolDataContext {
 	private readonly clearedSymbolDataItems: Map<string, ProjectId[]>;
 	private readonly partitionLifeCycle: Map<Id /* Document | Project */, SymbolData[]>;
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
-	private readonly validateVisibilityOn: Map<string, SymbolData[]>
+	private readonly validateVisibilityOn: Map<string, SymbolData[]>;
 
 	public constructor(context: EmitterContext, group: Group, workspaceFolder: string, reporter: Reporter, dataMode: DataMode) {
 		this.context = context;
