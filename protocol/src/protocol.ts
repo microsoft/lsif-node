@@ -166,7 +166,7 @@ type _objectDescription<T extends Object> = {
 		: T[P] extends EdgeLabels
 			? EdgeLabelsProperty
 			: Property<NotUndefined<T[P]>>;
-}
+};
 
 type ObjectDescription<T extends Object> = Omit<_objectDescription<T>, '__brand'>;
 
@@ -175,7 +175,7 @@ interface Indexable {
 }
 
 class ObjectDescriptor<T extends Object> {
-	public readonly description: ObjectDescription<T>
+	public readonly description: ObjectDescription<T>;
 	constructor(description: ObjectDescription<T>) {
 		this.description = description;
 	}
