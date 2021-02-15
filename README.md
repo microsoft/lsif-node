@@ -6,20 +6,22 @@ A first draft specification can be found [here](https://github.com/Microsoft/lan
 
 ## How to Run the tools
 
-- `> npm install -g lsif-tsc` install the tsc LSIF tool.
-- `> lsif-tsc -p .\tsconfig.json --stdout` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
+- `> npm install -g lsif` to install the LSIF tool chain.
+- `> lsif tsc -p .\tsconfig.json --stdout` creates a LSIF dump for the given typescript project. Output format is new line separated JSON.
 
-If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so run
+If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so you can either ask the tsc tool to already do that using
 
-- `> npm install -g lsif-npm` install the npm LSIF tools
-- `> lsif-tsc -p .\tsconfig.json --stdout | lsif-npm --stdin --package .\package.json --stdout` creates an LSIF dump and converts the monikers to npm format.
+- `> lsif tsc -p .\tsconfig.json --package .\package.json --stdout`
+
+or you can run the tool separate in case you want to inspect the newly generated NPM monikers using
+
+- `lsif tsc -p .\tsconfig.json --stdout || lsif npm --stdin --package .\package.json --stdout`
 
 Please note that the tools are work in progress and that we have not done any extensive testing so far. Known issues are:
 
 1. Go to Declaration for function overloads doesn't honor the signature
 1. Go to Type Declaration is not fully implement
 1. Document link support and go to implementation is completely  missing
-1. Reference results are not always inlined when possible
 
 Both tools support --help to get information about their command line arguments.
 
