@@ -1,14 +1,18 @@
-trigger:
-- none
+schedules:
+- cron: "0 0 * * *"
+  displayName: Daily midnight test repositories validation
+  branches:
+    include:
+    - main
 
 pool:
-  vmImage: 'Ubuntu-16.04'
+  vmImage: 'ubuntu-20.04'
 
 steps:
 - task: NodeTool@0
   inputs:
-    versionSpec: '10.*'
-  displayName: 'Use Node.js 10.15.1'
+    versionSpec: '12.18.3'
+  displayName: 'Use Node.js 12.18.3'
 
 - script: |
     npm ci
