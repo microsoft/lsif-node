@@ -21,7 +21,7 @@ function updateNextTag() {
 		return;
 	}
 
-	opts = {};
+	var opts = {};
 	opts.stdio = 'inherit';
 
 	console.log(name + ": set 'next' tag to latest version");

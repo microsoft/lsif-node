@@ -14,7 +14,7 @@ export const describe: string = 'Language Server Index Format tool for TypeScrip
 export type PublishedPackageOptions = {
 	package: string;
 	project: string;
-}
+};
 
 export namespace PublishedPackageOptions {
 	export function is(value: any): value is PublishedPackageOptions {
@@ -53,7 +53,7 @@ export type Options = {
 	package: string | undefined;
 	publishedPackages: PublishedPackageOptions[] | undefined;
 	log: string | boolean;
-}
+};
 
 export namespace Options {
 	export const defaults: Options = {
