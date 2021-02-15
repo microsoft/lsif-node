@@ -42,7 +42,7 @@ class PackageJson {
 	public repository?: {
 		type: string;
 		url: string;
-	}
+	};
 
 	private constructor(fileName: string, json: any) {
 		this.$fileName = paths.normalizeSeparator(fileName);

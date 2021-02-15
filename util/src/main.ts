@@ -76,12 +76,12 @@ export function main(): void {
 					process.exitCode = 1;
 				} else {
 					readInput(
-				argv.inputFormat as string,
-				argv.stdin ? '--stdin' : argv.file as string,
-				(input: LSIF.Element[]) => {
-					const filter: IFilter = argv as unknown as IFilter;
-					process.exitCode = validate(input, getFilteredIds(filter, input));
-				});
+						argv.inputFormat as string,
+						argv.stdin ? '--stdin' : argv.file as string,
+						(input: LSIF.Element[]) => {
+							const filter: IFilter = argv as unknown as IFilter;
+							process.exitCode = validate(input, getFilteredIds(filter, input));
+						});
 				}
 			})
 
