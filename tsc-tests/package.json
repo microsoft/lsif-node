@@ -13,9 +13,9 @@
 		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
 	"dependencies": {
-		"lsif-protocol": "0.5.1",
-		"lsif-tooling": "0.5.1",
-		"lsif-tsc": "0.5.1",
+		"lsif-protocol": "0.5.2",
+		"lsif-tooling": "0.5.2",
+		"lsif-tsc": "0.5.5",
 		"vscode-uri": "^3.0.2"
 	},
 	"devDependencies": {
