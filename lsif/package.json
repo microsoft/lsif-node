@@ -17,7 +17,7 @@
 		"lsif": "./bin/lsif"
 	},
 	"dependencies": {
-		"yargs": "^16.0.3",
+		"yargs": "^16.2.0",
 		"lsif-tsc": "0.5.5",
 		"lsif-npm": "0.5.2",
 		"lsif-sqlite": "0.5.2",
