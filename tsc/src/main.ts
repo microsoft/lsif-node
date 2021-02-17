@@ -690,7 +690,7 @@ export async function run(this: void, options: Options): Promise<void> {
 	reporter.end();
 }
 
-async function main(this: void): Promise<void> {
+export async function main(this: void): Promise<void> {
 	yargs.
 		parserConfiguration({ 'camel-case-expansion': false }).
 		exitProcess(false).
