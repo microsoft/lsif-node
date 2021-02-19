@@ -49,8 +49,16 @@ namespace ResolvedGroupOptions {
 		if (groupConfig.uri === undefined || groupConfig.name === undefined || groupConfig.rootUri === undefined) {
 			return undefined;
 		}
+		let groupUri = URI.parse(groupConfig.uri);
+		if (groupUri.scheme === 'file' && !groupConfig.uri.startsWith('file:')) {
+			groupUri = groupUri.with({ 'scheme': 'lsif'});
+		}
+		let rootUri = URI.parse(groupConfig.rootUri);
+		if (rootUri.scheme !== 'file') {
+			console.log();
+		}
 		return {
-			uri: groupConfig.uri,
+			uri: groupUri.toString(true),
 			conflictResolution: groupConfig.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB',
 			name: groupConfig.name,
 			rootUri: groupConfig.rootUri,
@@ -512,18 +520,18 @@ export async function run(this: void, options: Options): Promise<void> {
 
 	options = Options.resolvePathToConfig(options);
 	if (options.package && !await pfs.isFile(options.package)) {
-		console.log(`The package.json file referenced by the package option doesn't exist. The value is ${options.package}`);
+		console.error(`The package.json file referenced by the package option doesn't exist. The value is ${options.package}`);
 		process.exitCode = -1;
 		return;
 	} else if (options.publishedPackages !== undefined) {
 		let failed: boolean = false;
 		for (const item of options.publishedPackages) {
 			if (!await pfs.isFile(item.package)) {
-				console.log(`The package.json file referenced by the 'publishedPackages' option doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+				console.error(`The package.json file referenced by the 'publishedPackages' option doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
 				failed = true;
 			}
 			if (!await pfs.isFile(item.project)) {
-				console.log(`The project file referenced by the 'publishedPackages' options doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
+				console.error(`The project file referenced by the 'publishedPackages' options doesn't exist. The value is ${JSON.stringify(item, undefined, 0)}`);
 				failed = true;
 			}
 		}

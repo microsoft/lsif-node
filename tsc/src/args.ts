@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import * as yargs from 'yargs';
+import { URI } from 'vscode-uri';
 
 export const command: string = 'tsc';
 
@@ -128,6 +129,16 @@ export namespace Options {
 		const result: Options = Object.assign({}, options);
 		if (typeof options.group === 'string' && options.group !== 'stdin') {
 			result.group = makeAbsolute(options.group);
+		} else if (options.group !== undefined && typeof options.group !== 'string') {
+			const value = options.group.rootUri;
+			if (value !== undefined) {
+				const uri = URI.parse(value);
+				if (uri.scheme === 'file') {
+					(result.group as GroupOptions).rootUri = URI.parse(makeAbsolute(value)).toString(true);
+				} else {
+					(result.group as GroupOptions).rootUri = uri.toString(true);
+				}
+			}
 		}
 		if (typeof options.package === 'string') {
 			result.package = makeAbsolute(options.package);
