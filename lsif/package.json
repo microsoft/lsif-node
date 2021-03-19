@@ -17,11 +17,11 @@
 		"lsif": "./bin/lsif"
 	},
 	"dependencies": {
-		"yargs": "^16.2.0",
-		"lsif-tsc": "0.5.6",
 		"lsif-npm": "0.5.3",
 		"lsif-sqlite": "0.5.3",
-		"lsif-tooling": "0.5.3"
+		"lsif-tooling": "0.5.3",
+		"lsif-tsc": "0.5.6",
+		"yargs": "^16.2.0"
 	},
 	"devDependencies": {},
 	"scripts": {

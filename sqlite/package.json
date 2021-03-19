@@ -17,15 +17,15 @@
 		"lsif-sqlite": "./bin/lsif-sqlite"
 	},
 	"dependencies": {
-		"lsif-protocol": "0.5.3",
-		"yargs": "16.2.0",
-		"vscode-uri": "^3.0.2",
 		"better-sqlite3": "^7.1.2",
-		"uuid": "^8.3.2"
+		"lsif-protocol": "0.5.3",
+		"uuid": "^8.3.2",
+		"vscode-uri": "^3.0.2",
+		"yargs": "16.2.0"
 	},
 	"devDependencies": {
-		"@types/uuid": "^8.3.0",
-		"@types/better-sqlite3": "^5.4.1"
+		"@types/better-sqlite3": "^5.4.1",
+		"@types/uuid": "^8.3.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",

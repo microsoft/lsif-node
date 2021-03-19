@@ -18,9 +18,9 @@
 	},
 	"dependencies": {
 		"lsif-protocol": "0.5.3",
-		"yargs": "16.2.0",
 		"uuid": "^8.3.2",
-		"vscode-uri": "^3.0.2"
+		"vscode-uri": "^3.0.2",
+		"yargs": "16.2.0"
 	},
 	"devDependencies": {
 		"@types/uuid": "^8.3.0"
