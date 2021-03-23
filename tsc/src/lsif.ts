@@ -2156,7 +2156,7 @@ export interface Reporter {
 
 export interface Options {
 	group: Group;
-	workspaceFolder: string;
+	workspaceRoot: string;
 	projectName: string;
 	tsConfigFile: string | undefined;
 	packageJsonFile: string | undefined;
@@ -2374,17 +2374,17 @@ class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 class GroupProjectDataManager extends LazyProjectDataManager {
 
 	private readonly groupName: string;
-	private readonly workspaceFolder: string;
+	private readonly workspaceRoot: string;
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, workspaceFolder: string, reporter: Reporter) {
+	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, workspaceRoot: string, reporter: Reporter) {
 		super(id, emitter, group, project, reporter);
 		this.groupName = group.name;
-		this.workspaceFolder = workspaceFolder;
+		this.workspaceRoot = workspaceRoot;
 	}
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
-		return paths.isParent(this.workspaceFolder, fileName);
+		return paths.isParent(this.workspaceRoot, fileName);
 	}
 
 	protected getName(): string {
@@ -2425,7 +2425,7 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 }
 
 interface TSProjectConfig {
-	workspaceFolder: string;
+	workspaceRoot: string;
 	configLocation: string | undefined;
 	sourceRoot: string;
 	outDir: string;
@@ -2502,7 +2502,7 @@ class TSProject {
 		}
 
 		this.config = {
-			workspaceFolder: options.workspaceFolder,
+			workspaceRoot: options.workspaceRoot,
 			configLocation,
 			sourceRoot,
 			outDir,
@@ -2666,7 +2666,7 @@ class TSProject {
 	}
 
 	public createDocumentData(manager: ProjectDataManager, sourceFile: ts.SourceFile, next: DocumentData | undefined): [DocumentData, ts.Symbol | undefined] {
-		const workspaceFolder = this.config.workspaceFolder;
+		const workspaceRoot = this.config.workspaceRoot;
 		const sourceRoot = this.config.sourceRoot;
 		const outDir = this.config.outDir;
 		const dependentOutDirs = this.config.dependentOutDirs;
@@ -2689,8 +2689,8 @@ class TSProject {
 			return false;
 		};
 
-		const isFromWorkspaceFolder = (sourceFile: ts.SourceFile): boolean => {
-			return paths.isParent(workspaceFolder, sourceFile.fileName);
+		const isFromWorkspaceRootFolder = (sourceFile: ts.SourceFile): boolean => {
+			return paths.isParent(workspaceRoot, sourceFile.fileName);
 		};
 
 		const document = this.vertex.document(sourceFile.fileName, sourceFile.text);
@@ -2700,15 +2700,15 @@ class TSProject {
 		let external: boolean = false;
 		if (this.isSourceFileFromExternalLibrary(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+			monikerPath = tss.computeMonikerPath(workspaceRoot, fileName);
 		} else if (isFromProjectSources(sourceFile)) {
-			monikerPath = tss.computeMonikerPath(workspaceFolder, tss.toOutLocation(fileName, sourceRoot, outDir));
+			monikerPath = tss.computeMonikerPath(workspaceRoot, tss.toOutLocation(fileName, sourceRoot, outDir));
 		} else if (isFromDependentProject(sourceFile)) {
 			external = true;
-			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
-		} else if (isFromWorkspaceFolder(sourceFile)) {
+			monikerPath = tss.computeMonikerPath(workspaceRoot, fileName);
+		} else if (isFromWorkspaceRootFolder(sourceFile)) {
 			external = sourceFile.isDeclarationFile;
-			monikerPath = tss.computeMonikerPath(workspaceFolder, fileName);
+			monikerPath = tss.computeMonikerPath(workspaceRoot, fileName);
 		}
 
 		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
@@ -2948,7 +2948,7 @@ export class DataManager implements SymbolDataContext {
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>;
 
-	public constructor(context: EmitterContext, group: Group, workspaceFolder: string, reporter: Reporter, dataMode: DataMode) {
+	public constructor(context: EmitterContext, group: Group, workspaceRoot: string, reporter: Reporter, dataMode: DataMode) {
 		this.context = context;
 		this.group = group;
 		this.reporter = reporter;
@@ -2962,7 +2962,7 @@ export class DataManager implements SymbolDataContext {
 
 		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
 		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
-		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), workspaceFolder, reporter);
+		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), workspaceRoot, reporter);
 	}
 
 	public get vertex(): VertexBuilder {

@@ -321,7 +321,7 @@ class FileReporter extends StreamReporter {
 
 interface ProcessProjectOptions {
 	group: Group;
-	workspaceFolder: string;
+	workspaceRoot: string;
 	projectName?:string;
 	typeAcquisition: boolean;
 	noProjectReferences: boolean;
@@ -350,7 +350,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 	// Check if we need to do type acquisition
 	if (options.typeAcquisition && (config.typeAcquisition === undefined || !!config.typeAcquisition.enable)) {
-		const projectRoot = options.workspaceFolder;
+		const projectRoot = options.workspaceRoot;
 		if (config.options.types !== undefined) {
 			const start = configFilePath !== undefined ? configFilePath : process.cwd();
 			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
@@ -365,7 +365,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		if (packageFile !== undefined) {
 			const packageJson = PackageJson.read(packageFile);
 			if (packageJson !== undefined) {
-				exportMonikers = new ExportMonikers(emitter, options.workspaceFolder, packageJson);
+				exportMonikers = new ExportMonikers(emitter, options.workspaceRoot, packageJson);
 			}
 		}
 	}
@@ -469,7 +469,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		if (options.projectName !== undefined) {
 			projectName = `${options.projectName}/${level + 1}`;
 		} else {
-			projectName =`${path.basename(options.workspaceFolder)}/${level + 1}`;
+			projectName =`${path.basename(options.workspaceRoot)}/${level + 1}`;
 		}
 	}
 	if (projectName === undefined) {
@@ -485,7 +485,7 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 
 	const lsifOptions: LSIFOptions = {
 		group: options.group,
-		workspaceFolder: options.workspaceFolder,
+		workspaceRoot: options.workspaceRoot,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
 		packageJsonFile: packageJsonFile,
@@ -667,18 +667,18 @@ export async function run(this: void, options: Options): Promise<void> {
 			}
 		}
 	}
-	const workspaceFolder =  tss.normalizePath(URI.parse(group.rootUri).fsPath);
+	const workspaceRoot =  tss.normalizePath(URI.parse(group.rootUri).fsPath);
 	let exportMonikers: ExportMonikers | undefined;
 	if (typeof packageInfo === 'string') {
 		const packageJson = PackageJson.read(packageInfo);
 		if (packageJson !== undefined) {
-			exportMonikers = new ExportMonikers(emitterContext, workspaceFolder, packageJson);
+			exportMonikers = new ExportMonikers(emitterContext, workspaceRoot, packageJson);
 		}
 		packageInfo = undefined;
 	}
 	const processProjectOptions: ProcessProjectOptions = {
 		group: group,
-		workspaceFolder: workspaceFolder,
+		workspaceRoot: workspaceRoot,
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
 		noProjectReferences: options.noProjectReferences,
@@ -688,8 +688,8 @@ export async function run(this: void, options: Options): Promise<void> {
 		reporter: reporter,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.workspaceFolder, processProjectOptions.reporter, processProjectOptions.dataMode);
-	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceFolder);
+	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.workspaceRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceRoot);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();

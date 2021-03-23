@@ -198,11 +198,11 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	};
 	const group = builder.vertex.group(URI.from({ scheme: 'lsif-test', path: cwd }).toString(), cwd, URI.from({ scheme: 'lsif-test', path: cwd }).toString());
 	emitterContext.emit(group);
-	const lsifOptions: LSIFOptions = { stdout: true, workspaceFolder: cwd, projectName: cwd, group: group, tsConfigFile: undefined, packageJsonFile: undefined, reporter, dataMode: DataMode.free };
+	const lsifOptions: LSIFOptions = { stdout: true, workspaceRoot: cwd, projectName: cwd, group: group, tsConfigFile: undefined, packageJsonFile: undefined, reporter, dataMode: DataMode.free };
 	const dataManager: DataManager = new DataManager(emitterContext, group, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();
-		_lsif(emitterContext, languageService, dataManager, new ImportMonikers(emitterContext, lsifOptions.workspaceFolder), undefined, [], lsifOptions);
+		_lsif(emitterContext, languageService, dataManager, new ImportMonikers(emitterContext, lsifOptions.workspaceRoot), undefined, [], lsifOptions);
 	} finally {
 		dataManager.end();
 	}
