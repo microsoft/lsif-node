@@ -15,13 +15,13 @@ import{ PackageJson } from './package';
 export class ImportMonikers {
 
 	private readonly emitter: EmitterContext;
-	private readonly workspaceFolder: string;
+	private readonly workspaceRoot: string;
 	private readonly packageData: Map<string,  { packageInfo: PackageInformation, packageJson: PackageJson } | null>;
 
-	constructor(emitter: EmitterContext, workspaceFolder: string) {
+	constructor(emitter: EmitterContext, workspaceRoot: string) {
 		this.packageData = new Map();
 		this.emitter = emitter;
-		this.workspaceFolder = workspaceFolder;
+		this.workspaceRoot = workspaceRoot;
 	}
 
 	attachMoniker(tscMoniker: Moniker, fileName: string, packageName: string, filePath: string, exportParts: string | string[]): void {
@@ -30,7 +30,7 @@ export class ImportMonikers {
 		if (index === -1) {
 			return;
 		}
-		const fullFilePath = path.posix.join(this.workspaceFolder, filePath);
+		const fullFilePath = path.posix.join(this.workspaceRoot, filePath);
 		const packageLocation = path.posix.join(fileName.substr(0, index), packagePart);
 		if (!fullFilePath.startsWith(packageLocation + '/')) {
 			return;

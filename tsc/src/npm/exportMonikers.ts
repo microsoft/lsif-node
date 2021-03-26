@@ -17,15 +17,15 @@ import { PackageJson } from './package';
 export class ExportMonikers {
 
 	private readonly emitter: EmitterContext;
-	private readonly workspaceFolder: string;
-	private readonly packageJson: PackageJson
+	private readonly workspaceRoot: string;
+	private readonly packageJson: PackageJson;
 
 	private readonly pathPrefix: string;
 	private _packageInformation: PackageInformation | undefined;
 
-	constructor(emitter: EmitterContext, workspaceFolder: string, packageJson: PackageJson) {
+	constructor(emitter: EmitterContext, workspaceRoot: string, packageJson: PackageJson) {
 		this.emitter = emitter;
-		this.workspaceFolder = workspaceFolder;
+		this.workspaceRoot = workspaceRoot;
 		this.packageJson = packageJson;
 		this.pathPrefix = packageJson.$location;
 		if (this.pathPrefix[this.pathPrefix.length - 1] !== '/') {
@@ -34,13 +34,13 @@ export class ExportMonikers {
 	}
 
 	public attachMoniker(tscMoniker: Moniker, filePath: string, exportParts: string | string[]): void {
-		if (!this.isPackaged(path.join(this.workspaceFolder, filePath))) {
+		if (!this.isPackaged(path.join(this.workspaceRoot, filePath))) {
 			return undefined;
 		}
 		const exportPath: string = typeof exportParts === 'string'
 			? exportParts
 			: `[${exportParts.join(',')}]`;
-		const npmFilePath = this.getNpmFilePath(this.workspaceFolder, filePath);
+		const npmFilePath = this.getNpmFilePath(this.workspaceRoot, filePath);
 		let npmIdentifier: string;
 		if (this.packageJson.main === npmFilePath || this.packageJson.typings === npmFilePath) {
 			npmIdentifier = NpmMoniker.create(this.packageJson.name, undefined, exportPath);

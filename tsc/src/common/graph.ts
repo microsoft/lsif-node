@@ -8,13 +8,13 @@ import { URI } from 'vscode-uri';
 
 import {
 	lsp, Id, Vertex, E, Edge,
-	Group, Project, Document, HoverResult, ReferenceResult,
+	Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
 	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next, belongsTo, UniquenessLevel, Uri, GroupEvent, MonikerAttachEvent, attach
+	DeclarationResult, textDocument_declaration, next, UniquenessLevel, Uri, MonikerAttachEvent, attach, Source, CatalogInfo
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -50,14 +50,13 @@ export class VertexBuilder {
 		};
 	}
 
-	public event(scope: EventScope.group, kind: EventKind, data: Group): Event;
 	public event(scope: EventScope.project, kind: EventKind, data: Project): Event;
 	public event(scope: EventScope.document, kind: EventKind, data: Document): Event;
 	public event(scope: EventScope.monikerAttach, kind: EventKind): Event;
 	public event(scope: EventScope, kind: EventKind, data?: Vertex): Event {
 		const id = this.nextId();
 		const dataId = data !== undefined ? data.id : id;
-		const result: ProjectEvent | GroupEvent | DocumentEvent | MonikerAttachEvent = {
+		const result: ProjectEvent | DocumentEvent | MonikerAttachEvent = {
 			id: id,
 			type: ElementTypes.vertex,
 			label: VertexLabels.event,
@@ -68,15 +67,24 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public group(uri: Uri, name: string, rootUri: Uri): Group {
-		const result: Group = {
+	public source(workspaceRoot: Uri): Source {
+		const result: Source = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
-			label: VertexLabels.group,
+			label: VertexLabels.source,
+			workspaceRoot
+		};
+		return result;
+	}
+
+	public catalogInfo(uri: Uri, name: string): CatalogInfo {
+		const result: CatalogInfo = {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.catalogInfo,
 			uri,
-			conflictResolution: 'takeDB',
 			name,
-			rootUri
+			conflictResolution: 'takeDB'
 		};
 		return result;
 	}
@@ -300,16 +308,6 @@ export class EdgeBuilder {
 			label: EdgeLabels.contains,
 			outV: from.id,
 			inVs: to.map(v => v.id)
-		};
-	}
-
-	public belongsTo(from: Project, to: Group): belongsTo {
-		return {
-			id: this.nextId(),
-			type: ElementTypes.edge,
-			label: EdgeLabels.belongsTo,
-			outV: from.id,
-			inV: to.id
 		};
 	}
 
