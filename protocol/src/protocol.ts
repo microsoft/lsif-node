@@ -1111,17 +1111,17 @@ export namespace MonikerKind {
 
 export enum UniquenessLevel {
 	/**
-	 * The moniker is only unique inside a document
+	 * The moniker is only unique inside a document.
 	 */
 	document = 'document',
 
 	/**
-	 * The moniker is unique inside a project for which a dump got created
+	 * The moniker is unique inside a project for which a dump got created.
 	 */
 	project = 'project',
 
 	/**
-	 * The moniker is unique inside the workspace to which a project belongs
+	 * The moniker is unique inside the workspace to which a project belongs.
 	 */
 	workspace = 'workspace',
 
@@ -1131,7 +1131,7 @@ export enum UniquenessLevel {
 	scheme = 'scheme',
 
 	/**
-	 * The moniker is globally unique
+	 * The moniker is globally unique.
 	 */
 	global = 'global'
 }
