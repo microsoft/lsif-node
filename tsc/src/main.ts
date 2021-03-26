@@ -24,7 +24,7 @@ import * as yargs from 'yargs';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
-import { Id, Version, Vertex, Edge, Source, CatalogInfo, RepositoryIndexInfo } from 'lsif-protocol';
+import { Id, Version, Vertex, Edge, Source, CatalogInfo, RepositoryIndexInfo, RepositoryInfo } from 'lsif-protocol';
 
 import { Writer, StdoutWriter, FileWriter } from './common/writer';
 import { Builder, EmitterContext } from './common/graph';
@@ -432,10 +432,10 @@ export async function run(this: void, options: Options): Promise<void> {
 	}
 
 	let writer: Writer | undefined;
-	if (options.out) {
-		writer = new FileWriter(fs.openSync(options.out, 'w'));
-	} else if (options.stdout) {
+	if (options.stdout) {
 		writer = new StdoutWriter();
+	} else if (options.out) {
+		writer = new FileWriter(fs.openSync(options.out, 'w'));
 	}
 
 	if (writer === undefined) {
@@ -449,6 +449,19 @@ export async function run(this: void, options: Options): Promise<void> {
 		console.error(`The workspace root doesn't denote a folder on disk. The value is ${workspaceRoot}`);
 		process.exitCode = -1;
 		return;
+	}
+
+	if (typeof options.source === 'string') {
+		if (!await pfs.isFile(options.source)) {
+			console.error(`The source option doesn't denote a valid file on disk. The value is ${options.source}`);
+			process.exitCode = -1;
+			return;
+		}
+		if (path.basename(options.source) !== 'package.json') {
+			console.error(`The source option can only point to a package.json file. The value is ${options.source}`);
+			process.exitCode = -1;
+			return;
+		}
 	}
 
 	interface ResolvedCatalogInfoOptions extends CatalogInfoOptions {
@@ -529,9 +542,20 @@ export async function run(this: void, options: Options): Promise<void> {
 			emitter.emit(element);
 		}
 	};
-	const source: Source | undefined = await async function() {
+	const metaData = builder.vertex.metaData(Version);
+	const source: Source | number = await async function() {
 		const result: Source = builder.vertex.source(URI.file(workspaceRoot).toString(true));
-		if (options.source !== undefined && options.source.repository !== undefined) {
+		if (typeof options.source === 'string') {
+			try {
+				const pjc = JSON.parse(await fs.promises.readFile(options.source, { encoding: 'utf8' })) as { repository?: RepositoryInfo; };
+				if (pjc.repository !== undefined && typeof pjc.repository.type === 'string' && typeof pjc.repository.url === 'string') {
+					result.repository = Object.assign({}, pjc.repository);
+				}
+			} catch (error) {
+				console.error(`Reading package.json file to obtain repository source failed.`);
+				return -1;
+			}
+		} else if (options.source !== undefined && options.source.repository !== undefined) {
 			result.repository = {
 				url: options.source.repository.url,
 				type: options.source.repository.type
@@ -545,7 +569,11 @@ export async function run(this: void, options: Options): Promise<void> {
 							reject(error ?? new Error(stderr));
 							return;
 						}
-						resolve(stdout);
+						let index = stdout.length - 1;
+						while (index >= 0 && (stdout[index] === '\r' || stdout[index] === '\n')) {
+							index--;
+						}
+						resolve(stdout.substr(0, index + 1));
 					});
 				});
 			};
@@ -556,24 +584,24 @@ export async function run(this: void, options: Options): Promise<void> {
 				(result.repository as RepositoryIndexInfo).branchName = branchName;
 			} catch (error) {
 				console.error(`Failed to probe repository. Error is ${error.message}`);
-				process.exitCode = -1;
-				return undefined;
+				return -1;
 			}
 		}
 		return result;
 	}();
-	if (source === undefined) {
+	if (typeof source === 'number') {
+		process.exitCode = source;
 		return;
 	}
 
-	emitter.emit(builder.vertex.metaData(Version));
+	emitter.emit(metaData);
 	emitter.emit(source);
 	if (catalogInfoOptions !== undefined) {
 		const catalogInfo: CatalogInfo = builder.vertex.catalogInfo(catalogInfoOptions.uri, catalogInfoOptions.name);
 		if (catalogInfoOptions.description !== undefined) {
 			catalogInfo.description = catalogInfoOptions.description;
 		}
-		catalogInfo.description = catalogInfoOptions.conflictResolution;
+		catalogInfo.conflictResolution = catalogInfoOptions.conflictResolution;
 		emitter.emit(catalogInfo);
 	}
 

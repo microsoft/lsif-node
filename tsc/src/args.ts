@@ -52,7 +52,7 @@ export type Options = {
 	moniker: 'strict' | 'lenient';
 	workspaceRoot: string | undefined;
 	probeRepository: boolean;
-	source: SourceOptions | undefined;
+	source: string | SourceOptions | undefined;
 	catalogInfo: CatalogInfoOptions | undefined;
 	projectName: string | undefined;
 	package: string | undefined;
@@ -99,11 +99,13 @@ export namespace Options {
 			}
 		}
 		if (result.source !== undefined) {
-			const source: SourceOptions = {};
-			if (typeof result.source.repository?.url === 'string' && (typeof result.source.repository?.type === 'string' || result.source.repository?.type === undefined)) {
-				source.repository = { url: result.source.repository.url, type: result.source.repository.type };
+			if (typeof result.source !== 'string') {
+				const source: SourceOptions = {};
+				if (typeof result.source.repository?.url === 'string' && (typeof result.source.repository?.type === 'string' || result.source.repository?.type === undefined)) {
+					source.repository = { url: result.source.repository.url, type: result.source.repository.type };
+				}
+				result.source = Object.keys(source).length > 0 ? source : undefined;
 			}
-			result.source = Object.keys(source).length > 0 ? source : undefined;
 		}
 		if (result.catalogInfo !== undefined) {
 			const catalogueInfo: CatalogInfoOptions = {};
