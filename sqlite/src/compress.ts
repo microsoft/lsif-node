@@ -643,7 +643,7 @@ export const monikerUniqueShortFroms = function() {
 	return new Map<UniquenessLevel, number>([
 		[UniquenessLevel.document, 1000],
 		[UniquenessLevel.project, 2000],
-		[UniquenessLevel.group, 3000],
+		[UniquenessLevel.workspace, 3000],
 		[UniquenessLevel.scheme, 4000],
 		[UniquenessLevel.global, 5000]
 	]);

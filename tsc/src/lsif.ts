@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Group, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
+	lsp, Vertex, Edge, Project, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
 	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
 } from 'lsif-protocol';
@@ -203,7 +203,7 @@ class ProjectData extends LSIFData<EmitterContext> {
 	private documents: Document[];
 	private diagnostics: lsp.Diagnostic[];
 
-	public constructor(emitter: EmitterContext, public readonly group: Group | undefined, public readonly project: Project) {
+	public constructor(emitter: EmitterContext, public readonly project: Project) {
 		super(emitter);
 		this.documents = [];
 		this.diagnostics = [];
@@ -211,9 +211,6 @@ class ProjectData extends LSIFData<EmitterContext> {
 
 	public begin(): void {
 		this.emit(this.project);
-		if (this.group !== undefined) {
-			this.emit(this.edge.belongsTo(this.project, this.group));
-		}
 		this.emit(this.vertex.event(EventScope.project, EventKind.begin, this.project));
 	}
 
@@ -604,7 +601,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		if (this._moniker !== undefined) {
 			throw new Error(`Symbol data ${this.symbolId} already has a primary moniker`);
 		}
-		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.group;
+		const unique: UniquenessLevel = kind === MonikerKind.local ? UniquenessLevel.document : UniquenessLevel.workspace;
 		const moniker = this.vertex.moniker('tsc', identifier, unique, kind);
 		this.emit(moniker);
 		this.emit(this.edge.moniker(this.resultSet, moniker));
@@ -646,7 +643,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		if (Array.isArray(this._moniker)) {
 			// In TS we only have group and document
 			for (const moniker of this._moniker) {
-				if (moniker.unique === UniquenessLevel.group) {
+				if (moniker.unique === UniquenessLevel.workspace) {
 					return moniker;
 				}
 			}
@@ -2155,7 +2152,6 @@ export interface Reporter {
 }
 
 export interface Options {
-	group: Group;
 	workspaceRoot: string;
 	projectName: string;
 	tsConfigFile: string | undefined;
@@ -2170,12 +2166,16 @@ enum ParseMode {
 	full = 2
 }
 
+interface ProjectDataManagerContext extends EmitterContext {
+	workspaceRoot: string;
+}
+
 abstract class ProjectDataManager {
 
 	public readonly id: ProjectId;
 	private startTime: number | undefined;
 
-	protected readonly emitter: EmitterContext;
+	protected readonly context: ProjectDataManagerContext;
 	private readonly projectData: ProjectData;
 	private readonly reporter: Reporter;
 
@@ -2186,10 +2186,10 @@ abstract class ProjectDataManager {
 	// corresponding node is processed.
 	private readonly managedSymbolDataItems: SymbolData[];
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
 		this.id = id;
-		this.emitter = emitter;
-		this.projectData = new ProjectData(emitter, group, project);
+		this.context = context;
+		this.projectData = new ProjectData(context, project);
 		this.reporter = reporter;
 		this.documentStats = 0;
 		this.documentDataItems = [];
@@ -2221,7 +2221,7 @@ abstract class ProjectDataManager {
 	}
 
 	public createDocumentData(_fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean, next: DocumentData | undefined): DocumentData {
-		const result = new DocumentData(this.id, this.emitter, document, moduleSystem, monikerPath, external, next);
+		const result = new DocumentData(this.id, this.context, document, moduleSystem, monikerPath, external, next);
 		result.begin();
 		this.projectData.addDocument(document);
 		this.documentStats++;
@@ -2262,9 +2262,9 @@ abstract class ProjectDataManager {
 		}
 		this.projectData.end();
 		let name: string;
-		if (this.projectData.project.resource !== undefined && this.projectData.group !== undefined) {
+		if (this.projectData.project.resource !== undefined) {
 			const uri = this.projectData.project.resource;
-			const root = this.projectData.group.rootUri;
+			const root = URI.file(this.context.workspaceRoot).toString(true);
 			if (uri.startsWith(root)) {
 				name = uri.substr(root.length + 1);
 			} else {
@@ -2292,8 +2292,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	private state: LazyProjectDataManagerState;
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(id, emitter, group, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
+		super(id, context, project, reporter);
 		this.state = LazyProjectDataManagerState.start;
 	}
 
@@ -2350,8 +2350,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 class GlobalProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(id, emitter, group, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
+		super(id, context, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2362,8 +2362,8 @@ class GlobalProjectDataManager extends LazyProjectDataManager {
 
 class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, reporter: Reporter) {
-		super(id, emitter, group, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
+		super(id, context, project, reporter);
 	}
 
 	protected getName(): string {
@@ -2371,14 +2371,12 @@ class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 	}
 }
 
-class GroupProjectDataManager extends LazyProjectDataManager {
+class WorkspaceProjectDataManager extends LazyProjectDataManager {
 
-	private readonly groupName: string;
 	private readonly workspaceRoot: string;
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, workspaceRoot: string, reporter: Reporter) {
-		super(id, emitter, group, project, reporter);
-		this.groupName = group.name;
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, workspaceRoot: string, reporter: Reporter) {
+		super(id, context, project, reporter);
 		this.workspaceRoot = workspaceRoot;
 	}
 
@@ -2388,7 +2386,7 @@ class GroupProjectDataManager extends LazyProjectDataManager {
 	}
 
 	protected getName(): string {
-		return `Workspace libraries for ${this.groupName}`;
+		return `Workspace libraries for ${this.workspaceRoot}`;
 	}
 }
 
@@ -2398,8 +2396,8 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	private readonly projectFiles: Set<string>;
 	private readonly managedDocuments: Set<Document>;
 
-	public constructor(id: ProjectId, emitter: EmitterContext, group: Group, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
-		super(id, emitter, group, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
+		super(id, context, project, reporter);
 		this.sourceRoot = sourceRoot;
 		this.projectFiles = new Set(projectFiles);
 		this.managedDocuments = new Set();
@@ -2911,7 +2909,7 @@ class TSProject {
 			const identifier = tss.createMonikerIdentifier(monikerPath, entry[1]);
 			const moniker = symbolData.getPrimaryMoniker() === undefined
 				? symbolData.addMoniker(identifier, MonikerKind.export)
-				: symbolData.attachMoniker(identifier, UniquenessLevel.group, MonikerKind.export);
+				: symbolData.attachMoniker(identifier, UniquenessLevel.workspace, MonikerKind.export);
 			if (this.exportMonikers !== undefined && monikerPath !== undefined) {
 				this.exportMonikers.attachMoniker(moniker, monikerPath, entry[1]);
 			}
@@ -2924,19 +2922,18 @@ export enum DataMode {
 	keep = 2
 }
 
-export class DataManager implements SymbolDataContext {
+export class DataManager implements SymbolDataContext, ProjectDataManagerContext {
 
 	private static readonly GlobalId: string = 'bc450df0-741c-4ee7-9e0e-eddd95f8f314';
 	private static readonly DefaultLibsId: string = '5779b280-596f-4b5d-90d8-b87441d7afa0';
 
 	private readonly context: EmitterContext;
-	private readonly group: Group;
 	private readonly reporter: Reporter;
 	private readonly dataMode: DataMode;
 
 	private readonly globalPDM: GlobalProjectDataManager;
 	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
-	private readonly groupPDM: GroupProjectDataManager;
+	private readonly workspacePDM: WorkspaceProjectDataManager;
 
 	private currentTSProject: TSProject | undefined;
 	private currentPDM: TSConfigProjectDataManager | undefined;
@@ -2948,9 +2945,12 @@ export class DataManager implements SymbolDataContext {
 	private readonly validateVisibilityCounter: Map<string, { projectDataManager: ProjectDataManager; counter: number }>;
 	private readonly validateVisibilityOn: Map<string, SymbolData[]>;
 
-	public constructor(context: EmitterContext, group: Group, workspaceRoot: string, reporter: Reporter, dataMode: DataMode) {
+	public readonly workspaceRoot: string;
+	public readonly vertex: VertexBuilder;
+	public readonly edge: EdgeBuilder;
+
+	public constructor(context: EmitterContext, workspaceRoot: string, reporter: Reporter, dataMode: DataMode) {
 		this.context = context;
-		this.group = group;
 		this.reporter = reporter;
 		this.dataMode = dataMode;
 		this.documentDataItems = new Map();
@@ -2960,17 +2960,13 @@ export class DataManager implements SymbolDataContext {
 		this.validateVisibilityCounter = new Map();
 		this.validateVisibilityOn = new Map();
 
-		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.GlobalId), reporter);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
-		this.groupPDM = new GroupProjectDataManager(ProjectId.next(), this, this.group, this.context.vertex.project(group.name), workspaceRoot, reporter);
-	}
+		this.workspaceRoot = workspaceRoot;
+		this.vertex = this.context.vertex;
+		this.edge = this.context.edge;
 
-	public get vertex(): VertexBuilder {
-		return this.context.vertex;
-	}
-
-	public get edge(): EdgeBuilder {
-		return this.context.edge;
+		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.GlobalId), reporter);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
+		this.workspacePDM = new WorkspaceProjectDataManager(ProjectId.next(), this, this.context.vertex.project(workspaceRoot), workspaceRoot, reporter);
 	}
 
 	public emit(element: Vertex | Edge): void {
@@ -2980,7 +2976,7 @@ export class DataManager implements SymbolDataContext {
 	public begin(): void {
 		this.globalPDM.begin();
 		this.defaultLibsPDM.begin();
-		this.groupPDM.begin();
+		this.workspacePDM.begin();
 	}
 
 	public beginProject(tsProject: TSProject, project: Project): void {
@@ -2988,7 +2984,7 @@ export class DataManager implements SymbolDataContext {
 			throw new Error(`There is already a current program data manager set`);
 		}
 		this.currentTSProject = tsProject;
-		this.currentPDM = new TSConfigProjectDataManager(tsProject.id, this, this.group, project, tsProject.getConfig().sourceRoot, tsProject.getSourceFilesToIndexFileNames(), this.reporter);
+		this.currentPDM = new TSConfigProjectDataManager(tsProject.id, this, project, tsProject.getConfig().sourceRoot, tsProject.getSourceFilesToIndexFileNames(), this.reporter);
 		this.currentPDM.begin();
 	}
 
@@ -3020,7 +3016,7 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	public end(): void {
-		const managers: ProjectDataManager[] = [this.groupPDM, this.defaultLibsPDM, this.globalPDM];
+		const managers: ProjectDataManager[] = [this.workspacePDM, this.defaultLibsPDM, this.globalPDM];
 		for (let i = 0; i < managers.length; i++) {
 			const manager = managers[i];
 			const documents = manager.getDocuments();
@@ -3071,8 +3067,8 @@ export class DataManager implements SymbolDataContext {
 			return this.defaultLibsPDM;
 		} else if (this.currentPDM !== undefined && this.currentPDM.handles(sourceFile)) {
 			return this.currentPDM;
-		} else if (this.groupPDM.handles(sourceFile)) {
-			return this.groupPDM;
+		} else if (this.workspacePDM.handles(sourceFile)) {
+			return this.workspacePDM;
 		} else {
 			return this.globalPDM;
 		}
@@ -3255,7 +3251,7 @@ export class DataManager implements SymbolDataContext {
 	}
 
 	private isGlobalProjectId(id: ProjectId): boolean {
-		return id === this.globalPDM.id || id === this.defaultLibsPDM.id || id === this.groupPDM.id;
+		return id === this.globalPDM.id || id === this.defaultLibsPDM.id || id === this.workspacePDM.id;
 	}
 }
 

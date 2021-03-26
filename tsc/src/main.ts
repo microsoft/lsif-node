@@ -2,15 +2,15 @@
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
-import { promisify } from 'util';
 import * as fs from 'fs';
-
 namespace pfs {
-	export const stat = promisify(fs.stat);
-	export const readFile = promisify(fs.readFile);
 	export async function isFile(path: fs.PathLike): Promise<boolean> {
-		const stat = await pfs.stat(path);
+		const stat = await fs.promises.stat(path);
 		return stat.isFile();
+	}
+	export async function isDirectory(path: fs.PathLike): Promise<boolean> {
+		const stat = await fs.promises.stat(path);
+		return stat.isDirectory();
 	}
 }
 
@@ -18,12 +18,13 @@ import * as path from 'path';
 import * as uuid from 'uuid';
 import * as crypto from 'crypto';
 import * as os from 'os';
+import * as cp from 'child_process';
 
 import * as yargs from 'yargs';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
-import { Id, Version, EventKind, Group, EventScope, Vertex, Edge } from 'lsif-protocol';
+import { Id, Version, Vertex, Edge, Source, CatalogInfo, RepositoryIndexInfo } from 'lsif-protocol';
 
 import { Writer, StdoutWriter, FileWriter } from './common/writer';
 import { Builder, EmitterContext } from './common/graph';
@@ -32,41 +33,10 @@ import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
 import * as tss from './typescripts';
-import { Options, builder, GroupOptions } from './args';
+import { Options, builder, CatalogInfoOptions } from './args';
 import { ImportMonikers } from './npm/importMonikers';
 import { ExportMonikers } from './npm/exportMonikers';
 import { PackageJson } from './npm/package';
-
-interface ResolvedGroupConfig extends GroupOptions {
-	uri: string;
-	conflictResolution: 'takeDump' | 'takeDB';
-	name: string;
-	rootUri: string;
-}
-
-namespace ResolvedGroupOptions {
-	export function from(groupConfig: GroupOptions): ResolvedGroupConfig | undefined {
-		if (groupConfig.uri === undefined || groupConfig.name === undefined || groupConfig.rootUri === undefined) {
-			return undefined;
-		}
-		let groupUri = URI.parse(groupConfig.uri);
-		if (groupUri.scheme === 'file' && !groupConfig.uri.startsWith('file:')) {
-			groupUri = groupUri.with({ 'scheme': 'lsif'});
-		}
-		let rootUri = URI.parse(groupConfig.rootUri);
-		if (rootUri.scheme !== 'file') {
-			console.log();
-		}
-		return {
-			uri: groupUri.toString(true),
-			conflictResolution: groupConfig.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB',
-			name: groupConfig.name,
-			rootUri: groupConfig.rootUri,
-			description: groupConfig.description,
-			repository: groupConfig.repository
-		};
-	}
-}
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
 	let absolute = path.resolve(file);
@@ -118,84 +88,6 @@ function createIdGenerator(options: Options): () => Id {
 			return () => {
 				return counter++;
 			};
-	}
-}
-
-async function readGroupConfig(options: Options): Promise<GroupOptions | undefined | number> {
-	const group = options.group;
-	if (group === 'stdin') {
-		try {
-			const result: GroupOptions | undefined = await new Promise((resolve, reject) => {
-				const stdin = process.stdin;
-				let buffer: Buffer | undefined;
-				stdin.on('data', (data) => {
-					if (buffer === undefined) {
-						buffer = data;
-					} else {
-						buffer = Buffer.concat([buffer, data]);
-					}
-				});
-				stdin.on('end', () => {
-					try {
-						if (buffer === undefined) {
-							resolve(undefined);
-						} else {
-							resolve(JSON.parse(buffer.toString('utf8')));
-						}
-					} catch (err) {
-						reject(err);
-					}
-				});
-				stdin.on('error', (err) => {
-					reject(err);
-				});
-			});
-			if (result === undefined) {
-				return 1;
-			}
-			return result;
-		} catch (err) {
-			if (err) {
-				console.error(err);
-			}
-			return 1;
-		}
-	} else if (typeof group === 'string' || group === undefined) {
-		const filePath = group !== undefined ? group : process.cwd();
-		try {
-			const stat = await pfs.stat(filePath);
-			if (stat.isFile()) {
-				let groupConfig: GroupOptions | undefined;
-				try {
-					groupConfig = JSON.parse(await pfs.readFile(filePath, { encoding: 'utf8'}));
-				} catch (err) {
-					console.error(`Reading group config file ${options.group} failed.`);
-					if (err) {
-						console.error(err);
-					}
-				}
-				if (groupConfig === undefined) {
-					return 1;
-				}
-				return groupConfig;
-			} else if (stat.isDirectory()) {
-				const absolute = tss.makeAbsolute(filePath);
-				const uri: string = URI.file(absolute).toString(true);
-				return {
-					uri: uri,
-					conflictResolution: 'takeDB',
-					name: path.basename(absolute),
-					rootUri: uri
-				};
-			} else {
-				return 1;
-			}
-		} catch (error) {
-			console.error(`Group config file system path ${options.group} doesn't exist.`);
-			return 1;
-		}
-	} else {
-		return group;
 	}
 }
 
@@ -320,7 +212,6 @@ class FileReporter extends StreamReporter {
 }
 
 interface ProcessProjectOptions {
-	group: Group;
 	workspaceRoot: string;
 	projectName?:string;
 	typeAcquisition: boolean;
@@ -484,7 +375,6 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 			: configFilePath !== undefined ? options.packageInfo.get(configFilePath) : undefined;
 
 	const lsifOptions: LSIFOptions = {
-		group: options.group,
 		workspaceRoot: options.workspaceRoot,
 		projectName: projectName,
 		tsConfigFile: configFilePath,
@@ -554,34 +444,47 @@ export async function run(this: void, options: Options): Promise<void> {
 		return;
 	}
 
-	let groupConfig = await readGroupConfig(options);
-	if (typeof groupConfig === 'number') {
-		process.exitCode = groupConfig;
+	const workspaceRoot = tss.normalizePath(options.workspaceRoot ?? process.cwd());
+	if (!await pfs.isDirectory(workspaceRoot)) {
+		console.error(`The workspace root doesn't denote a folder on disk. The value is ${workspaceRoot}`);
+		process.exitCode = -1;
 		return;
 	}
 
-	let resolvedGroupConfig: ResolvedGroupConfig | undefined;
-	if (groupConfig !== undefined) {
-		if (!groupConfig.uri) {
-			console.error(`Group config must provide an URI.`);
-			process.exitCode = 1;
-			return;
-		}
-		if (!groupConfig.name) {
-			console.error(`Group config must provide a group name.`);
-			process.exitCode = 1;
-			return;
-		}
-		if (!groupConfig.rootUri) {
-			console.error(`Group config must provide a file system root URI.`);
-			process.exitCode = 1;
-			return;
-		}
-		resolvedGroupConfig = ResolvedGroupOptions.from(groupConfig);
+	interface ResolvedCatalogInfoOptions extends CatalogInfoOptions {
+		uri: string;
+		name: string;
+		description? : string;
+		conflictResolution: 'takeDump' | 'takeDB';
 	}
-	if (resolvedGroupConfig === undefined) {
-		console.error(`Couldn't resolve group configuration to proper values:\n\r${JSON.stringify(groupConfig, undefined, 4)}`);
-		process.exitCode = 1;
+
+	const catalogInfoOptions: ResolvedCatalogInfoOptions | undefined | number = function() {
+		if (options.catalogInfo === undefined) {
+			return undefined;
+		}
+		if (typeof options.catalogInfo.uri !== 'string') {
+			console.error(`The uri of a catalog info must be a string. The value is ${options.catalogInfo.uri}`);
+			return -1;
+		}
+		const uri = URI.parse(options.catalogInfo.uri);
+		if (typeof options.catalogInfo.name !== 'string') {
+			console.error(`The name of a catalog info must be a string. The value is ${options.catalogInfo.uri}`);
+			return -1;
+		}
+		if (options.catalogInfo.description !== undefined && typeof options.catalogInfo.description !== 'string') {
+			console.error(`The description of a catalog info must be a string or not set at all. The value is ${options.catalogInfo.uri}`);
+			return -1;
+		}
+		const conflictResolution: 'takeDump' | 'takeDB' = options.catalogInfo.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB';
+		return {
+			uri: uri.toString(true),
+			name: options.catalogInfo.name,
+			description: options.catalogInfo.description,
+			conflictResolution
+		};
+	}();
+	if (typeof catalogInfoOptions === 'number') {
+		process.exitCode = catalogInfoOptions;
 		return;
 	}
 
@@ -626,13 +529,54 @@ export async function run(this: void, options: Options): Promise<void> {
 			emitter.emit(element);
 		}
 	};
+	const source: Source | undefined = await async function() {
+		const result: Source = builder.vertex.source(URI.file(workspaceRoot).toString(true));
+		if (options.source !== undefined && options.source.repository !== undefined) {
+			result.repository = {
+				url: options.source.repository.url,
+				type: options.source.repository.type
+			};
+		}
+		if (options.probeRepository && result.repository?.type === 'git') {
+			const runGit = async (command: string): Promise<string> => {
+				return new Promise((resolve, reject) => {
+					cp.exec(`git ${command}`, (error, stdout, stderr) => {
+						if (error || stderr.length > 0) {
+							reject(error ?? new Error(stderr));
+							return;
+						}
+						resolve(stdout);
+					});
+				});
+			};
+			try {
+				const commitId: string = await runGit('rev-parse HEAD');
+				const branchName: string = await runGit('rev-parse --abbrev-ref HEAD');
+				(result.repository as RepositoryIndexInfo).commitId = commitId;
+				(result.repository as RepositoryIndexInfo).branchName = branchName;
+			} catch (error) {
+				console.error(`Failed to probe repository. Error is ${error.message}`);
+				process.exitCode = -1;
+				return undefined;
+			}
+		}
+		return result;
+	}();
+	if (source === undefined) {
+		return;
+	}
+
 	emitter.emit(builder.vertex.metaData(Version));
-	const group = builder.vertex.group(resolvedGroupConfig.uri, resolvedGroupConfig.name, resolvedGroupConfig.rootUri);
-	group.conflictResolution = resolvedGroupConfig.conflictResolution;
-	group.description = resolvedGroupConfig.description;
-	group.repository = resolvedGroupConfig.repository;
-	emitter.emit(group);
-	emitter.emit(builder.vertex.event(EventScope.group, EventKind.begin, group));
+	emitter.emit(source);
+	if (catalogInfoOptions !== undefined) {
+		const catalogInfo: CatalogInfo = builder.vertex.catalogInfo(catalogInfoOptions.uri, catalogInfoOptions.name);
+		if (catalogInfoOptions.description !== undefined) {
+			catalogInfo.description = catalogInfoOptions.description;
+		}
+		catalogInfo.description = catalogInfoOptions.conflictResolution;
+		emitter.emit(catalogInfo);
+	}
+
 	let reporter: InternalReporter;
 	if (options.log === '') { // --log not provided
 		// The trace is written to stdout so we can't log anything.
@@ -667,7 +611,6 @@ export async function run(this: void, options: Options): Promise<void> {
 			}
 		}
 	}
-	const workspaceRoot =  tss.normalizePath(URI.parse(group.rootUri).fsPath);
 	let exportMonikers: ExportMonikers | undefined;
 	if (typeof packageInfo === 'string') {
 		const packageJson = PackageJson.read(packageInfo);
@@ -677,7 +620,6 @@ export async function run(this: void, options: Options): Promise<void> {
 		packageInfo = undefined;
 	}
 	const processProjectOptions: ProcessProjectOptions = {
-		group: group,
 		workspaceRoot: workspaceRoot,
 		projectName: options.projectName,
 		typeAcquisition: options.typeAcquisition,
@@ -688,12 +630,11 @@ export async function run(this: void, options: Options): Promise<void> {
 		reporter: reporter,
 		processed: new Map()
 	};
-	const dataManager: DataManager = new DataManager(emitterContext, group, processProjectOptions.workspaceRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
+	const dataManager: DataManager = new DataManager(emitterContext, processProjectOptions.workspaceRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
 	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceRoot);
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();
-	emitter.emit(builder.vertex.event(EventScope.group, EventKind.end, group));
 	emitter.end();
 	reporter.end();
 }

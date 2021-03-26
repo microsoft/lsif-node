@@ -277,9 +277,10 @@ export namespace Element {
  */
 export enum VertexLabels {
 	metaData = 'metaData',
+	catalogInfo = 'catalogue',
 	event = '$event',
+	source = 'source',
 	project = 'project',
-	group = 'group',
 	range = 'range',
 	location = 'location',
 	document = 'document',
@@ -365,7 +366,6 @@ export namespace EventKind {
  * The event scopes
  */
 export enum EventScope {
-	group = 'group',
 	project = 'project',
 	document = 'document',
 	monikerAttach = 'monikerAttach'
@@ -408,20 +408,6 @@ export namespace Event {
 		data: Id.property()
 	}));
 	export function is(value: any): value is Event {
-		return descriptor.validate(value);
-	}
-}
-
-export interface GroupEvent extends Event {
-	scope: EventScope.group;
-}
-
-
-export namespace GroupEvent {
-	export const descriptor = new VertexDescriptor<Required<GroupEvent>>(Object.assign({}, Event.descriptor.description, {
-		scope: new Property(value => value === EventScope.group),
-	}));
-	export function is(value: any): value is GroupEvent {
 		return descriptor.validate(value);
 	}
 }
@@ -893,17 +879,12 @@ export interface RepositoryInfo {
 	 */
 	url: string;
 
-	/**
-	 * A commitId if available.
-	 */
-	commitId?: string;
 }
 
 export namespace RepositoryInfo {
 	export const descriptor = new ObjectDescriptor<RepositoryInfo>({
 		type: new StringProperty(),
 		url: new StringProperty(),
-		commitId: new StringProperty(PropertyFlags.optional)
 	});
 	export function is(value: any): value is RepositoryInfo {
 		return descriptor.validate(value);
@@ -913,61 +894,100 @@ export namespace RepositoryInfo {
 	}
 }
 
-export interface Group extends V {
-	/**
-	 * The label property.
-	 */
-	label: VertexLabels.group;
+export interface RepositoryIndexInfo extends RepositoryInfo {
 
 	/**
-	 * The group uri
+	 * A commitId if available.
+	 */
+	commitId: string;
+
+	/**
+	 * The branch name.
+	 */
+	branchName: string;
+}
+
+export namespace RepositoryIndexInfo {
+	export const descriptor = new ObjectDescriptor<RepositoryIndexInfo>(Object.assign({}, RepositoryInfo.descriptor.description, {
+		commitId: new StringProperty(PropertyFlags.optional),
+		branchName: new StringProperty(PropertyFlags.optional)
+	}));
+	export function is(value: any): value is RepositoryInfo {
+		return descriptor.validate(value);
+	}
+	export function property(flags: PropertyFlags = PropertyFlags.none): Property<RepositoryIndexInfo> {
+		return new Property<RepositoryIndexInfo>(RepositoryIndexInfo.is, flags);
+	}
+}
+
+export interface Source extends V {
+
+	label: VertexLabels.source;
+
+	/**
+	 * The workspace root used when indexing.
+	 */
+	workspaceRoot: Uri;
+
+	/**
+	 * Optional information about the repository containing the indexed source.
+	 */
+	repository?: RepositoryInfo | RepositoryIndexInfo;
+}
+
+export namespace Source {
+	export const descriptor = new VertexDescriptor<Source>(Object.assign({}, V.descriptor.description, {
+		label: VertexLabels.property(VertexLabels.source),
+		workspaceRoot: new UriProperty(),
+		repository: new Property<RepositoryInfo | RepositoryIndexInfo>((value) => RepositoryInfo.is(value) || RepositoryIndexInfo.is(value), PropertyFlags.optional)
+	}));
+	export function is(value: any): value is Source {
+		return descriptor.validate(value);
+	}
+}
+
+export interface CatalogInfo extends V {
+
+	label: VertexLabels.catalogInfo;
+
+	/**
+	 * The URI of the catalog info. The scheme of a catalog URI should usually
+	 * be `lsif-cat` and the authority should point to the organization's
+	 * http address. And example of a catalogue URI would be something
+	 * like `lsif-cat://microsoft.com/Azure/DevDiv/vscode/vscode-languageserver-protocol`
 	 */
 	uri: Uri;
 
 	/**
-	 * Groups are usually shared between project dumps. This property indicates how a DB should
-	 * handle group information coming from different project dumps. In case of a conflict (the group
-	 * already exists in a DB) the values' meaning are:
-	 *
-	 * - `takeDump`: information of the group should overwrite information in a DB.
-	 * - `takeDB`: information of the group is ignored. The DB values stay as is.
-	 */
-	conflictResolution: 'takeDump' | 'takeDB';
-
-	/**
-	 * The group name
+	 * A user friendly name of the catalogue info.
 	 */
 	name: string;
 
 	/**
-	 * The root folder uri pointing to the file system that contained the source
-	 * when creating the dump. This is usually a TS project rootDir or a
-	 * workspace folder on disk.
-	 */
-	rootUri: Uri;
-
-	/**
-	 * The group description
+	 * An optional description.
 	 */
 	description?: string;
 
 	/**
-	 * Optional information about the repository containing the source of the package.
+	 * When a project is re-index it might want to update its catalog info. If the
+	 * DB managing the index already has an entry for the catalog information the
+	 * value defines how the conflict should be resolved. The meanings are:
+	 *
+	 * - `takeDump`: information of the catalogue should overwrite information in a DB.
+	 * - `takeDB`: information of the catalogue is ignored. The DB values stay as is.
 	 */
-	repository?: RepositoryInfo;
+	conflictResolution: 'takeDump' | 'takeDB';
 }
 
-export namespace Group {
-	export const descriptor = new VertexDescriptor<Group>(Object.assign({}, V.descriptor.description, {
-		label:VertexLabels.property(VertexLabels.group),
+export namespace CatalogueInfo {
+	export const descriptor = new VertexDescriptor<CatalogInfo>(Object.assign({}, V.descriptor.description, {
+		label:VertexLabels.property(VertexLabels.catalogInfo),
 		uri: new StringProperty(),
-		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB'),
 		name: new StringProperty(),
-		rootUri: new UriProperty(),
 		description: new StringProperty(PropertyFlags.optional),
-		repository: RepositoryInfo.property(PropertyFlags.optional)
+		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB')
 	}));
-	export function is(value: any): value is Group {
+	export function is(value: any): value is CatalogInfo {
 		return descriptor.validate(value);
 	}
 }
@@ -1101,9 +1121,9 @@ export enum UniquenessLevel {
 	project = 'project',
 
 	/**
-	 * The moniker is unique inside the group to which a project belongs
+	 * The moniker is unique inside the workspace to which a project belongs
 	 */
-	group = 'group',
+	workspace = 'workspace',
 
 	/**
 	 * The moniker is unique inside the moniker scheme.
@@ -1496,8 +1516,9 @@ export namespace HoverResult {
 export type Vertex =
 	MetaData |
 	Event |
+	Source |
+	CatalogInfo |
 	Project |
-	Group |
 	Document |
 	Moniker |
 	PackageInformation |
@@ -1518,8 +1539,9 @@ export namespace Vertex {
 	const descriptors: Map<VertexLabels, VertexDescriptor<V>> = new Map();
 	descriptors.set(VertexLabels.metaData, MetaData.descriptor);
 	descriptors.set(VertexLabels.event, Event.descriptor);
+	descriptors.set(VertexLabels.source, Source.descriptor);
+	descriptors.set(VertexLabels.catalogInfo, CatalogueInfo.descriptor);
 	descriptors.set(VertexLabels.project, Project.descriptor);
-	descriptors.set(VertexLabels.group, Group.descriptor);
 	descriptors.set(VertexLabels.document, Document.descriptor);
 	descriptors.set(VertexLabels.moniker, Moniker.descriptor);
 	descriptors.set(VertexLabels.packageInformation, PackageInformation.descriptor);
@@ -1838,23 +1860,6 @@ export namespace packageInformation {
 }
 
 /**
- * An edge associating a project with a group. The relationship exists between:
- *
- * -  `Project` -> `Group`
- */
-export type belongsTo = E11<Project, Group, EdgeLabels.belongsTo>;
-
-export namespace belongsTo {
-	const edgeInformation: EdgeTuple<belongsTo>[] = [[Project.descriptor, Group.descriptor]];
-	export const descriptor = new EdgeDescriptor<belongsTo>(Object.assign({}, E11.descriptor.description, {
-		label: EdgeLabels.property(EdgeLabels.belongsTo)
-	}), Cardinality.one2one, edgeInformation);
-	export function is(value: any): value is attach {
-		return descriptor.validate(value);
-	}
-}
-
-/**
  * An edge representing a `textDocument/documentSymbol` relationship. The relationship exists between:
  *
  * - `Document` -> `DocumentSymbolResult`
@@ -2042,7 +2047,6 @@ export type Edge =
 	moniker |
 	attach |
 	packageInformation |
-	belongsTo |
 	textDocument_documentSymbol |
 	textDocument_foldingRange |
 	textDocument_documentLink |
@@ -2073,7 +2077,6 @@ export namespace Edge {
 	descriptors.set(EdgeLabels.moniker, moniker.descriptor);
 	descriptors.set(EdgeLabels.attach, attach.descriptor);
 	descriptors.set(EdgeLabels.packageInformation, packageInformation.descriptor);
-	descriptors.set(EdgeLabels.belongsTo, belongsTo.descriptor);
 	descriptors.set(EdgeLabels.textDocument_documentSymbol, textDocument_documentSymbol.descriptor);
 	descriptors.set(EdgeLabels.textDocument_foldingRange, textDocument_foldingRange.descriptor);
 	descriptors.set(EdgeLabels.textDocument_documentLink, textDocument_documentLink.descriptor);

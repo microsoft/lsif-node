@@ -6,7 +6,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import * as yargs from 'yargs';
-import { URI } from 'vscode-uri';
 
 export const command: string = 'tsc';
 
@@ -24,12 +23,14 @@ export namespace PublishedPackageOptions {
 	}
 }
 
-export interface GroupOptions {
+export interface CatalogInfoOptions {
 	uri?: string;
-	conflictResolution?: 'takeDump' | 'takeDB';
 	name?: string;
-	rootUri?: string;
 	description? : string;
+	conflictResolution?: 'takeDump' | 'takeDB';
+}
+
+export interface SourceOptions {
 	repository?: {
 		type: string;
 		url: string;
@@ -48,8 +49,11 @@ export type Options = {
 	noContents: boolean;
 	noProjectReferences: boolean;
 	typeAcquisition: boolean;
-	moniker: 'strict' | 'lenient'
-	group: string | GroupOptions | undefined;
+	moniker: 'strict' | 'lenient';
+	workspaceRoot: string | undefined;
+	probeRepository: boolean;
+	source: SourceOptions | undefined;
+	catalogInfo: CatalogInfoOptions | undefined;
 	projectName: string | undefined;
 	package: string | undefined;
 	publishedPackages: PublishedPackageOptions[] | undefined;
@@ -70,7 +74,10 @@ export namespace Options {
 		noProjectReferences: false,
 		typeAcquisition: false,
 		moniker: 'lenient',
-		group: undefined,
+		workspaceRoot: undefined,
+		probeRepository: false,
+		source: undefined,
+		catalogInfo: undefined,
 		projectName: undefined,
 		package: undefined,
 		publishedPackages: undefined,
@@ -91,29 +98,30 @@ export namespace Options {
 				}
 			}
 		}
-		if (result.group === undefined || typeof result.group === 'string') {
-			return result;
+		if (result.source !== undefined) {
+			const source: SourceOptions = {};
+			if (typeof result.source.repository?.url === 'string' && (typeof result.source.repository?.type === 'string' || result.source.repository?.type === undefined)) {
+				source.repository = { url: result.source.repository.url, type: result.source.repository.type };
+			}
+			result.source = Object.keys(source).length > 0 ? source : undefined;
 		}
-		const group: GroupOptions = {};
-		if (typeof result.group.name === 'string') {
-			group.name = result.group.name;
+		if (result.catalogInfo !== undefined) {
+			const catalogueInfo: CatalogInfoOptions = {};
+			if (typeof result.catalogInfo.uri === 'string') {
+				catalogueInfo.uri = result.catalogInfo.uri;
+			}
+			if (typeof result.catalogInfo.name === 'string') {
+				catalogueInfo.name = result.catalogInfo.name;
+			}
+			if (typeof result.catalogInfo.description === 'string') {
+				catalogueInfo.description = result.catalogInfo.description;
+			}
+			if (result.catalogInfo.conflictResolution === 'takeDB' || result.catalogInfo.conflictResolution === 'takeDump') {
+				catalogueInfo.conflictResolution = result.catalogInfo.conflictResolution;
+			}
+
+			result.catalogInfo = Object.keys(catalogueInfo).length > 0 ? catalogueInfo : undefined;
 		}
-		if (typeof result.group.uri === 'string') {
-			group.uri = result.group.uri;
-		}
-		if (result.group.conflictResolution === 'takeDB' || result.group.conflictResolution === 'takeDump') {
-			group.conflictResolution = result.group.conflictResolution;
-		}
-		if (typeof result.group.rootUri === 'string') {
-			group.rootUri = result.group.rootUri;
-		}
-		if (typeof result.group.description === 'string') {
-			group.description = result.group.description;
-		}
-		if (typeof result.group.repository?.type === 'string' && typeof result.group.repository?.url === 'string') {
-			group.repository = { url: result.group.repository.url, type: result.group.repository.type };
-		}
-		Object.keys(group).length > 0 ? result.group = group : result.group = undefined;
 		return result;
 	}
 
@@ -127,18 +135,8 @@ export namespace Options {
 		}
 
 		const result: Options = Object.assign({}, options);
-		if (typeof options.group === 'string' && options.group !== 'stdin') {
-			result.group = makeAbsolute(options.group);
-		} else if (options.group !== undefined && typeof options.group !== 'string') {
-			const value = options.group.rootUri;
-			if (value !== undefined) {
-				const uri = URI.parse(value);
-				if (uri.scheme === 'file') {
-					(result.group as GroupOptions).rootUri = URI.parse(makeAbsolute(value)).toString(true);
-				} else {
-					(result.group as GroupOptions).rootUri = uri.toString(true);
-				}
-			}
+		if (typeof options.workspaceRoot === 'string') {
+			result.workspaceRoot = makeAbsolute(options.workspaceRoot);
 		}
 		if (typeof options.package === 'string') {
 			result.package = makeAbsolute(options.package);
@@ -208,9 +206,13 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 			choices:['number', 'uuid'],
 			default: 'number'
 		}).
-		option('group', {
-			description: 'Specifies the group config file, the group folder or stdin to read the group information from stdin.',
+		option('workspaceRoot', {
+			description: 'Specifies the root of the workspace. If omitted defaults to the current working directory',
 			string: true
+		}).
+		option('probeRepository', {
+			description: 'The tools should probe for repository information like commit id or branch name. This will launch an external process like git.',
+			boolean: true
 		}).
 		option('projectName', {
 			description: 'Specifies the project name. Defaults to the last directory segment of the tsconfig.json file.',
