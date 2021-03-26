@@ -277,7 +277,7 @@ export namespace Element {
  */
 export enum VertexLabels {
 	metaData = 'metaData',
-	catalogInfo = 'catalogue',
+	catalogInfo = 'catalogInfo',
 	event = '$event',
 	source = 'source',
 	project = 'project',
