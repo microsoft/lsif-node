@@ -10,7 +10,8 @@ import {
 	Element, ElementTypes, VertexLabels, V, DeclarationTag, UnknownTag, ResultSet, RangeTagTypes, DefinitionTag, ReferenceTag, RangeTag, Range,
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
-	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Group, MonikerKind, UniquenessLevel, GroupEvent
+	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Source, MonikerKind, UniquenessLevel,
+	CatalogInfo, RepositoryIndexInfo
 } from 'lsif-protocol';
 
 namespace Is {
@@ -430,8 +431,9 @@ export const vertexShortForms = function() {
 	return new Map<VertexLabels, number>([
 		[VertexLabels.metaData, shortCounter++],
 		[VertexLabels.event, shortCounter++],
+		[VertexLabels.catalogInfo, shortCounter++],
+		[VertexLabels.source, shortCounter++],
 		[VertexLabels.project, shortCounter++],
-		[VertexLabels.group, shortCounter++],
 		[VertexLabels.range, shortCounter++],
 		[VertexLabels.location, shortCounter++],
 		[VertexLabels.document, shortCounter++],
@@ -600,20 +602,26 @@ const locationCompressor = new GenericCompressor<Location>(vertexCompressor, Com
 ]);
 Compressor.registerVertexCompressor(VertexLabels.location, locationCompressor);
 
-const groupRepositoryCompressor = new GenericCompressor<{type: string; url: string;}>(undefined, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.scalar('type', next()),
-	GenericCompressorProperty.scalar('url', next())
-]);
-
-const groupCompressor = new GenericCompressor<Group>(vertexCompressor, Compressor.nextId(), (next) => [
+const catalogInfoCompressor = new GenericCompressor<CatalogInfo>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('uri', next()),
 	GenericCompressorProperty.scalar('conflictResolution', next()),
 	GenericCompressorProperty.scalar('name', next()),
-	GenericCompressorProperty.scalar('rootUri', next()),
 	GenericCompressorProperty.scalar('description', next()),
-	GenericCompressorProperty.literal('repository', next(), groupRepositoryCompressor)
 ]);
-Compressor.registerVertexCompressor(VertexLabels.group, groupCompressor);
+Compressor.registerVertexCompressor(VertexLabels.catalogInfo, catalogInfoCompressor);
+
+const sourceRepositoryCompressor = new GenericCompressor<RepositoryIndexInfo>(undefined, Compressor.nextId(), (next) => [
+	GenericCompressorProperty.scalar('type', next()),
+	GenericCompressorProperty.scalar('url', next()),
+	GenericCompressorProperty.scalar('commitId', next()),
+	GenericCompressorProperty.scalar('branchName', next())
+]);
+
+const sourceCompressor = new GenericCompressor<Source>(vertexCompressor, Compressor.nextId(), (next) => [
+	GenericCompressorProperty.scalar('workspaceRoot', next()),
+	GenericCompressorProperty.literal('repository', next(), sourceRepositoryCompressor)
+]);
+Compressor.registerVertexCompressor(VertexLabels.source, sourceCompressor);
 
 
 const projectCompressor = new GenericCompressor<Project>(vertexCompressor, Compressor.nextId(), (next) => [
@@ -630,7 +638,7 @@ const documentCompressor = new GenericCompressor<Document>(vertexCompressor, Com
 ]);
 Compressor.registerVertexCompressor(VertexLabels.document, documentCompressor);
 
-export const monikerKindShortFroms = function() {
+export const monikerKindShortForms = function() {
 	let shortCounter: number = 1;
 	return new Map<MonikerKind, number>([
 		[MonikerKind.local, shortCounter++],
@@ -639,7 +647,7 @@ export const monikerKindShortFroms = function() {
 	]);
 }();
 
-export const monikerUniqueShortFroms = function() {
+export const monikerUniqueShortForms = function() {
 	return new Map<UniquenessLevel, number>([
 		[UniquenessLevel.document, 1000],
 		[UniquenessLevel.project, 2000],
@@ -651,8 +659,8 @@ export const monikerUniqueShortFroms = function() {
 const monikerCompressor = new GenericCompressor<Moniker>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('scheme', next()),
 	GenericCompressorProperty.scalar('identifier', next()),
-	GenericCompressorProperty.scalar('kind', next(), monikerKindShortFroms),
-	GenericCompressorProperty.scalar('unique', next(), monikerUniqueShortFroms)
+	GenericCompressorProperty.scalar('kind', next(), monikerKindShortForms),
+	GenericCompressorProperty.scalar('unique', next(), monikerUniqueShortForms)
 ]);
 Compressor.registerVertexCompressor(VertexLabels.moniker, monikerCompressor);
 
@@ -797,7 +805,7 @@ const scopeShortForm = function() {
 	]);
 }();
 
-const eventCompressor = new GenericCompressor<GroupEvent | ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
+const eventCompressor = new GenericCompressor<ProjectEvent | DocumentEvent >(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('kind', next(), kindShortForm),
 	GenericCompressorProperty.scalar('scope', next(), scopeShortForm),
 	GenericCompressorProperty.id('data', next()),
@@ -809,7 +817,6 @@ export const edgeShortForms = function() {
 	return new Map<EdgeLabels, number>([
 		[EdgeLabels.contains, shortCounter++],
 		[EdgeLabels.item, shortCounter++],
-		[EdgeLabels.belongsTo, shortCounter++],
 		[EdgeLabels.next, shortCounter++],
 		[EdgeLabels.moniker, shortCounter++],
 		[EdgeLabels.attach, shortCounter++],
@@ -849,9 +856,6 @@ Compressor.registerEdgeCompressor(EdgeLabels.next, nextCompressor);
 
 export const monikerEdgeCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.moniker, monikerEdgeCompressor);
-
-export const belongsToCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
-Compressor.registerEdgeCompressor(EdgeLabels.belongsTo, belongsToCompressor);
 
 export const attachCompressor = new GenericCompressor<E<V, V, EdgeLabels>>(edge11Compressor, Compressor.nextId(), () => []);
 Compressor.registerEdgeCompressor(EdgeLabels.attach, attachCompressor);

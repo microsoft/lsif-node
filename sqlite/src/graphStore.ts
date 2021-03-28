@@ -8,7 +8,7 @@ import * as Sqlite from 'better-sqlite3';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,
-	PackageInformation, item, Group, Id, Moniker, Event, belongsTo
+	PackageInformation, item, Source, Id, Moniker, Event
 } from 'lsif-protocol';
 
 import { itemPropertyShortForms } from './compress';
@@ -162,8 +162,8 @@ export class GraphStore extends Store {
 				case VertexLabels.event:
 					this.handleEvent(element);
 					break;
-				case VertexLabels.group:
-					this.insertGroup(element);
+				case VertexLabels.source:
+					this.insertSource(element);
 					break;
 				case VertexLabels.project:
 					this.insertProject(element);
@@ -215,7 +215,7 @@ export class GraphStore extends Store {
 		}
 	}
 
-	private insertGroup(group: Group): void {
+	private insertSource(group: Group): void {
 		const id = this.transformId(group.id);
 		if (this.mode === 'create') {
 			this.insertVertex(group);

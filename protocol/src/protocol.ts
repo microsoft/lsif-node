@@ -277,8 +277,8 @@ export namespace Element {
  */
 export enum VertexLabels {
 	metaData = 'metaData',
-	catalogInfo = 'catalogInfo',
 	event = '$event',
+	catalogInfo = 'catalogInfo',
 	source = 'source',
 	project = 'project',
 	range = 'range',
@@ -1574,7 +1574,6 @@ export enum EdgeLabels {
 	moniker = 'moniker',
 	attach = 'attach',
 	packageInformation = 'packageInformation',
-	belongsTo = 'belongsTo',
 	textDocument_documentSymbol = 'textDocument/documentSymbol',
 	textDocument_foldingRange = 'textDocument/foldingRange',
 	textDocument_documentLink = 'textDocument/documentLink',
