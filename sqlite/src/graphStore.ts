@@ -25,7 +25,6 @@ export class GraphStore extends Store {
 	private insertContentStmt: Sqlite.Statement;
 
 	private vertexInserter: Inserter;
-	private groupInserter: Inserter;
 	private projectInserter: Inserter;
 
 	private edgeInserter: Inserter;
@@ -34,13 +33,12 @@ export class GraphStore extends Store {
 	private documentInserter: Inserter;
 	private monikerInserter: Inserter;
 
-	private pendingProjectInserts: Map<Id, Project>;
+	private source: Source | undefined;
 	private pendingDocumentInserts: Map<Id, { uri: string, hash: string }>;
 	private pendingRangeInserts: Map<Id, Range>;
 
 	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, private mode: Mode) {
 		super(input);
-		this.pendingProjectInserts = new Map();
 		this.pendingDocumentInserts = new Map();
 		this.pendingRangeInserts = new Map();
 		if (mode === 'import' && fs.existsSync(filename)) {
@@ -76,8 +74,7 @@ export class GraphStore extends Store {
 		this.db.pragma('journal_mode = MEMORY');
 
 		this.vertexInserter = new Inserter(this.db, 'Insert Into vertices (id, label, value)', 3, 128);
-		this.groupInserter = new Inserter(this.db, 'Insert Into groups (uri, id)', 2, 5);
-		this.projectInserter = new Inserter(this.db, 'Insert Into projects (groupId, name, id)', 3, 1);
+		this.projectInserter = new Inserter(this.db, 'Insert Into projects (id, name, sourceId)', 3, 1);
 		this.rangeInserter = new Inserter(this.db, 'Insert into ranges (id, belongsTo, startLine, startCharacter, endLine, endCharacter)', 6, 128);
 		this.monikerInserter = new Inserter(this.db, 'Insert into monikers (identifier, scheme, kind, uniqueness, id)', 5, 128);
 		this.documentInserter = new Inserter(this.db, 'Insert Into documents (projectId, uri, id, documentHash)', 4, 5);
@@ -97,8 +94,7 @@ export class GraphStore extends Store {
 		this.db.exec('Create Table vertices (id Integer Unique Primary Key, label Integer Not Null, value Text Not Null)');
 
 		// Search tables for vertices.
-		this.db.exec('Create Table groups (uri Text Unique Primary Key, id Integer Not Null)');
-		this.db.exec('Create table projects (groupId Integer Not Null, name Text Not Null, id Integer Not Null, Primary Key(groupId, id))');
+		this.db.exec('Create table projects (id Integer Unique Primary Key, name Text Not Null, sourceId Integer Not Null)');
 		this.db.exec('Create Table ranges (id Integer Unique Primary Key, belongsTo Integer Not Null, startLine Integer Not Null, startCharacter Integer Not Null, endLine Integer Not Null, endCharacter Integer Not Null)');
 		this.db.exec('Create Table monikers (identifier Text Not Null, scheme Text Not Null, kind Integer, uniqueness Integer Not Null, id Integer Unique)');
 		this.db.exec('Create Table documents (projectId Integer Not Null, uri Text Not Null, id Integer Not Null, documentHash Text Not Null, Primary Key(projectId, uri))');
@@ -123,7 +119,6 @@ export class GraphStore extends Store {
 
 	public close(): void {
 		this.vertexInserter.finish();
-		this.groupInserter.finish();
 		this.projectInserter.finish();
 		this.rangeInserter.finish();
 		this.monikerInserter.finish();
@@ -131,9 +126,6 @@ export class GraphStore extends Store {
 
 		this.edgeInserter.finish();
 		this.itemInserter.finish();
-		if (this.pendingProjectInserts.size > 0) {
-			console.error(`${this.pendingProjectInserts.size} pending projects exists before DB is closed.`);
-		}
 		if (this.pendingDocumentInserts.size > 0) {
 			console.error(`${this.pendingDocumentInserts.size} pending documents exists before DB is closed.`);
 		}
@@ -191,8 +183,6 @@ export class GraphStore extends Store {
 				case EdgeLabels.item:
 					this.insertItem(element);
 					break;
-				case EdgeLabels.belongsTo:
-					this.insertBelongsTo(element);
 				default:
 					this.insertEdge(element);
 			}
@@ -215,24 +205,14 @@ export class GraphStore extends Store {
 		}
 	}
 
-	private insertSource(group: Group): void {
-		const id = this.transformId(group.id);
-		if (this.mode === 'create') {
-			this.insertVertex(group);
-			this.groupInserter.do(group.uri, id);
-		} else {
-			const existingGroup: Id = this.db.prepare('Select id from groups Where uri = $uri').get({ uri: group.uri })?.id;
-			if (existingGroup === undefined) {
-				this.insertVertex(group);
-				this.groupInserter.do(group.uri, id);
-			}
-		}
+	private insertSource(source: Source): void {
+		this.source = source;
+		this.insertVertex(source);
 	}
 
 	private insertProject(project: Project): void {
 		const id = this.transformId(project.id);
-		this.pendingProjectInserts.set(id, project);
-		// this.projectInserter.do(this.activeGroup, project.name, id);
+		this.projectInserter.do(id, project.name, this.source?.id);
 		if (project.resource !== undefined && project.contents !== undefined) {
 			const hash = this.insertContent(project);
 			if (hash !== undefined) {
@@ -348,16 +328,5 @@ export class GraphStore extends Store {
 				this.itemInserter.do(id, outV, inV, shard, null);
 			}
 		}
-	}
-
-	private insertBelongsTo(belongsTo: belongsTo): void {
-		const outV = this.transformId(belongsTo.outV);
-		const inV = this.transformId(belongsTo.inV);
-		const pendingProjectInsert = this.pendingProjectInserts.get(outV);
-		if (pendingProjectInsert !== undefined) {
-			this.pendingProjectInserts.delete(outV);
-			this.projectInserter.do(inV, pendingProjectInsert.name, outV);
-		}
-		this.insertEdge(belongsTo);
 	}
 }
