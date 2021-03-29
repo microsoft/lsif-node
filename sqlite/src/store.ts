@@ -8,7 +8,7 @@ import * as readline from 'readline';
 
 import { Edge, Vertex, ElementTypes, VertexLabels, Id, MonikerKind, UniquenessLevel } from 'lsif-protocol';
 import { CompressorPropertyDescription, MetaData } from './protocol.compress';
-import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor, CompressorOptions, monikerKindShortFroms, monikerUniqueShortFroms } from './compress';
+import { Compressor, CompressorProperty, vertexShortForms, edgeShortForms, vertexCompressor, edge11Compressor, itemEdgeCompressor, CompressorOptions, monikerKindShortForms, monikerUniqueShortForms } from './compress';
 
 export abstract class Store {
 
@@ -125,7 +125,7 @@ export abstract class Store {
 			return -1;
 		}
 
-		const result = monikerKindShortFroms.get(kind);
+		const result = monikerKindShortForms.get(kind);
 		return result === undefined ? -1 : result;
 	}
 
@@ -134,7 +134,7 @@ export abstract class Store {
 			return -1;
 		}
 
-		const result = monikerUniqueShortFroms.get(level);
+		const result = monikerUniqueShortForms.get(level);
 		return result === undefined ? -1 : result;
 	}
 }

@@ -14,7 +14,7 @@ import * as paths from './paths';
 import PackageJson from './package';
 import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, attach, UniquenessLevel,
-	MonikerAttachEvent, EventScope, EventKind, Event, Group, GroupEvent
+	MonikerAttachEvent, EventScope, EventKind, Event, Source
 } from 'lsif-protocol';
 
 import { TscMoniker, NpmMoniker } from './common/moniker';
@@ -172,36 +172,16 @@ class AttachQueue {
 }
 
 
-class Groups {
+class SourceInfo {
 
-	private groups: Map<Id, Group>;
+	private _workspaceRoot: string | undefined;
 
-	private _activeProjectRoot: string | undefined;
-
-	constructor() {
-		this.groups = new Map();
+	public handleSource(source: Source): void {
+		this._workspaceRoot = URI.parse(source.workspaceRoot).fsPath;
 	}
 
-	public handleGroup(group: Group): void {
-		this.groups.set(group.id, group);
-	}
-
-	public handleGroupBegin(event: GroupEvent): void {
-		const group = this.groups.get(event.data);
-		if (group === undefined) {
-			this._activeProjectRoot = undefined;
-		} else {
-			this._activeProjectRoot = paths.normalizePath(URI.parse(group.rootUri).fsPath);
-		}
-	}
-
-	public handleGroupEnd(event: GroupEvent): void {
-		this._activeProjectRoot = undefined;
-		this.groups.delete(event.data);
-	}
-
-	public get activeProjectRoot(): string | undefined {
-		return this._activeProjectRoot;
+	public get workspaceRoot(): string | undefined {
+		return this._workspaceRoot;
 	}
 }
 
@@ -210,7 +190,7 @@ class ExportLinker {
 	private packageInformation: PackageInformation | undefined;
 	private pathPrefix: string;
 
-	constructor(private groups: Groups, private packageJson: PackageJson, private queue: AttachQueue) {
+	constructor(private source: SourceInfo, private packageJson: PackageJson, private queue: AttachQueue) {
 		this.pathPrefix = packageJson.$location;
 		if (this.pathPrefix[this.pathPrefix.length - 1] !== '/') {
 			this.pathPrefix = `${this.pathPrefix}/`;
@@ -221,14 +201,14 @@ class ExportLinker {
 		if (moniker.kind !== MonikerKind.export || moniker.scheme !== TscMoniker.scheme) {
 			return;
 		}
-		const projectRoot: string | undefined = this.groups.activeProjectRoot;
-		if (projectRoot === undefined) {
+		const workspaceRoot: string | undefined = this.source.workspaceRoot;
+		if (workspaceRoot === undefined) {
 			return;
 		}
 		const tscMoniker: TscMoniker = TscMoniker.parse(moniker.identifier);
-		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(projectRoot, tscMoniker.path))) {
+		if (TscMoniker.hasPath(tscMoniker) && this.isPackaged(path.join(workspaceRoot, tscMoniker.path))) {
 			this.ensurePackageInformation();
-			const monikerPath = this.getMonikerPath(projectRoot, tscMoniker);
+			const monikerPath = this.getMonikerPath(workspaceRoot, tscMoniker);
 			let npmIdentifier: string;
 			if (this.packageJson.main === monikerPath || this.packageJson.typings === monikerPath) {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, undefined, tscMoniker.name);
@@ -267,7 +247,7 @@ class ImportLinker {
 
 	private packageData: Map<string,  { packageInfo: PackageInformation, packageJson: PackageJson } | null>;
 
-	constructor(private group: Groups, private queue: AttachQueue) {
+	constructor(private source: SourceInfo, private queue: AttachQueue) {
 		this.packageData = new Map();
 	}
 
@@ -279,8 +259,8 @@ class ImportLinker {
 		if (!TscMoniker.hasPath(tscMoniker)) {
 			return;
 		}
-		const projectRoot = this.group.activeProjectRoot;
-		if (projectRoot === undefined) {
+		const workspaceRoot = this.source.workspaceRoot;
+		if (workspaceRoot === undefined) {
 			return;
 		}
 		const parts = tscMoniker.path.split('/');
@@ -291,7 +271,7 @@ class ImportLinker {
 			if (part === 'node_modules') {
 				// End is exclusive and one for the name
 				const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2);
-				packagePath = path.join(projectRoot, ...parts.slice(0, packageIndex), `package.json`);
+				packagePath = path.join(workspaceRoot, ...parts.slice(0, packageIndex), `package.json`);
 				monikerPath = parts.slice(packageIndex).join('/');
 				break;
 			}
@@ -384,12 +364,12 @@ export function run(options: Options): void {
 	}
 
 	const queue: AttachQueue = new AttachQueue(emit);
-	const groups: Groups = new Groups();
+	const sourceInfo: SourceInfo = new SourceInfo();
 	let exportLinker: ExportLinker | undefined;
 	if (packageJson !== undefined) {
-		exportLinker = new ExportLinker(groups, packageJson, queue);
+		exportLinker = new ExportLinker(sourceInfo, packageJson, queue);
 	}
-	const importLinker: ImportLinker = new ImportLinker(groups, queue);
+	const importLinker: ImportLinker = new ImportLinker(sourceInfo, queue);
 	let input: NodeJS.ReadStream | fs.ReadStream = process.stdin;
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
@@ -417,18 +397,11 @@ export function run(options: Options): void {
 					}
 					importLinker.handleMoniker(element);
 					break;
-				case VertexLabels.group:
-					groups.handleGroup(element);
+				case VertexLabels.source:
+					sourceInfo.handleSource(element);
 					break;
 				case VertexLabels.event:
 					queue.duplicateEvent(element);
-					if (element.scope === EventScope.group) {
-						if (element.kind === EventKind.begin) {
-							groups.handleGroupBegin(element as GroupEvent);
-						} else {
-							groups.handleGroupEnd(element as GroupEvent);
-						}
-					}
 					break;
 			}
 		}
