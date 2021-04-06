@@ -16,7 +16,7 @@
 	"devDependencies": {
 		"@types/node": "^12.12.29",
 		"@types/shelljs": "^0.8.8",
-		"@types/yargs": "^16.0.0",
+		"@types/yargs": "^16.0.1",
 		"@typescript-eslint/eslint-plugin": "^4.19.0",
 		"@typescript-eslint/parser": "^4.19.0",
 		"eslint": "^7.23.0",
