@@ -12,5 +12,12 @@
 		{ "package": "./sqlite/package.json", "project": "./sqlite/tsconfig.json" },
 		{ "package": "./tooling/package.json", "project": "./tooling/tsconfig.json" },
 		{ "package": "./lsif/package.json", "project": "./lsif/tsconfig.json" }
-	]
+	],
+	// Get the source info from the package.json file
+	"source": "./package.json",
+	// The catalog information
+	"catalogInfo": {
+    	"uri": "lsif-cat://microsoft.com/azure/devdiv/vscode/lsif-node",
+        "name": "LSIF indexer tooling"
+    }
 }
