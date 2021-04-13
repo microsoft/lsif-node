@@ -316,6 +316,13 @@ class DocumentData extends LSIFData<EmitterContext> {
 		this.documentSymbols = documentSymbols;
 	}
 
+	public flushRanges(): void {
+		if (this.ranges.length >= 0) {
+			this.emit(this.edge.contains(this.document, this.ranges));
+			this.ranges = [];
+		}
+	}
+
 	public end(): void {
 		this.checkClosed();
 		if (this.ranges.length >= 0) {
@@ -3080,6 +3087,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		if (data === undefined) {
 			throw new Error(`No document data for file ${fileName}`);
 		}
+		data.flushRanges();
 		const handledSymbolData: Set<string> = new Set();
 		const validateVisibilityOn = this.validateVisibilityOn.get(fileName);
 		this.validateVisibilityOn.delete(fileName);
