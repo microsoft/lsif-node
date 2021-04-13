@@ -21,6 +21,7 @@ export class ValidateCommand extends Command {
 	private readonly edgeInformation: Map<EdgeLabels, Map<VertexDescriptor<V>, Set<VertexDescriptor<V>>>>;
 	private readonly openElements: Set<Id>;
 	private readonly closedElements: Set<Id>;
+	private readonly associatedRanges: Set<Id>;
 
 	constructor(input: NodeJS.ReadStream | fs.ReadStream | IterableIterator<Edge | Vertex>, options: ValidateOptions, reporter: DiagnosticReporter) {
 		super(input, reporter);
@@ -31,6 +32,7 @@ export class ValidateCommand extends Command {
 		this.edgeInformation = new Map();
 		this.openElements = new Set();
 		this.closedElements = new Set();
+		this.associatedRanges = new Set();
 		this.options;
 	}
 
@@ -75,6 +77,8 @@ export class ValidateCommand extends Command {
 		let cardinalityCorrect: boolean = true;
 		let isOpen: boolean = true;
 		let isClosed: boolean = false;
+		let freeRanges: Id[] = [];
+
 		if (valid) {
 			const referencedVertices: [VertexLabels | undefined, VertexLabels | undefined][] = [];
 			if (Edge.is11(edge)) {
@@ -121,12 +125,26 @@ export class ValidateCommand extends Command {
 			if (descriptor.cardinality === Cardinality.one2one && cardinality !== 1) {
 				cardinalityCorrect = false;
 			}
+			if (edge.label === EdgeLabels.contains) {
+				const vertexLabel = this.vertices.get(edge.outV);
+				if (vertexLabel === VertexLabels.document) {
+					for (const range of edge.inVs) {
+						this.associatedRanges.add(range);
+					}
+				}
+			}
 			if (edge.label === EdgeLabels.item) {
 				isOpen = this.openElements.has(edge.shard)!!;
 				isClosed = this.closedElements.has(edge.shard)!!;
+				for (const inV of edge.inVs) {
+					const vertexLabel = this.vertices.get(inV);
+					if (vertexLabel === VertexLabels.range && !this.associatedRanges.has(inV)) {
+						freeRanges.push(inV);
+					}
+				}
 			}
 		}
-		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen || !cardinalityCorrect) {
+		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen || !cardinalityCorrect || freeRanges.length > 0) {
 			this.reporter.error(edge);
 			if (!valid) {
 				this.reporter.error(edge, 'edge has invalid property values.');
@@ -152,6 +170,9 @@ export class ValidateCommand extends Command {
 				} else {
 					this.reporter.error(edge, `the vertex referenced via the shard property is not open yet.`);
 				}
+			}
+			if (freeRanges.length > 0) {
+				this.reporter.error(edge, `the ranges [${freeRanges.join(',')}] referenced via the edge are not associated with a document.`);
 			}
 		}
 	}

@@ -439,7 +439,7 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 
 	public end(): void {
 		if (this.definitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
-			let definitionResult = this.symbolData.getOrCreateDefinitionResult();
+			const definitionResult = this.symbolData.getOrCreateDefinitionResult();
 			this.emit(this.edge.item(definitionResult, this.definitionRanges, this.shard));
 		}
 		if (this.typeDefinitionRanges !== SymbolDataPartition.EMPTY_ARRAY) {
@@ -820,7 +820,7 @@ class StandardSymbolData extends SymbolData {
 		if (forceSingle && this.partitions.size > 1) {
 			throw new Error(`Symbol data has more than one partition.`);
 		}
-		for (let entry of this.partitions.entries()) {
+		for (const entry of this.partitions.entries()) {
 			entry[1].end();
 		}
 		this.clearedPartitions = undefined;
@@ -2216,6 +2216,12 @@ abstract class ProjectDataManager {
 	public getDocuments(): Set<Document> {
 		const result = new Set<Document>();
 		for (const data of this.documentDataItems) {
+			// The documents are used to end partitions in lower level
+			// projects. So flush the ranges so that we can use them
+			// in item edges.
+			if (!data.isClosed) {
+				data.flushRanges();
+			}
 			result.add(data.document);
 		}
 		return result;
@@ -2257,6 +2263,11 @@ abstract class ProjectDataManager {
 	public abstract end(): void;
 
 	protected doEnd(documents: Set<Document> | undefined): void {
+		for (const data of this.documentDataItems) {
+			if (!data.isClosed) {
+				data.flushRanges();
+			}
+		}
 		for (const symbolData of this.managedSymbolDataItems) {
 			if (documents === undefined) {
 				symbolData.end();
