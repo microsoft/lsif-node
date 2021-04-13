@@ -252,6 +252,7 @@ class DocumentData extends LSIFData<EmitterContext> {
 	public readonly next: DocumentData | undefined;
 	private _isClosed: boolean;
 	private ranges: Range[];
+	private rangesEmitted: boolean;
 	private diagnostics: lsp.Diagnostic[];
 	private foldingRanges: lsp.FoldingRange[];
 	private documentSymbols: RangeBasedDocumentSymbol[];
@@ -266,6 +267,7 @@ class DocumentData extends LSIFData<EmitterContext> {
 		this.next = next;
 		this._isClosed = false;
 		this.ranges = [];
+		this.rangesEmitted = false;
 		this.diagnostics = DocumentData.EMPTY_ARRAY;
 		this.foldingRanges = DocumentData.EMPTY_ARRAY;
 		this.documentSymbols = DocumentData.EMPTY_ARRAY;
@@ -317,15 +319,16 @@ class DocumentData extends LSIFData<EmitterContext> {
 	}
 
 	public flushRanges(): void {
-		if (this.ranges.length >= 0) {
+		if (this.ranges.length > 0) {
 			this.emit(this.edge.contains(this.document, this.ranges));
 			this.ranges = [];
+			this.rangesEmitted = true;
 		}
 	}
 
 	public end(): void {
 		this.checkClosed();
-		if (this.ranges.length >= 0) {
+		if (this.ranges.length > 0 || (!this.rangesEmitted && this.ranges.length === 0)) {
 			this.emit(this.edge.contains(this.document, this.ranges));
 		}
 		if (this.diagnostics !== DocumentData.EMPTY_ARRAY) {

@@ -172,14 +172,15 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 78);
 		const validate: Element[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"YMJQRLr/qZiUrOskF3looA==","unique":"document","kind":"local"}'),
-			JSON.parse('{"id":38,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":39,"type":"edge","label":"textDocument/references","outV":14,"inV":38}'),
+			JSON.parse('{"id":39,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":40,"type":"edge","label":"textDocument/references","outV":14,"inV":39}'),
 			JSON.parse('{"id":59,"type":"vertex","label":"range","start":{"line":0,"character":9},"end":{"line":0,"character":12},"tag":{"type":"definition","text":"foo","kind":7,"fullRange":{"start":{"line":0,"character":9},"end":{"line":0,"character":12}}}}'),
 			JSON.parse('{"id":65,"type":"vertex","label":"range","start":{"line":1,"character":0},"end":{"line":1,"character":3},"tag":{"type":"reference","text":"foo"}}'),
-			JSON.parse('{"id":73,"type":"edge","label":"item","outV":38,"inVs":[59,65],"shard":48,"property":"references"}')
+			JSON.parse('{"id":74,"type":"edge","label":"item","outV":39,"inVs":[59,65],"shard":48,"property":"references"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -202,6 +203,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
+		assert.deepEqual(emitter.lastId, 85);
 		const validate: Element[] = [
 			// _foo
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
@@ -217,9 +219,9 @@ suite('Export Tests', () => {
 			JSON.parse('{"id":27,"type":"vertex","label":"referenceResult"}'),
 			JSON.parse('{"id":28,"type":"edge","label":"textDocument/references","outV":23,"inV":27}'),
 			// The reference result for _foo
-			JSON.parse('{"id":41,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":42,"type":"edge","label":"textDocument/references","outV":14,"inV":41}'),
-			JSON.parse('{"id":45,"type":"edge","label":"item","outV":41,"inVs":[27],"shard":7,"property":"referenceResults"}')
+			JSON.parse('{"id":42,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":43,"type":"edge","label":"textDocument/references","outV":14,"inV":42}'),
+			JSON.parse('{"id":46,"type":"edge","label":"item","outV":42,"inVs":[27],"shard":7,"property":"referenceResults"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -816,18 +818,18 @@ suite('Export Tests', () => {
 			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"F2J3JxC7HxVdRqlV9CVRfQ==","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:bar.__rt.value","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":29}'),
-			JSON.parse('{"id":59,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":60,"type":"edge","label":"textDocument/references","outV":14,"inV":59}'),
-			JSON.parse('{"id":65,"type":"vertex","label":"referenceResult"}'),
-			JSON.parse('{"id":66,"type":"edge","label":"textDocument/references","outV":21,"inV":65}'),
+			JSON.parse('{"id":60,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":61,"type":"edge","label":"textDocument/references","outV":14,"inV":60}'),
+			JSON.parse('{"id":66,"type":"vertex","label":"referenceResult"}'),
+			JSON.parse('{"id":67,"type":"edge","label":"textDocument/references","outV":21,"inV":66}'),
 			JSON.parse('{"id":92,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:foo","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":93,"type":"edge","label":"attach","outV":92,"inV":15}'),
 			JSON.parse('{"id":94,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:bar","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":95,"type":"edge","label":"attach","outV":94,"inV":22}'),
 			JSON.parse('{"id":96,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"b:bar.__rt.value","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":97,"type":"edge","label":"attach","outV":96,"inV":29}'),
-			JSON.parse('{"id":142,"type":"edge","label":"item","outV":59,"inVs":[118,132],"shard":107,"property":"references"}'),
-			JSON.parse('{"id":143,"type":"edge","label":"item","outV":65,"inVs":[126,134],"shard":107,"property":"references"}')
+			JSON.parse('{"id":143,"type":"edge","label":"item","outV":60,"inVs":[118,132],"shard":107,"property":"references"}'),
+			JSON.parse('{"id":144,"type":"edge","label":"item","outV":66,"inVs":[126,134],"shard":107,"property":"references"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
