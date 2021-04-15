@@ -45,22 +45,32 @@ export class ValidateCommand extends Command {
 	}
 
 	private validateVertex(vertex: Vertex): void {
+		const descriptor = Vertex.getDescriptor(vertex);
+		const valid = descriptor.validate(vertex);
 		this.vertices.set(vertex.id, vertex.label);
-		if (vertex.label === VertexLabels.event) {
-			if (vertex.kind === EventKind.begin) {
-				this.openElements.add(vertex.data);
-			} else if (vertex.kind === EventKind.end) {
-				this.openElements.delete(vertex.data);
-				this.closedElements.add(vertex.data);
+
+		let isClosed: Id | undefined = undefined;
+		if (valid) {
+			if (vertex.label === VertexLabels.event) {
+				if (vertex.kind === EventKind.begin) {
+					if (this.closedElements.has(vertex.data)) {
+						isClosed = vertex.data;
+					}
+					this.openElements.add(vertex.data);
+				} else if (vertex.kind === EventKind.end) {
+					this.openElements.delete(vertex.data);
+					this.closedElements.add(vertex.data);
+				}
 			}
 		}
 
-		const descriptor = Vertex.getDescriptor(vertex);
-		const valid = descriptor.validate(vertex);
-		if (!valid) {
+		if (!valid || isClosed !== undefined) {
 			this.reporter.error(vertex);
 			if (!valid) {
 				this.reporter.error(vertex, 'vertex has invalid property values.');
+			}
+			if (isClosed !== undefined) {
+				this.reporter.error(vertex, `vertex ${isClosed} got already closed and shouldn't be reopened.`);
 			}
 		}
 	}
