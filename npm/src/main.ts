@@ -120,12 +120,6 @@ class AttachQueue {
 		return result;
 	}
 
-	public duplicateEvent(event: Event) {
-		const duplicate: Event = Object.assign({}, event);
-		duplicate.id = this.idGenerator();
-		this.store.push(duplicate);
-	}
-
 	public flush(lastId: Id): void {
 		if (this.store.length === 0) {
 			return;
@@ -399,9 +393,6 @@ export function run(options: Options): void {
 					break;
 				case VertexLabels.source:
 					sourceInfo.handleSource(element);
-					break;
-				case VertexLabels.event:
-					queue.duplicateEvent(element);
 					break;
 			}
 		}
