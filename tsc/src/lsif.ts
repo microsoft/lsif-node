@@ -2369,14 +2369,14 @@ class LazyProjectDataManager extends ProjectDataManager {
 	}
 }
 
-class GlobalProjectDataManager extends LazyProjectDataManager {
+class MachineProjectDataManager extends LazyProjectDataManager {
 
 	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
 		super(id, context, project, reporter);
 	}
 
 	protected getName(): string {
-		return 'Global libraries';
+		return 'Machine default libraries';
 	}
 }
 
@@ -2945,16 +2945,16 @@ export enum DataMode {
 
 export class DataManager implements SymbolDataContext, ProjectDataManagerContext {
 
-	private static readonly GlobalId: string = 'bc450df0-741c-4ee7-9e0e-eddd95f8f314';
+	private static readonly MachineId: string = 'bc450df0-741c-4ee7-9e0e-eddd95f8f314';
 	private static readonly DefaultLibsId: string = '5779b280-596f-4b5d-90d8-b87441d7afa0';
 
 	private readonly context: EmitterContext;
 	private readonly reporter: Reporter;
 	private readonly dataMode: DataMode;
 
-	private readonly globalPDM: GlobalProjectDataManager;
-	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
 	private readonly workspacePDM: WorkspaceProjectDataManager;
+	private readonly machinePDM: MachineProjectDataManager;
+	private readonly defaultLibsPDM: DefaultLibsProjectDataManager;
 
 	private currentTSProject: TSProject | undefined;
 	private currentPDM: TSConfigProjectDataManager | undefined;
@@ -2985,9 +2985,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		this.vertex = this.context.vertex;
 		this.edge = this.context.edge;
 
-		this.globalPDM = new GlobalProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.GlobalId), reporter);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
 		this.workspacePDM = new WorkspaceProjectDataManager(ProjectId.next(), this, this.context.vertex.project(workspaceRoot), workspaceRoot, reporter);
+		this.machinePDM = new MachineProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.MachineId), reporter);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
 	}
 
 	public emit(element: Vertex | Edge): void {
@@ -2995,8 +2995,8 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	}
 
 	public begin(): void {
-		this.globalPDM.begin();
 		this.defaultLibsPDM.begin();
+		this.machinePDM.begin();
 		this.workspacePDM.begin();
 	}
 
@@ -3037,7 +3037,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	}
 
 	public end(): void {
-		const managers: ProjectDataManager[] = [this.workspacePDM, this.defaultLibsPDM, this.globalPDM];
+		const managers: ProjectDataManager[] = [this.workspacePDM, this.machinePDM, this.defaultLibsPDM];
 		for (let i = 0; i < managers.length; i++) {
 			const manager = managers[i];
 			const documents = manager.getDocuments();
@@ -3091,7 +3091,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		} else if (this.workspacePDM.handles(sourceFile)) {
 			return this.workspacePDM;
 		} else {
-			return this.globalPDM;
+			return this.machinePDM;
 		}
 	}
 
@@ -3230,12 +3230,12 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
 		let manager: ProjectDataManager;
 		if (useGlobalProjectDataManager || sourceFiles === undefined || sourceFiles.length === 0) {
-			manager = this.globalPDM;
+			manager = this.machinePDM;
 		} else {
 			manager = this.getProjectDataManager(sourceFiles[0]);
 			for (let i = 1; i < sourceFiles.length; i++) {
 				if (manager !== this.getProjectDataManager(sourceFiles[i])) {
-					manager = this.globalPDM;
+					manager = this.machinePDM;
 					break;
 				}
 			}
@@ -3273,7 +3273,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	}
 
 	private isGlobalProjectId(id: ProjectId): boolean {
-		return id === this.globalPDM.id || id === this.defaultLibsPDM.id || id === this.workspacePDM.id;
+		return id === this.defaultLibsPDM.id || id === this.machinePDM.id || id === this.workspacePDM.id;
 	}
 }
 
