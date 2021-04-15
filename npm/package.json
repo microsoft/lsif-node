@@ -1,7 +1,7 @@
 {
 	"name": "lsif-npm",
 	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.6.0-next.1",
+	"version": "0.6.0-next.2",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
