@@ -58,8 +58,8 @@ suite('Union Types', () => {
 			JSON.parse('{"id":127,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":[a:A.name,a:B.name]","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":128,"type":"edge","label":"moniker","outV":126,"inV":127}'),
 			JSON.parse('{"id":153,"type":"edge","label":"textDocument/references","outV":126,"inV":152}'),
-			JSON.parse('{"id":154,"type":"edge","label":"item","outV":152,"inVs":[70,83],"shard":2,"property":"referenceResults"}'),
-			JSON.parse('{"id":155,"type":"edge","label":"item","outV":152,"inVs":[22,36],"shard":2,"property":"referenceLinks"}')
+			JSON.parse('{"id":154,"type":"edge","label":"item","outV":152,"inVs":[70,83],"shard":3,"property":"referenceResults"}'),
+			JSON.parse('{"id":155,"type":"edge","label":"item","outV":152,"inVs":[22,36],"shard":3,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
@@ -94,8 +94,8 @@ suite('Union Types', () => {
 			JSON.parse('{"id":156,"type":"edge","label":"moniker","outV":154,"inV":155}'),
 			JSON.parse('{"id":180,"type":"vertex","label":"referenceResult"}'),
 			JSON.parse('{"id":181,"type":"edge","label":"textDocument/references","outV":154,"inV":180}'),
-			JSON.parse('{"id":182,"type":"edge","label":"item","outV":180,"inVs":[86,99],"shard":2,"property":"referenceResults"}'),
-			JSON.parse('{"id":183,"type":"edge","label":"item","outV":180,"inVs":[22,36],"shard":2,"property":"referenceLinks"}'),
+			JSON.parse('{"id":182,"type":"edge","label":"item","outV":180,"inVs":[86,99],"shard":3,"property":"referenceResults"}'),
+			JSON.parse('{"id":183,"type":"edge","label":"item","outV":180,"inVs":[22,36],"shard":3,"property":"referenceLinks"}'),
 		];
 		for (const elem of validate) {
 			assert.deepEqual(emitter.elements.get(elem.id), elem);
