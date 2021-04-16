@@ -58,6 +58,12 @@ export type Options = {
 	package: string | undefined;
 	publishedPackages: PublishedPackageOptions[] | undefined;
 	log: string | boolean;
+	files: Map<string, string> | undefined;
+	outputWriter: {
+		write(...data: string[]): void;
+		writeEOL(): void;
+		writeln(...data: string[]): void;
+	} | undefined;
 };
 
 export namespace Options {
@@ -81,7 +87,9 @@ export namespace Options {
 		projectName: undefined,
 		package: undefined,
 		publishedPackages: undefined,
-		log: ''
+		log: '',
+		files: undefined,
+		outputWriter: undefined
 	};
 
 	export function sanitize(options: Options): Options {
