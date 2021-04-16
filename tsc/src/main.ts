@@ -604,6 +604,9 @@ export async function run(this: void, options: Options): Promise<void> {
 		catalogInfo.conflictResolution = catalogInfoOptions.conflictResolution;
 		emitter.emit(catalogInfo);
 	}
+	const capabilities = builder.vertex.capabilities(true);
+	capabilities.declarationProvider = false;
+	emitter.emit(capabilities);
 
 	let reporter: InternalReporter;
 	if (options.log === '') { // --log not provided

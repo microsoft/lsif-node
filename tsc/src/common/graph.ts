@@ -14,7 +14,7 @@ import {
 	UnknownTag, DefinitionResult, ImplementationResult, textDocument_implementation, textDocument_typeDefinition, TypeDefinitionResult, FoldingRangeResult,
 	textDocument_foldingRange, RangeBasedDocumentSymbol, DefinitionTag, DefinitionRange, ResultSet, MetaData, Location, ElementTypes, VertexLabels, EdgeLabels,
 	Moniker, PackageInformation, moniker, packageInformation, MonikerKind, ItemEdgeProperties, Event, EventKind, EventScope, DocumentEvent, ProjectEvent,
-	DeclarationResult, textDocument_declaration, next, UniquenessLevel, Uri, MonikerAttachEvent, attach, Source, CatalogInfo
+	DeclarationResult, textDocument_declaration, next, UniquenessLevel, Uri, MonikerAttachEvent, attach, Source, CatalogInfo, Capabilities
 } from 'lsif-protocol';
 
 export interface BuilderOptions {
@@ -87,6 +87,22 @@ export class VertexBuilder {
 			conflictResolution: 'takeDB'
 		};
 		return result;
+	}
+
+	public capabilities(defaultValue: boolean = false): Capabilities {
+		return {
+			id: this.nextId(),
+			type: ElementTypes.vertex,
+			label: VertexLabels.capabilities,
+			hoverProvider: defaultValue,
+			declarationProvider: defaultValue,
+			definitionProvider: defaultValue,
+			typeDefinitionProvider: defaultValue,
+			referencesProvider: defaultValue,
+			documentSymbolProvider: defaultValue,
+			foldingRangeProvider: defaultValue,
+			diagnosticProvider: defaultValue
+		};
 	}
 
 	public project(name: string, contents?: string): Project {

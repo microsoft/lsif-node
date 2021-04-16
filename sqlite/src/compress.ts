@@ -11,7 +11,7 @@ import {
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
 	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Source, MonikerKind, UniquenessLevel,
-	CatalogInfo, RepositoryIndexInfo
+	CatalogInfo, RepositoryIndexInfo, Capabilities
 } from 'lsif-protocol';
 
 namespace Is {
@@ -433,6 +433,7 @@ export const vertexShortForms = function() {
 		[VertexLabels.event, shortCounter++],
 		[VertexLabels.catalogInfo, shortCounter++],
 		[VertexLabels.source, shortCounter++],
+		[VertexLabels.capabilities, shortCounter++],
 		[VertexLabels.project, shortCounter++],
 		[VertexLabels.range, shortCounter++],
 		[VertexLabels.location, shortCounter++],
@@ -622,6 +623,18 @@ const sourceCompressor = new GenericCompressor<Source>(vertexCompressor, Compres
 	GenericCompressorProperty.literal('repository', next(), sourceRepositoryCompressor)
 ]);
 Compressor.registerVertexCompressor(VertexLabels.source, sourceCompressor);
+
+const capabilitiesCompressor = new GenericCompressor<Capabilities>(vertexCompressor, Compressor.nextId(), (next) => [
+	GenericCompressorProperty.scalar('hoverProvider', next()),
+	GenericCompressorProperty.scalar('declarationProvider', next()),
+	GenericCompressorProperty.scalar('definitionProvider', next()),
+	GenericCompressorProperty.scalar('typeDefinitionProvider', next()),
+	GenericCompressorProperty.scalar('referencesProvider', next()),
+	GenericCompressorProperty.scalar('documentSymbolProvider', next()),
+	GenericCompressorProperty.scalar('foldingRangeProvider', next()),
+	GenericCompressorProperty.scalar('diagnosticProvider', next())
+]);
+Compressor.registerVertexCompressor(VertexLabels.capabilities, capabilitiesCompressor);
 
 
 const projectCompressor = new GenericCompressor<Project>(vertexCompressor, Compressor.nextId(), (next) => [

@@ -280,6 +280,7 @@ export enum VertexLabels {
 	event = '$event',
 	catalogInfo = 'catalogInfo',
 	source = 'source',
+	capabilities = 'capabilities',
 	project = 'project',
 	range = 'range',
 	location = 'location',
@@ -993,6 +994,71 @@ export namespace CatalogueInfo {
 }
 
 /**
+ * The LSP capabilities a dump supports
+ */
+export interface Capabilities extends V {
+
+	label: VertexLabels.capabilities;
+
+	/**
+	 * The dump has support for hover
+	 */
+	hoverProvider: boolean;
+
+	/**
+	 * The dump has support for goto declaration.
+	 */
+	declarationProvider: boolean;
+
+	/**
+	 * The dump has support for goto definition.
+	 */
+	definitionProvider: boolean;
+
+	/**
+	 * The dump has support for goto type definition.
+	 */
+	typeDefinitionProvider: boolean;
+
+	/**
+	 * The dump has support for find references.
+	 */
+	referencesProvider: boolean;
+
+	/**
+	 * The dump has support for document symbols.
+	 */
+	documentSymbolProvider: boolean;
+
+	/**
+	 * The dump has support for folding ranges.
+	 */
+	foldingRangeProvider: boolean;
+
+	/**
+	 * The dump has support for diagnostics.
+	 */
+	diagnosticProvider: boolean;
+}
+
+export namespace Capabilities {
+	export const descriptor = new VertexDescriptor<Capabilities>(Object.assign({}, V.descriptor.description, {
+		label:VertexLabels.property(VertexLabels.capabilities),
+		hoverProvider: new BooleanProperty(),
+		declarationProvider: new BooleanProperty(),
+		definitionProvider: new BooleanProperty(),
+		referencesProvider: new BooleanProperty(),
+		typeDefinitionProvider: new BooleanProperty(),
+		documentSymbolProvider: new BooleanProperty(),
+		foldingRangeProvider: new BooleanProperty(),
+		diagnosticProvider: new BooleanProperty()
+	}));
+	export function is(value: any): value is CatalogInfo {
+		return descriptor.validate(value);
+	}
+}
+
+/**
  * A project vertex.
  */
 export interface Project extends V {
@@ -1518,6 +1584,7 @@ export type Vertex =
 	Event |
 	Source |
 	CatalogInfo |
+	Capabilities |
 	Project |
 	Document |
 	Moniker |
