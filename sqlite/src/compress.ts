@@ -617,6 +617,7 @@ const sourceRepositoryCompressor = new GenericCompressor<RepositoryIndexInfo>(un
 	GenericCompressorProperty.scalar('commitId', next()),
 	GenericCompressorProperty.scalar('branchName', next())
 ]);
+Compressor.addCompressor(sourceRepositoryCompressor);
 
 const sourceCompressor = new GenericCompressor<Source>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('workspaceRoot', next()),
