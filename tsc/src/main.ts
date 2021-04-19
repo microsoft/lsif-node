@@ -221,6 +221,7 @@ interface ProcessProjectOptions {
 	dataMode: DataMode;
 	reporter: Reporter;
 	processed: Map<String, ProjectInfo>;
+	files?: Map<string, string>;
 }
 
 async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined,  options: ProcessProjectOptions): Promise<ProjectInfo | number> {
@@ -282,10 +283,10 @@ async function processProject(config: ts.ParsedCommandLine, emitter: EmitterCont
 		getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
 			let result: ts.IScriptSnapshot | undefined = scriptSnapshots.get(fileName);
 			if (result === undefined) {
-				if (!ts.sys.fileExists(fileName)) {
-					return undefined;
+				let content: string | undefined = options.files !== undefined ? options.files.get(fileName) : undefined;
+				if (content === undefined && ts.sys.fileExists(fileName)) {
+					content = ts.sys.readFile(fileName);
 				}
-				let content = ts.sys.readFile(fileName);
 				if (content === undefined) {
 					return undefined;
 				}
@@ -431,11 +432,13 @@ export async function run(this: void, options: Options): Promise<void> {
 		}
 	}
 
-	let writer: Writer | undefined;
-	if (options.stdout) {
-		writer = new StdoutWriter();
-	} else if (options.out) {
-		writer = new FileWriter(fs.openSync(options.out, 'w'));
+	let writer: Writer | undefined = options.outputWriter;
+	if (writer === undefined) {
+		if (options.stdout) {
+			writer = new StdoutWriter();
+		} else if (options.out) {
+			writer = new FileWriter(fs.openSync(options.out, 'w'));
+		}
 	}
 
 	if (writer === undefined) {
@@ -521,6 +524,13 @@ export async function run(this: void, options: Options): Promise<void> {
 	}
 	if (needsProject && options.p !== undefined) {
 		args.push('-p', options.p);
+	}
+
+	// Push in memory file onto the args so that the TS compiler sees them.
+	if (options.files !== undefined) {
+		for (const filename of options.files.keys()) {
+			args.push(filename);
+		}
 	}
 
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
@@ -659,7 +669,8 @@ export async function run(this: void, options: Options): Promise<void> {
 		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
 		packageInfo: packageInfo,
 		reporter: reporter,
-		processed: new Map()
+		processed: new Map(),
+		files: options.files
 	};
 	const dataManager: DataManager = new DataManager(emitterContext, processProjectOptions.workspaceRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
 	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceRoot);
