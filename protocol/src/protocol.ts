@@ -1606,6 +1606,7 @@ export namespace Vertex {
 	const descriptors: Map<VertexLabels, VertexDescriptor<V>> = new Map();
 	descriptors.set(VertexLabels.metaData, MetaData.descriptor);
 	descriptors.set(VertexLabels.event, Event.descriptor);
+	descriptors.set(VertexLabels.capabilities, Capabilities.descriptor);
 	descriptors.set(VertexLabels.source, Source.descriptor);
 	descriptors.set(VertexLabels.catalogInfo, CatalogueInfo.descriptor);
 	descriptors.set(VertexLabels.project, Project.descriptor);
