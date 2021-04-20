@@ -1,5 +1,6 @@
 # lsif-npm
-> *Languag Server Index Format tool for npm*
+
+> _Language Server Index Format tool for npm_
 
 ### Requirements
 
@@ -13,4 +14,20 @@ See also the [Language Server Index Format Specification](https://github.com/Mic
 
 ### How to Run the Tool
 
-The easiest way to run the tool is to install the latest version (which are pre-release version starting with 0.x right now). For example `npm install -g lsif-npm`. Then create a LSIF dump for TypeScript using [lsif-tsc](https://github.com/microsoft/lsif-node/blob/master/tsc/README.md) and store it to a file using `--out` option. Something like `lsif-tsc -p .\tsconfig.json --out dump.lsif`. To make the monikers npm specific use the created dump as an input to the lsif-npm tool. Something like `lisf-npm --in .\dump.lsif --package .\package.json --stdout` which print the dump with both tsc and npm monikers to stdout. Also of interest could be the overall [readme](https://github.com/microsoft/lsif-node/blob/master/README.md)
+The easiest way to run the tool is to install the latest version (which are pre-release version starting with 0.x right now).
+
+First, install `lsif-npm` with:
+
+`npm install -g lsif-npm`.
+
+Then create a LSIF dump for TypeScript using [lsif-tsc](https://github.com/microsoft/lsif-node/blob/master/tsc/README.md) and store it to a file using the `--out` option:
+
+`lsif-tsc -p .\tsconfig.json --out dump.lsif`
+
+Next, to make the monikers npm specific use the created dump as an input to the `lsif-npm` tool:
+
+`lsif-npm --in .\dump.lsif --package .\package.json --stdout`
+
+This will print the dump with both tsc and npm monikers to stdout.
+
+For more information, see [the lsif-node readme](https://github.com/microsoft/lsif-node/blob/master/README.md)
