@@ -23,13 +23,6 @@ export namespace PublishedPackageOptions {
 	}
 }
 
-export interface CatalogInfoOptions {
-	uri?: string;
-	name?: string;
-	description? : string;
-	conflictResolution?: 'takeDump' | 'takeDB';
-}
-
 export interface SourceOptions {
 	repository?: {
 		type: string;
@@ -51,9 +44,7 @@ export type Options = {
 	typeAcquisition: boolean;
 	moniker: 'strict' | 'lenient';
 	workspaceRoot: string | undefined;
-	probeRepository: boolean;
 	source: string | SourceOptions | undefined;
-	catalogInfo: CatalogInfoOptions | undefined;
 	projectName: string | undefined;
 	package: string | undefined;
 	publishedPackages: PublishedPackageOptions[] | undefined;
@@ -81,9 +72,7 @@ export namespace Options {
 		typeAcquisition: false,
 		moniker: 'lenient',
 		workspaceRoot: undefined,
-		probeRepository: false,
 		source: undefined,
-		catalogInfo: undefined,
 		projectName: undefined,
 		package: undefined,
 		publishedPackages: undefined,
@@ -114,23 +103,6 @@ export namespace Options {
 				}
 				result.source = Object.keys(source).length > 0 ? source : undefined;
 			}
-		}
-		if (result.catalogInfo !== undefined) {
-			const catalogueInfo: CatalogInfoOptions = {};
-			if (typeof result.catalogInfo.uri === 'string') {
-				catalogueInfo.uri = result.catalogInfo.uri;
-			}
-			if (typeof result.catalogInfo.name === 'string') {
-				catalogueInfo.name = result.catalogInfo.name;
-			}
-			if (typeof result.catalogInfo.description === 'string') {
-				catalogueInfo.description = result.catalogInfo.description;
-			}
-			if (result.catalogInfo.conflictResolution === 'takeDB' || result.catalogInfo.conflictResolution === 'takeDump') {
-				catalogueInfo.conflictResolution = result.catalogInfo.conflictResolution;
-			}
-
-			result.catalogInfo = Object.keys(catalogueInfo).length > 0 ? catalogueInfo : undefined;
 		}
 		return result;
 	}
@@ -219,10 +191,6 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 		option('workspaceRoot', {
 			description: 'Specifies the root of the workspace. If omitted defaults to the current working directory',
 			string: true
-		}).
-		option('probeRepository', {
-			description: 'The tools should probe for repository information like commit id or branch name. This will launch an external process like git.',
-			boolean: true
 		}).
 		option('projectName', {
 			description: 'Specifies the project name. Defaults to the last directory segment of the tsconfig.json file.',

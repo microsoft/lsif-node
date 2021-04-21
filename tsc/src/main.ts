@@ -18,13 +18,12 @@ import * as path from 'path';
 import * as uuid from 'uuid';
 import * as crypto from 'crypto';
 import * as os from 'os';
-import * as cp from 'child_process';
 
 import * as yargs from 'yargs';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 
-import { Id, Version, Vertex, Edge, Source, CatalogInfo, RepositoryIndexInfo, RepositoryInfo } from 'lsif-protocol';
+import { Id, Version, Vertex, Edge, Source, RepositoryInfo } from 'lsif-protocol';
 
 import { Writer, StdoutWriter, FileWriter } from './common/writer';
 import { Builder, EmitterContext } from './common/graph';
@@ -33,7 +32,7 @@ import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
 import * as tss from './typescripts';
-import { Options, builder, CatalogInfoOptions } from './args';
+import { Options, builder } from './args';
 import { ImportMonikers } from './npm/importMonikers';
 import { ExportMonikers } from './npm/exportMonikers';
 import { PackageJson } from './npm/package';
@@ -467,43 +466,6 @@ export async function run(this: void, options: Options): Promise<void> {
 		}
 	}
 
-	interface ResolvedCatalogInfoOptions extends CatalogInfoOptions {
-		uri: string;
-		name: string;
-		description? : string;
-		conflictResolution: 'takeDump' | 'takeDB';
-	}
-
-	const catalogInfoOptions: ResolvedCatalogInfoOptions | undefined | number = function() {
-		if (options.catalogInfo === undefined) {
-			return undefined;
-		}
-		if (typeof options.catalogInfo.uri !== 'string') {
-			console.error(`The uri of a catalog info must be a string. The value is ${options.catalogInfo.uri}`);
-			return -1;
-		}
-		const uri = URI.parse(options.catalogInfo.uri);
-		if (typeof options.catalogInfo.name !== 'string') {
-			console.error(`The name of a catalog info must be a string. The value is ${options.catalogInfo.uri}`);
-			return -1;
-		}
-		if (options.catalogInfo.description !== undefined && typeof options.catalogInfo.description !== 'string') {
-			console.error(`The description of a catalog info must be a string or not set at all. The value is ${options.catalogInfo.uri}`);
-			return -1;
-		}
-		const conflictResolution: 'takeDump' | 'takeDB' = options.catalogInfo.conflictResolution === 'takeDump' ? 'takeDump' : 'takeDB';
-		return {
-			uri: uri.toString(true),
-			name: options.catalogInfo.name,
-			description: options.catalogInfo.description,
-			conflictResolution
-		};
-	}();
-	if (typeof catalogInfoOptions === 'number') {
-		process.exitCode = catalogInfoOptions;
-		return;
-	}
-
 	// We have read the config from file. See if we need to put back a -p to successfully
 	// parse the command line.
 	const args: string[] = [];
@@ -571,32 +533,6 @@ export async function run(this: void, options: Options): Promise<void> {
 				type: options.source.repository.type
 			};
 		}
-		if (options.probeRepository && result.repository?.type === 'git') {
-			const runGit = async (command: string): Promise<string> => {
-				return new Promise((resolve, reject) => {
-					cp.exec(`git ${command}`, (error, stdout, stderr) => {
-						if (error || stderr.length > 0) {
-							reject(error ?? new Error(stderr));
-							return;
-						}
-						let index = stdout.length - 1;
-						while (index >= 0 && (stdout[index] === '\r' || stdout[index] === '\n')) {
-							index--;
-						}
-						resolve(stdout.substr(0, index + 1));
-					});
-				});
-			};
-			try {
-				const commitId: string = await runGit('rev-parse HEAD');
-				const branchName: string = await runGit('rev-parse --abbrev-ref HEAD');
-				(result.repository as RepositoryIndexInfo).commitId = commitId;
-				(result.repository as RepositoryIndexInfo).branchName = branchName;
-			} catch (error) {
-				console.error(`Failed to probe repository. Error is ${error.message}`);
-				return -1;
-			}
-		}
 		return result;
 	}();
 	if (typeof source === 'number') {
@@ -606,14 +542,6 @@ export async function run(this: void, options: Options): Promise<void> {
 
 	emitter.emit(metaData);
 	emitter.emit(source);
-	if (catalogInfoOptions !== undefined) {
-		const catalogInfo: CatalogInfo = builder.vertex.catalogInfo(catalogInfoOptions.uri, catalogInfoOptions.name);
-		if (catalogInfoOptions.description !== undefined) {
-			catalogInfo.description = catalogInfoOptions.description;
-		}
-		catalogInfo.conflictResolution = catalogInfoOptions.conflictResolution;
-		emitter.emit(catalogInfo);
-	}
 	const capabilities = builder.vertex.capabilities(true);
 	capabilities.declarationProvider = false;
 	emitter.emit(capabilities);

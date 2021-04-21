@@ -11,7 +11,7 @@ import {
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
 	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Source, MonikerKind, UniquenessLevel,
-	CatalogInfo, RepositoryIndexInfo, Capabilities
+	 Capabilities, RepositoryInfo
 } from 'lsif-protocol';
 
 namespace Is {
@@ -431,7 +431,6 @@ export const vertexShortForms = function() {
 	return new Map<VertexLabels, number>([
 		[VertexLabels.metaData, shortCounter++],
 		[VertexLabels.event, shortCounter++],
-		[VertexLabels.catalogInfo, shortCounter++],
 		[VertexLabels.source, shortCounter++],
 		[VertexLabels.capabilities, shortCounter++],
 		[VertexLabels.project, shortCounter++],
@@ -603,25 +602,15 @@ const locationCompressor = new GenericCompressor<Location>(vertexCompressor, Com
 ]);
 Compressor.registerVertexCompressor(VertexLabels.location, locationCompressor);
 
-const catalogInfoCompressor = new GenericCompressor<CatalogInfo>(vertexCompressor, Compressor.nextId(), (next) => [
-	GenericCompressorProperty.scalar('uri', next()),
-	GenericCompressorProperty.scalar('conflictResolution', next()),
-	GenericCompressorProperty.scalar('name', next()),
-	GenericCompressorProperty.scalar('description', next()),
-]);
-Compressor.registerVertexCompressor(VertexLabels.catalogInfo, catalogInfoCompressor);
-
-const sourceRepositoryCompressor = new GenericCompressor<RepositoryIndexInfo>(undefined, Compressor.nextId(), (next) => [
+const repositoryCompressor = new GenericCompressor<RepositoryInfo>(undefined, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('type', next()),
-	GenericCompressorProperty.scalar('url', next()),
-	GenericCompressorProperty.scalar('commitId', next()),
-	GenericCompressorProperty.scalar('branchName', next())
+	GenericCompressorProperty.scalar('url', next())
 ]);
-Compressor.addCompressor(sourceRepositoryCompressor);
+Compressor.addCompressor(repositoryCompressor);
 
 const sourceCompressor = new GenericCompressor<Source>(vertexCompressor, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('workspaceRoot', next()),
-	GenericCompressorProperty.literal('repository', next(), sourceRepositoryCompressor)
+	GenericCompressorProperty.literal('repository', next(), repositoryCompressor)
 ]);
 Compressor.registerVertexCompressor(VertexLabels.source, sourceCompressor);
 
@@ -683,7 +672,8 @@ const packageInformationCompressor = new GenericCompressor<PackageInformation>(v
 	GenericCompressorProperty.scalar('manager', next()),
 	GenericCompressorProperty.scalar('version', next()),
 	GenericCompressorProperty.scalar('uri', next()),
-	GenericCompressorProperty.scalar('contents', next())
+	GenericCompressorProperty.scalar('contents', next()),
+	GenericCompressorProperty.literal('repository', next(), repositoryCompressor)
 ]);
 Compressor.registerVertexCompressor(VertexLabels.packageInformation, packageInformationCompressor);
 

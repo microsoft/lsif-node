@@ -278,7 +278,6 @@ export namespace Element {
 export enum VertexLabels {
 	metaData = 'metaData',
 	event = '$event',
-	catalogInfo = 'catalogInfo',
 	source = 'source',
 	capabilities = 'capabilities',
 	project = 'project',
@@ -895,32 +894,6 @@ export namespace RepositoryInfo {
 	}
 }
 
-export interface RepositoryIndexInfo extends RepositoryInfo {
-
-	/**
-	 * A commitId if available.
-	 */
-	commitId: string;
-
-	/**
-	 * The branch name.
-	 */
-	branchName: string;
-}
-
-export namespace RepositoryIndexInfo {
-	export const descriptor = new ObjectDescriptor<RepositoryIndexInfo>(Object.assign({}, RepositoryInfo.descriptor.description, {
-		commitId: new StringProperty(PropertyFlags.optional),
-		branchName: new StringProperty(PropertyFlags.optional)
-	}));
-	export function is(value: any): value is RepositoryInfo {
-		return descriptor.validate(value);
-	}
-	export function property(flags: PropertyFlags = PropertyFlags.none): Property<RepositoryIndexInfo> {
-		return new Property<RepositoryIndexInfo>(RepositoryIndexInfo.is, flags);
-	}
-}
-
 export interface Source extends V {
 
 	label: VertexLabels.source;
@@ -933,62 +906,16 @@ export interface Source extends V {
 	/**
 	 * Optional information about the repository containing the indexed source.
 	 */
-	repository?: RepositoryInfo | RepositoryIndexInfo;
+	repository?: RepositoryInfo;
 }
 
 export namespace Source {
 	export const descriptor = new VertexDescriptor<Source>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.source),
 		workspaceRoot: new UriProperty(),
-		repository: new Property<RepositoryInfo | RepositoryIndexInfo>((value) => RepositoryInfo.is(value) || RepositoryIndexInfo.is(value), PropertyFlags.optional)
+		repository: new Property<RepositoryInfo>((value) => RepositoryInfo.is(value), PropertyFlags.optional)
 	}));
 	export function is(value: any): value is Source {
-		return descriptor.validate(value);
-	}
-}
-
-export interface CatalogInfo extends V {
-
-	label: VertexLabels.catalogInfo;
-
-	/**
-	 * The URI of the catalog info. The scheme of a catalog URI should usually
-	 * be `lsif-cat` and the authority should point to the organization's
-	 * http address. And example of a catalogue URI would be something
-	 * like `lsif-cat://microsoft.com/Azure/DevDiv/vscode/vscode-languageserver-protocol`
-	 */
-	uri: Uri;
-
-	/**
-	 * A user friendly name of the catalogue info.
-	 */
-	name: string;
-
-	/**
-	 * An optional description.
-	 */
-	description?: string;
-
-	/**
-	 * When a project is re-index it might want to update its catalog info. If the
-	 * DB managing the index already has an entry for the catalog information the
-	 * value defines how the conflict should be resolved. The meanings are:
-	 *
-	 * - `takeDump`: information of the catalogue should overwrite information in a DB.
-	 * - `takeDB`: information of the catalogue is ignored. The DB values stay as is.
-	 */
-	conflictResolution: 'takeDump' | 'takeDB';
-}
-
-export namespace CatalogueInfo {
-	export const descriptor = new VertexDescriptor<CatalogInfo>(Object.assign({}, V.descriptor.description, {
-		label:VertexLabels.property(VertexLabels.catalogInfo),
-		uri: new StringProperty(),
-		name: new StringProperty(),
-		description: new StringProperty(PropertyFlags.optional),
-		conflictResolution: new Property<'takeDump' | 'takeDB'>(value => value === 'takeDump' || value === 'takeDB')
-	}));
-	export function is(value: any): value is CatalogInfo {
 		return descriptor.validate(value);
 	}
 }
@@ -1053,7 +980,7 @@ export namespace Capabilities {
 		foldingRangeProvider: new BooleanProperty(),
 		diagnosticProvider: new BooleanProperty()
 	}));
-	export function is(value: any): value is CatalogInfo {
+	export function is(value: any): value is Capabilities {
 		return descriptor.validate(value);
 	}
 }
@@ -1583,7 +1510,6 @@ export type Vertex =
 	MetaData |
 	Event |
 	Source |
-	CatalogInfo |
 	Capabilities |
 	Project |
 	Document |
@@ -1608,7 +1534,6 @@ export namespace Vertex {
 	descriptors.set(VertexLabels.event, Event.descriptor);
 	descriptors.set(VertexLabels.capabilities, Capabilities.descriptor);
 	descriptors.set(VertexLabels.source, Source.descriptor);
-	descriptors.set(VertexLabels.catalogInfo, CatalogueInfo.descriptor);
 	descriptors.set(VertexLabels.project, Project.descriptor);
 	descriptors.set(VertexLabels.document, Document.descriptor);
 	descriptors.set(VertexLabels.moniker, Moniker.descriptor);
