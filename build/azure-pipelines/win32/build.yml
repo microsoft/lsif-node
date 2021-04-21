@@ -10,7 +10,13 @@ steps:
 
 - script: |
     npm run symlink
+  displayName: 'Symlink Dependencies'
+
+-script:
     npm run lint
+  displayName: 'Hygiene Checks'
+
+-script:
     npm run compile
   displayName: 'Compile client'
 
