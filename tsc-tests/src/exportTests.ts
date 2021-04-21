@@ -7,7 +7,7 @@ import * as assert from 'assert';
 import * as os from 'os';
 
 import { lsif, ts } from './lsifs';
-import { Element, ElementTypes, VertexLabels } from 'lsif-protocol';
+import { Edge, Element, ElementTypes, Vertex, VertexLabels } from 'lsif-protocol';
 
 suite('Export Tests', () => {
 	const compilerOptions: ts.CompilerOptions = {
@@ -808,14 +808,14 @@ suite('Export Tests', () => {
 			]
 		]), compilerOptions);
 		assert.deepEqual(emitter.lastId, 148);
-		const validate: Element[] = [
+		const validate: (Vertex | Edge)[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":16,"type":"edge","label":"moniker","outV":14,"inV":15}'),
 			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:bar","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":23,"type":"edge","label":"moniker","outV":21,"inV":22}'),
-			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"F2J3JxC7HxVdRqlV9CVRfQ==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:bar.__rt.value","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":29}'),
 			JSON.parse('{"id":60,"type":"vertex","label":"referenceResult"}'),
@@ -832,7 +832,11 @@ suite('Export Tests', () => {
 			JSON.parse('{"id":144,"type":"edge","label":"item","outV":66,"inVs":[126,134],"shard":107,"property":"references"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			const actual = emitter.elements.get(elem.id);
+			if (elem.label === VertexLabels.moniker && elem.identifier === '*' && actual && actual.label === VertexLabels.moniker) {
+				actual.identifier = '*';
+			}
+			assert.deepEqual(actual, elem);
 		}
 	});
 });

@@ -7,7 +7,7 @@ import * as assert from 'assert';
 import * as os from 'os';
 
 import { lsif } from './lsifs';
-import { Element } from 'lsif-protocol';
+import { Element, ElementTypes, VertexLabels, Vertex, Edge } from 'lsif-protocol';
 
 suite('Global Module Tests', () => {
 	test('Single export', async () => {
@@ -184,9 +184,9 @@ suite('Global Module Tests', () => {
 			]
 		]), { });
 		assert.deepEqual(emitter.lastId, 83);
-		const validate: Element[] = [
+		const validate: (Vertex | Edge)[] = [
 			JSON.parse('{"id":23,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"qKuKQk2vMciItiwlUxWfVg==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":25,"type":"edge","label":"moniker","outV":23,"inV":24}'),
 			JSON.parse('{"id":26,"type":"vertex","label":"range","start":{"line":2,"character":13},"end":{"line":2,"character":21},"tag":{"type":"definition","text":"onDetach","kind":7,"fullRange":{"start":{"line":2,"character":13},"end":{"line":2,"character":29}}}}'),
 			JSON.parse('{"id":27,"type":"edge","label":"next","outV":26,"inV":23}'),
@@ -194,7 +194,11 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":42,"type":"edge","label":"attach","outV":41,"inV":24}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			const actual = emitter.elements.get(elem.id);
+			if (elem.label === VertexLabels.moniker && elem.identifier === '*' && actual && actual.label === VertexLabels.moniker) {
+				actual.identifier = '*';
+			}
+			assert.deepEqual(actual, elem);
 		}
 	});
 	test('Constructor Signature', async () => {
