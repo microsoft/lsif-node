@@ -4,6 +4,12 @@ trigger:
     include:
     - main
 
+- job: Linux
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - template: build/azure-pipelines/linux/build.yml
+
 jobs:
 - job: Windows
   pool:
@@ -11,8 +17,10 @@ jobs:
   steps:
   - template: build/azure-pipelines/win32/build.yml
 
-- job: Linux
+jobs:
+- job: Source Index
   pool:
-    vmImage: 'ubuntu-latest'
+    vmImage: VS2017-Win2016
   steps:
-  - template: build/azure-pipelines/linux/build.yml
+  - template: build/azure-pipelines/win32/build.yml
+

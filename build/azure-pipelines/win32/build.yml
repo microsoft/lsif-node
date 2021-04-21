@@ -29,9 +29,3 @@ steps:
     testResultsFormat: 'JUnit'
     testResultsFiles: 'util/junit.xml'
     testRunTitle: 'Run unit tests'
-
-- task: RichCodeNavIndexer@0
-  displayName: VS Rich Code Navigation Upload
-  inputs:
-    languages: typescript
-  continueOnError: true
