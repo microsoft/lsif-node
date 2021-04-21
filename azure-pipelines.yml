@@ -21,5 +21,5 @@ jobs:
   pool:
     vmImage: VS2017-Win2016
   steps:
-  - template: build/azure-pipelines/win32/build.yml
+  - template: build/azure-pipelines/index/build.yml
 
