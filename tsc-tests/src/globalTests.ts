@@ -7,7 +7,7 @@ import * as assert from 'assert';
 import * as os from 'os';
 
 import { lsif } from './lsifs';
-import { Element, ElementTypes, VertexLabels, Vertex, Edge } from 'lsif-protocol';
+import { Element, VertexLabels, Vertex, Edge } from 'lsif-protocol';
 
 suite('Global Module Tests', () => {
 	test('Single export', async () => {
