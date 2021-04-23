@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import * as os from 'os';
 
-import { lsif, ts } from './lsifs';
+import { lsif, ts, assertElement } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('Union Types', () => {
@@ -30,7 +30,7 @@ suite('Union Types', () => {
 			JSON.parse('{"id":27,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":Number.toString","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Union type (2)', async () => {
@@ -62,7 +62,7 @@ suite('Union Types', () => {
 			JSON.parse('{"id":155,"type":"edge","label":"item","outV":152,"inVs":[22,36],"shard":3,"property":"referenceLinks"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Union type (3)', async () => {
@@ -98,7 +98,7 @@ suite('Union Types', () => {
 			JSON.parse('{"id":183,"type":"edge","label":"item","outV":180,"inVs":[22,36],"shard":3,"property":"referenceLinks"}'),
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Union types with literals', async () => {
@@ -135,7 +135,7 @@ suite('Union Types', () => {
 			JSON.parse('{"id":97,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":a:D.name","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 });

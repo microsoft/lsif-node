@@ -19,7 +19,7 @@
 	"dependencies": {
 		"latest-version": "5.1.0",
 		"lsif-protocol": "0.6.0-next.4",
-		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.1.3-lsif.1/typescript-4.1.3-lsif.1.tgz",
+		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.3.0-lsif.1/typescript-4.3.0-lsif.1.tgz",
 		"uuid": "^8.3.2",
 		"vscode-uri": "^3.0.2",
 		"yargs": "16.2.0"

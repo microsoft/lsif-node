@@ -9,7 +9,7 @@ import * as path from 'path';
 
 import { URI } from 'vscode-uri';
 
-import { Vertex, Edge, Id, ElementTypes } from 'lsif-protocol';
+import { Vertex, Edge, Id, ElementTypes, VertexLabels, Element } from 'lsif-protocol';
 
 import { DiagnosticReporter } from 'lsif-tooling/lib/command';
 import { ValidateCommand } from 'lsif-tooling/lib/validate';
@@ -21,6 +21,13 @@ import { Emitter } from 'lsif-tsc/lib/emitters/emitter';
 import { ImportMonikers } from 'lsif-tsc/lib/npm/importMonikers';
 
 export { ts };
+
+export function assertElement(actual: Element | undefined, expected: Element): void {
+	if (expected.label === VertexLabels.moniker && expected.identifier === '*' && actual && actual.label === VertexLabels.moniker) {
+		actual.identifier = '*';
+	}
+	assert.deepEqual(actual, expected);
+}
 
 class TestDiagnosticReporter implements DiagnosticReporter {
 	public readonly buffer: string[] = [];
@@ -177,6 +184,9 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	const languageService = ts.createLanguageService(host);
 	let counter = 1;
 	const generator = (): number => {
+		if (counter === 22) {
+			debugger;
+		}
 		return counter++;
 	};
 	const builder = new Builder({ idGenerator: generator, emitSource: false });

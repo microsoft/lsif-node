@@ -249,13 +249,15 @@ export namespace ElementTypes {
 /**
  * An element in the graph.
  */
-export interface Element {
+export interface GraphElement {
 	id: Id;
 	type: ElementTypes;
 }
 
-export namespace Element {
-	export const descriptor = new ObjectDescriptor<Element>({
+export type Element = Vertex | Edge;
+
+export namespace GraphElement {
+	export const descriptor = new ObjectDescriptor<GraphElement>({
 		id: Id.property(),
 		type: ElementTypes.property()
 	});
@@ -323,7 +325,7 @@ namespace Uri {
 	}
 }
 
-export interface V extends Element {
+export interface V extends GraphElement {
 	type: ElementTypes.vertex;
 	label: VertexLabels;
 }
@@ -335,7 +337,7 @@ export class VertexDescriptor<T extends V> extends ObjectDescriptor<T> {
 }
 
 export namespace V {
-	export const descriptor = new VertexDescriptor<V>(Object.assign({}, Element.descriptor.description, {
+	export const descriptor = new VertexDescriptor<V>(Object.assign({}, GraphElement.descriptor.description, {
 		type: new Property<ElementTypes.vertex>(value => value === ElementTypes.vertex),
 		label: VertexLabels.property()
 	}));
@@ -1615,7 +1617,7 @@ export class EdgeDescriptor<T> extends ObjectDescriptor<T> {
  * documentation purpose only. An edge never holds a direct reference to a vertex. They are
  * referenced by `Id`.
  */
-export interface E11<S extends V, T extends V, K extends EdgeLabels> extends Element {
+export interface E11<S extends V, T extends V, K extends EdgeLabels> extends GraphElement {
 	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
 	__brand?: [S, T];
 	id: Id;
@@ -1643,7 +1645,7 @@ export namespace E11 {
 	}, Cardinality.one2one, [[V.descriptor, V.descriptor]]);
 }
 
-export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends Element {
+export interface E1N<S extends V, T extends V, K extends EdgeLabels> extends GraphElement {
 	/* The brand.  This is only necessary to make make type instantiation differ from each other. */
 	__brand?: [S, T];
 	id: Id;

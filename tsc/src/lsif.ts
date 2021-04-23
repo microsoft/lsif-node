@@ -1820,7 +1820,7 @@ class Symbols {
 				if (parameterDeclaration !== undefined && parameterDeclaration.parent.name !== undefined) {
 					const parentSymbol = this.typeChecker.getSymbolAtLocation(parameterDeclaration.parent.name);
 					if (parentSymbol !== undefined) {
-						const parentValue = this.computeExportPath(parentSymbol, kind);
+						const parentValue = this.getCachedSymbolInformation(parentSymbol);
 						if (parentValue !== undefined) {
 							return isNotNamed ? null : `${parentValue}.${this.getExportSymbolName(symbol)}`;
 						}
@@ -1829,7 +1829,7 @@ class Symbols {
 			}
 			return undefined;
 		} else {
-			const parentValue = this.computeExportPath(parent, kind);
+			const [parentValue] = this.getCachedSymbolInformation(parent);
 			// The parent is not exported so any member isn't either
 			if (parentValue === undefined) {
 				return undefined;

@@ -3,10 +3,9 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as assert from 'assert';
 import * as os from 'os';
 
-import { lsif, ts } from './lsifs';
+import { lsif, ts, assertElement } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('Scope Tests', () => {
@@ -25,10 +24,10 @@ suite('Scope Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
-			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"2ZCxI9/jgL7ThCn7ogThOg==","unique":"document","kind":"local"}')
+			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 });

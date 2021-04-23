@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import * as os from 'os';
 
-import { lsif, ts } from './lsifs';
+import { lsif, ts, assertElement } from './lsifs';
 import { Element } from 'lsif-protocol';
 
 suite('General Tests', () => {
@@ -25,7 +25,7 @@ suite('General Tests', () => {
 			JSON.parse('{"id":17,"type":"vertex","label":"range","start":{"line":0,"character":13},"end":{"line":0,"character":14},"tag":{"type":"definition","text":"x","kind":7,"fullRange":{"start":{"line":0,"character":13},"end":{"line":0,"character":19}}}}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Type cyclic references', async () => {

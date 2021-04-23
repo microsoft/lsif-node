@@ -6,7 +6,7 @@
 import * as assert from 'assert';
 import * as os from 'os';
 
-import { lsif } from './lsifs';
+import { lsif, assertElement } from './lsifs';
 import { Element, VertexLabels, Vertex, Edge } from 'lsif-protocol';
 
 suite('Global Module Tests', () => {
@@ -18,7 +18,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":10,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Export in namespace', async () => {
@@ -30,7 +30,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":17,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":N.a","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Private in namespace', async () => {
@@ -39,10 +39,10 @@ suite('Global Module Tests', () => {
 		]), { });
 		const validate: Element[] = [
 			JSON.parse('{"id":10,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":N","unique":"workspace","kind":"export"}'),
-			JSON.parse('{"id":17,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"g5yRGXDFrx4hhFmRmF/HHA==","unique":"document","kind":"local"}')
+			JSON.parse('{"id":17,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Same export name', async () => {
@@ -61,7 +61,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":26,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":A.a","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Export via type literal', async () => {
@@ -79,7 +79,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Export in declaration file', async () => {
@@ -96,7 +96,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x.touch","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Export function signature in declaration file', async () => {
@@ -112,7 +112,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":10,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":x","unique":"workspace","kind":"export"}'),
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Interface with signature', async () => {
@@ -140,7 +140,7 @@ suite('Global Module Tests', () => {
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Ambient module', async () => {
@@ -160,7 +160,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":25,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":applicationinsights.export=","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Bug 76', async () => {
@@ -194,11 +194,7 @@ suite('Global Module Tests', () => {
 			JSON.parse('{"id":42,"type":"edge","label":"attach","outV":41,"inV":24}')
 		];
 		for (const elem of validate) {
-			const actual = emitter.elements.get(elem.id);
-			if (elem.label === VertexLabels.moniker && elem.identifier === '*' && actual && actual.label === VertexLabels.moniker) {
-				actual.identifier = '*';
-			}
-			assert.deepEqual(actual, elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 	test('Constructor Signature', async () => {
@@ -220,7 +216,7 @@ suite('Global Module Tests', () => {
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {
-			assert.deepEqual(emitter.elements.get(elem.id), elem);
+			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
 });
