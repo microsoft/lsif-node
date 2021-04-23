@@ -18,10 +18,25 @@ const readdir = util.promisify(fs.readdir);
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
-interface TestFormat {
+type TestFormat = {
 	tsconfig: string;
 	projectRoot?: string;
 	cwd?: string;
+} | {
+	config: string;
+	projectRoot?: string;
+	cwd?: string;
+}
+
+namespace TestFormat {
+	export function hasTSConfig(value: TestFormat): value is TestFormat & { tsconfig: string } {
+		const candidate: { tsconfig: string } = value as any;
+		return candidate && typeof candidate.tsconfig === 'string';
+	}
+	export function hasConfig(value: TestFormat): value is TestFormat & { config: string } {
+		const candidate: { config: string } = value as any;
+		return candidate && typeof candidate.config === 'string';
+	}
 }
 
 interface DataFormat {
@@ -69,13 +84,16 @@ async function runCommand(command: string, args: ReadonlyArray<string>, cwd?: st
 }
 
 async function runLsifTsc(cwd: string, name: string, test: TestFormat): Promise<void> {
-	let args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js'),
-		'-p', test.tsconfig,
-		'--outputFormat', 'line'
-	];
+	let args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js')];
+	if (TestFormat.hasConfig(test)) {
+		args.push('--config', test.config);
+	} else if (TestFormat.hasTSConfig(test)) {
+		args.push('-p', test.tsconfig);
+	}
 	if (test.projectRoot) {
 		args.push('--projectRoot', test.projectRoot);
 	}
+	args.push('--outputFormat', 'line');
 	args.push('--out', path.join(cwd, `${name}.lsif`));
 	await runCommand('node', args, cwd);
 }
@@ -117,7 +135,7 @@ async function runTest(filename: string): Promise<number | undefined> {
 	if (data.tests) {
 		for (let test of data.tests) {
 			let cwd = test.cwd ? path.join(directory, test.cwd) : directory;
-			process.stdout.write(`Running LSIF exporter for ${path.join(cwd, test.tsconfig)}\n`);
+			process.stdout.write(`Running LSIF exporter for ${path.join(cwd, TestFormat.hasConfig(test) ? test.config : TestFormat.hasTSConfig(test) ? test.tsconfig : 'unknown')}\n`);
 			await runLsifTsc(cwd, data.name, test);
 			process.stdout.write(`Running validation tool for ${path.join(cwd, data.name)}.lsif\n`);
 			await runValidate(cwd, data.name);

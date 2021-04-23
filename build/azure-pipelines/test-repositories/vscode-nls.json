@@ -1,11 +1,12 @@
 {
-	"name": "vscode-eslint",
-	"repository": "https://github.com/microsoft/vscode-eslint.git",
+	"name": "vscode-nls",
+	"repository": "https://github.com/microsoft/vscode-nls.git",
 	"init": [
 		{ "command": "npm", "args": ["install"] }
 	],
 	"tests": [
 		{
+			"cwd": ".",
 			"config": "lsif.json"
 		}
 	]

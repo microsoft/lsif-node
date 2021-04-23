@@ -8,7 +8,7 @@
 	"tests": [
 		{
 			"cwd": ".",
-			"tsconfig": "./tsconfig.json"
+			"config": "lsif.json"
 		}
 	]
 }
