@@ -1,0 +1,14 @@
+{
+	"name": "vscode-extension-samples",
+	"repository": "https://github.com/microsoft/vscode-extension-samples.git",
+	"init": [
+		{ "command": "npm", "args": ["install"] },
+		{ "command": "npm", "args": ["run update-lsif"] }
+	],
+	"tests": [
+		{
+			"cwd": ".",
+			"config": "lsif.json"
+		}
+	]
+}
