@@ -30,11 +30,26 @@ export interface SourceOptions {
 	}
 }
 
+// JS / TSConfig options. In the TS API this is treated
+// as any.
+export interface ConfigOptions {
+	__brand: 'inlineConfig';
+	configFilePath: string | undefined;
+	kind?: 'ts' | 'js';
+}
+
+export namespace ConfigOptions {
+	export function is(value: any): value is ConfigOptions {
+		const candidate = value as ConfigOptions;
+		return candidate && candidate.__brand === 'inlineConfig';
+	}
+}
+
 export type Options = {
 	help: boolean;
 	version: boolean;
 	config: string | undefined;
-	p: string | undefined;
+	p: string | ConfigOptions | undefined;
 	id: 'number' | 'uuid';
 	outputFormat: 'json' | 'line' | 'vis' | 'graphSON';
 	stdout: boolean;
@@ -83,6 +98,9 @@ export namespace Options {
 
 	export function sanitize(options: Options): Options {
 		const result = Object.assign({}, options);
+		if (options.p !== undefined && typeof options.p !== 'string') {
+			result.p = Object.assign<unknown, unknown, ConfigOptions>({}, options.p, { __brand: 'inlineConfig', configFilePath: getConfigFilePath(options)});
+		}
 		if (!Array.isArray(result.publishedPackages)) {
 			result.publishedPackages = undefined;
 		}
@@ -105,6 +123,13 @@ export namespace Options {
 			}
 		}
 		return result;
+	}
+
+	function getConfigFilePath(options: Options): string | undefined {
+		if (options.config === undefined) {
+			return undefined;
+		}
+		return path.isAbsolute(options.config) ? options.config : path.join(process.cwd(), options.config);
 	}
 
 	export function resolvePathToConfig(options: Options): Options {

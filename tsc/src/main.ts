@@ -32,7 +32,7 @@ import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
 import * as tss from './typescripts';
-import { Options, builder } from './args';
+import { Options, builder, ConfigOptions } from './args';
 import { ImportMonikers } from './npm/importMonikers';
 import { ExportMonikers } from './npm/exportMonikers';
 import { PackageJson } from './npm/package';
@@ -49,6 +49,22 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
 		config.compilerOptions = Object.assign(config.compilerOptions, tss.getDefaultCompilerOptions(file));
 	}
 	let result = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(absolute));
+	if (result.errors.length > 0) {
+		throw new Error(ts.formatDiagnostics(result.errors, ts.createCompilerHost({})));
+	}
+	return result;
+}
+
+function parseConfigFileContent(options: ConfigOptions, basePath: string): ts.ParsedCommandLine {
+	const configFileName = options.kind === 'ts' ? 'tsconfig.json' : 'jsconfig.json';
+	const config: Partial<ConfigOptions> & { compilerOptions?: ts.CompilerOptions; } = Object.assign({}, options);
+	delete config.__brand;
+	delete config.configFilePath;
+	delete config.kind;
+	if (config.compilerOptions !== undefined) {
+		config.compilerOptions = Object.assign(config.compilerOptions, tss.getDefaultCompilerOptions(configFileName));
+	}
+	let result = ts.parseJsonConfigFileContent(config, ts.sys, basePath);
 	if (result.errors.length > 0) {
 		throw new Error(ts.formatDiagnostics(result.errors, ts.createCompilerHost({})));
 	}
@@ -90,9 +106,9 @@ function createIdGenerator(options: Options): () => Id {
 	}
 }
 
-function makeKey(config: ts.ParsedCommandLine): string {
+function makeKey(config: ts.ParsedCommandLine | ConfigOptions): string {
 	let hash = crypto.createHash('md5');
-	hash.update(JSON.stringify(config.options, undefined, 0));
+	hash.update(JSON.stringify(ConfigOptions.is(config) ? config : config.options, undefined, 0));
 	return  hash.digest('base64');
 }
 
@@ -223,20 +239,37 @@ interface ProcessProjectOptions {
 	files?: Map<string, string>;
 }
 
-async function processProject(config: ts.ParsedCommandLine, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined,  options: ProcessProjectOptions): Promise<ProjectInfo | number> {
-	const configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
-	const key = configFilePath ?? makeKey(config);
-	if (options.processed.has(key)) {
-		return options.processed.get(key)!;
-	}
-	if (configFilePath && !ts.sys.fileExists(configFilePath)) {
-		console.error(`Project configuration file ${configFilePath} does not exist`);
-		return 1;
-	}
+async function processProject(pclOrOptions: ts.ParsedCommandLine | ConfigOptions, emitter: EmitterContext, typingsInstaller: TypingsInstaller, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, options: ProcessProjectOptions): Promise<ProjectInfo | number> {
+	let config: ts.ParsedCommandLine;
+	let configFilePath: string | undefined;
+	let key: string;
+	if (ConfigOptions.is(pclOrOptions)) {
+		if (pclOrOptions.configFilePath === undefined) {
+			console.error(`No config file path available although --config is used.`);
+			return -1;
+		}
+		configFilePath = pclOrOptions.configFilePath;
+		key = configFilePath ?? makeKey(pclOrOptions);
+		if (options.processed.has(key)) {
+			return options.processed.get(key)!;
+		}
+		config = parseConfigFileContent(pclOrOptions, path.dirname(configFilePath));
+	} else {
+		config = pclOrOptions;
+		configFilePath = tss.CompileOptions.getConfigFilePath(config.options);
+		key = configFilePath ?? makeKey(config);
+		if (options.processed.has(key)) {
+			return options.processed.get(key)!;
+		}
+		if (configFilePath && !ts.sys.fileExists(configFilePath)) {
+			console.error(`Project configuration file ${configFilePath} does not exist`);
+			return 1;
+		}
 
-	// we have a config file path that came from a -p option. Load the file.
-	if (configFilePath && config.options.project) {
-		config = loadConfigFile(configFilePath);
+		// we have a config file path that came from a -p option. Load the file.
+		if (configFilePath && config.options.project) {
+			config = loadConfigFile(configFilePath);
+		}
 	}
 
 	// Check if we need to do type acquisition
@@ -484,7 +517,7 @@ export async function run(this: void, options: Options): Promise<void> {
 		}
 		args.push(arg);
 	}
-	if (needsProject && options.p !== undefined) {
+	if (needsProject && typeof options.p === 'string') {
 		args.push('-p', options.p);
 	}
 
@@ -495,7 +528,7 @@ export async function run(this: void, options: Options): Promise<void> {
 		}
 	}
 
-	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
+	const config: ts.ParsedCommandLine | ConfigOptions = ConfigOptions.is(options.p) ? options.p : ts.parseCommandLine(args);
 	const idGenerator = createIdGenerator(options);
 	const emitter = createEmitter(options, writer, idGenerator);
 	emitter.start();
