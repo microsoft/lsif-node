@@ -3,40 +3,24 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as fs from 'fs';
+import * as util from 'util';
+import * as _fs from 'fs';
+const fs = _fs.promises;
+const exists = util.promisify(_fs.exists);
+
 import * as os from 'os';
 import * as path from 'path';
 import * as cp from 'child_process';
-import * as util from 'util';
 
+import * as uuid from 'uuid';
 import * as shelljs from 'shelljs';
-
-const exists = util.promisify(fs.exists);
-const readFile = util.promisify(fs.readFile);
-const stat = util.promisify(fs.stat);
-const readdir = util.promisify(fs.readdir);
 
 const ROOT = path.join(__dirname, '..', '..', '..', '..');
 
-type TestFormat = {
-	tsconfig: string;
-	projectRoot?: string;
-	cwd?: string;
-} | {
-	config: string;
-	projectRoot?: string;
-	cwd?: string;
-}
 
-namespace TestFormat {
-	export function hasTSConfig(value: TestFormat): value is TestFormat & { tsconfig: string } {
-		const candidate: { tsconfig: string } = value as any;
-		return candidate && typeof candidate.tsconfig === 'string';
-	}
-	export function hasConfig(value: TestFormat): value is TestFormat & { config: string } {
-		const candidate: { config: string } = value as any;
-		return candidate && typeof candidate.config === 'string';
-	}
+interface TestFormat {
+	cwd?: string;
+	config: string | object;
 }
 
 interface DataFormat {
@@ -44,7 +28,7 @@ interface DataFormat {
 	repository: string;
 	branch?: string;
 	init?: { command: string; args?: string[]; }[];
-	tests: TestFormat[];
+	tests?: TestFormat[]
 }
 
 interface TestStatistics {
@@ -83,24 +67,18 @@ async function runCommand(command: string, args: ReadonlyArray<string>, cwd?: st
 	})
 }
 
-async function runLsifTsc(cwd: string, name: string, test: TestFormat): Promise<void> {
-	let args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js')];
-	if (TestFormat.hasConfig(test)) {
-		args.push('--config', test.config);
-	} else if (TestFormat.hasTSConfig(test)) {
-		args.push('-p', test.tsconfig);
-	}
-	if (test.projectRoot) {
-		args.push('--projectRoot', test.projectRoot);
-	}
-	args.push('--outputFormat', 'line');
-	args.push('--out', path.join(cwd, `${name}.lsif`));
+async function runLsifTsc(cwd: string, configFilePath: string): Promise<string> {
+	const out: string = `${uuid.v4()}.lsif`;
+	const args: string[] = [path.join(ROOT, 'tsc', 'lib', 'main.js')];
+	args.push('--config', configFilePath);
+	args.push('--out', path.join(cwd, out));
 	await runCommand('node', args, cwd);
+	return out;
 }
 
-async function runValidate(cwd: string, name: string): Promise<void> {
+async function runValidate(cwd: string, outFile: string): Promise<void> {
 	let args: string[] = [path.join(ROOT, 'tooling', 'lib', 'main.js'),
-		'--in', `${name}.lsif`
+		'--in', `${outFile}`
 	];
 	await runCommand('node', args, cwd);
 }
@@ -115,7 +93,7 @@ async function runTest(filename: string): Promise<number | undefined> {
 		process.stderr.write(`Repository description ${filename} not found.`);
 		return 1;
 	}
-	const data: DataFormat = JSON.parse(await readFile(filename, { encoding: 'utf8' }));
+	const data: DataFormat = JSON.parse(await fs.readFile(filename, { encoding: 'utf8' }));
 	const tmpdir = os.tmpdir();
 	let directory = path.join(tmpdir, data.name);
 
@@ -132,13 +110,29 @@ async function runTest(filename: string): Promise<number | undefined> {
 			await runCommand(init.command, init.args ?? [], directory);
 		}
 	}
-	if (data.tests) {
-		for (let test of data.tests) {
-			let cwd = test.cwd ? path.join(directory, test.cwd) : directory;
-			process.stdout.write(`Running LSIF exporter for ${path.join(cwd, TestFormat.hasConfig(test) ? test.config : TestFormat.hasTSConfig(test) ? test.tsconfig : 'unknown')}\n`);
-			await runLsifTsc(cwd, data.name, test);
+	if (Array.isArray(data.tests)) {
+		for (const test of data.tests) {
+			const cwd = test.cwd ? path.join(directory, test.cwd) : directory;
+			let configFileName: string = path.join(directory, 'lsif.json');
+			let label = `lsif.json`;
+			if (!await exists(configFileName)) {
+				if (typeof test.config === 'string') {
+					label = test.config;
+					configFileName = path.isAbsolute(test.config) ? test.config : path.join(cwd, test.config);
+				} else if (test.config !== undefined) {
+					configFileName = path.join(directory, uuid.v4());
+					label = 'inline configuration';
+					await fs.writeFile(configFileName, JSON.stringify(test.config));
+				}
+			}
+			if (!await exists(configFileName)) {
+				process.stderr.write(`Configuration files ${configFileName} doesn't exist`);
+				continue;
+			}
+			process.stdout.write(`Running LSIF exporter for ${label}\n`);
+			const outFile = await runLsifTsc(cwd, configFileName);
 			process.stdout.write(`Running validation tool for ${path.join(cwd, data.name)}.lsif\n`);
-			await runValidate(cwd, data.name);
+			await runValidate(cwd, outFile);
 			process.stdout.write(`\n`);
 		}
 	}
@@ -156,7 +150,7 @@ async function main(pathname: string | undefined): Promise<number | undefined> {
 	}
 
 	let testStats: TestStatistics = { passed: [], failed: [] };
-	let stats = await stat(pathname);
+	let stats = await fs.stat(pathname);
 	if (stats.isFile() && path.extname(pathname) === '.json') {
 		try {
 			await runTest(pathname);
@@ -166,13 +160,13 @@ async function main(pathname: string | undefined): Promise<number | undefined> {
 			console.log(error);
 		}
 	} else if (stats.isDirectory()) {
-		let entries = await readdir(pathname);
+		let entries = await fs.readdir(pathname);
 		for (let entry of entries) {
 			if (entry === '.' || entry === '..') {
 				continue;
 			}
 			let candidate = path.join(pathname, entry);
-			let stats = await stat(candidate);
+			let stats = await fs.stat(candidate);
 			if (stats.isFile() && path.extname(candidate) === '.json') {
 				try {
 					await runTest(candidate);

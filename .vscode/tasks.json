@@ -40,6 +40,17 @@
 				"showReuseMessage": true,
 				"clear": true
 			}
+		},
+		{
+			"type": "npm",
+			"script": "watch:build",
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": "build",
+			"label": "npm: watch:build",
+			"detail": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
+			"isBackground": true
 		}
 	]
 }

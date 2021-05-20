@@ -6,7 +6,9 @@
 	],
 	"tests": [
 		{
-			"tsconfig": "./tsconfig.all.json"
+			"config": {
+				"project": "./tsconfig.all.json"
+			}
 		}
 	]
 }

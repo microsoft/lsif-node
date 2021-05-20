@@ -1,0 +1,17 @@
+{
+	"name": "lsif-test-tooling",
+	"description": "Helper tooling to test lsif tools",
+	"version": "0.1.1",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"private": true,
+	"dependencies": {
+		"uuid": "^8.3.2"
+	},
+	"devDependencies": {
+		"@types/uuid": "^8.3.0"
+	},
+	"scripts": {
+		"compile": "node ../../bin/tsc -b ./tsconfig.json"
+	}
+}
