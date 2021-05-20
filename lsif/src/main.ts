@@ -23,7 +23,7 @@ export async function main(): Promise<void> {
 				handler: async (argv) => {
 					const options: tsc.Options = Object.assign({}, tsc.Options.defaults, argv);
 					const main = await import('lsif-tsc');
-					await main.run(options);
+					await main.run(tsc.Options.sanitize(options));
 				}
 			}).
 			command({
