@@ -26,10 +26,6 @@ import { TscMoniker } from './common/moniker';
 import { ExportMonikers } from './npm/exportMonikers';
 import { ImportMonikers } from './npm/importMonikers';
 
-interface Disposable {
-	(): void;
-}
-
 namespace Converter {
 
 	const DiagnosticCategory = ts.DiagnosticCategory;
