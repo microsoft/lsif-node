@@ -184,9 +184,6 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	const languageService = ts.createLanguageService(host);
 	let counter = 1;
 	const generator = (): number => {
-		if (counter === 22) {
-			debugger;
-		}
 		return counter++;
 	};
 	const builder = new Builder({ idGenerator: generator, emitSource: false });

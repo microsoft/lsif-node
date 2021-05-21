@@ -130,6 +130,10 @@ interface InternalSymbol extends ts.Symbol {
 	__symbol__data__key__: string | undefined;
 }
 
+interface InternalSymbolLinks {
+	type?: ts.Type;
+}
+
 export namespace Symbol {
 
 	const Unknown = 'unknown';
@@ -189,6 +193,15 @@ export namespace Symbol {
 
 	export function getParent(symbol: ts.Symbol): ts.Symbol | undefined {
 		return (symbol as InternalSymbol).parent;
+	}
+
+	export function getTypeFromSymbolLink(symbol: ts.Symbol): ts.Type | undefined {
+		// Symbol links are merged into transient symbols. See
+		// https://github.com/microsoft/TypeScript/blob/master/src/compiler/types.ts#L4871
+		if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
+			return (symbol as InternalSymbolLinks).type;
+		}
+		return undefined;
 	}
 
 	export function is(value: ts.Symbol | ts.Type): value is ts.Symbol {

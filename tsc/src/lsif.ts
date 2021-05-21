@@ -1594,6 +1594,14 @@ class Symbols {
 		return tss.Symbol.createKey(this.typeChecker, symbol);
 	}
 
+	public getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
+		let result = this.typeChecker.getSymbolAtLocation(node);
+		if (result === undefined) {
+			result = tss.Node.getSymbol(node);
+		}
+		return result;
+	}
+
 	public getTypeAtLocation(node: ts.Node): ts.Type {
 		return this.typeChecker.getTypeAtLocation(node);
 	}
@@ -1605,6 +1613,12 @@ class Symbols {
 		let node: ts.Node | undefined = this.inferLocationNode(symbol);
 		if (node === undefined) {
 			node = typeof location === 'function' ? location() : location;
+		}
+		if (node === undefined) {
+			const result = tss.Symbol.getTypeFromSymbolLink(symbol);
+			if (result !== undefined) {
+				return result;
+			}
 		}
 		if (node === undefined) {
 			throw new Error(`No location provided when querying types of a symbol ${symbol.name}`);
@@ -1777,7 +1791,7 @@ class Symbols {
 		let globalCount: number = 0;
 		for (let sourceFile of sourceFiles) {
 			// files that represent a module do have a resolve symbol.
-			if (this.typeChecker.getSymbolAtLocation(sourceFile) !== undefined) {
+			if (this.getSymbolAtLocation(sourceFile) !== undefined) {
 				moduleCount++;
 				continue;
 			}
@@ -1818,7 +1832,7 @@ class Symbols {
 				// must be exported to allow merging across files.
 				const parameterDeclaration = Symbols.asParameterDeclaration(symbol);
 				if (parameterDeclaration !== undefined && parameterDeclaration.parent.name !== undefined) {
-					const parentSymbol = this.typeChecker.getSymbolAtLocation(parameterDeclaration.parent.name);
+					const parentSymbol = this.getSymbolAtLocation(parameterDeclaration.parent.name);
 					if (parentSymbol !== undefined) {
 						const parentValue = this.getCachedSymbolInformation(parentSymbol);
 						if (parentValue !== undefined) {
@@ -2624,11 +2638,7 @@ class TSProject {
 	}
 
 	public getSymbolAtLocation(node: ts.Node): ts.Symbol | undefined {
-		let result = this.typeChecker.getSymbolAtLocation(node);
-		if (result === undefined) {
-			result = tss.Node.getSymbol(node);
-		}
-		return result;
+		return this.symbols.getSymbolAtLocation(node);
 	}
 
 	public getTypeAtLocation(node: ts.Node): ts.Type {
@@ -2730,7 +2740,7 @@ class TSProject {
 			monikerPath = tss.computeMonikerPath(workspaceRoot, fileName);
 		}
 
-		const symbol = this.typeChecker.getSymbolAtLocation(sourceFile);
+		const symbol = this.getSymbolAtLocation(sourceFile);
 		return [manager.createDocumentData(fileName, document, symbol !== undefined ? ModuleSystemKind.module : ModuleSystemKind.global, monikerPath, external, next), symbol];
 	}
 
@@ -3332,7 +3342,6 @@ class Visitor {
 	private project: Project;
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
-	private disposables: Map<string, Disposable[]>;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
@@ -3346,7 +3355,6 @@ class Visitor {
 		this.tsProject = new TSProject(this.dataManager, languageService, importMonikers, exportMonikers, dependsOn, options, this.dataManager);
 
 		this.dataManager.beginProject(this.tsProject, this.project);
-		this.disposables = new Map();
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -3457,7 +3465,6 @@ class Visitor {
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
-		const disposables: Disposable[] = [];
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
@@ -3468,7 +3475,6 @@ class Visitor {
 		this._currentDocumentData = documentData;
 		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
-		this.disposables.set(sourceFile.fileName, disposables);
 		return true;
 	}
 
@@ -3516,10 +3522,6 @@ class Visitor {
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
 		this.dataManager.documentProcessed(sourceFile);
-		for (const disposable of this.disposables.get(sourceFile.fileName)!) {
-			disposable();
-		}
-		this.disposables.delete(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
