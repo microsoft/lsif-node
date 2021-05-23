@@ -1872,7 +1872,8 @@ class Symbols {
 
 	public needsIndirectExportCheck(symbol: ts.Symbol): boolean {
 		const flags = ts.SymbolFlags.Property | ts.SymbolFlags.Function | ts.SymbolFlags.Method  | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface | ts.SymbolFlags.Class;
-		return (symbol.getFlags() & flags) !== 0 || Symbols.isVariableDeclaration(symbol);
+		return (symbol.getFlags() & flags) !== 0 || Symbols.isVariableDeclaration(symbol) ||
+			(symbol.name === ts.InternalSymbolName.ExportEquals && (symbol.getFlags() & ts.SymbolFlags.Assignment) !== 0);
 	}
 
 	public isTopLevelSymbol(symbol: ts.Symbol): boolean {
@@ -3423,6 +3424,9 @@ class Visitor {
 			case ts.SyntaxKind.ExportDeclaration:
 				this.doVisit(this.visitExportDeclaration, this.endVisitExportDeclaration, node as ts.ExportDeclaration);
 				break;
+			case ts.SyntaxKind.ExpressionStatement:
+				this.doVisit(this.visitExpressionStatement, this.endVisitExpressionStatement, node as ts.ExpressionStatement);
+				break;
 			case ts.SyntaxKind.VariableStatement:
 				this.doVisit(this.visitGeneric, this.endVisitGeneric, node as ts.VariableStatement);
 				break;
@@ -3762,6 +3766,43 @@ class Visitor {
 			this.dataManager.getOrCreateSymbolData(aliasedSymbol);
 			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, '', this.currentSourceFile);
 		}
+	}
+
+	private visitExpressionStatement(_node: ts.ExpressionStatement): boolean {
+		return true;
+	}
+
+	private endVisitExpressionStatement(node: ts.ExpressionStatement): void {
+		// we only need to handle `module.exports = `
+		if (!ts.isSourceFile(node.parent) || !ts.isBinaryExpression(node.expression) || !ts.isPropertyAccessExpression(node.expression.left)) {
+			return;
+		}
+		const left = node.expression.left;
+		if (!ts.isIdentifier(left.expression) || left.expression.escapedText !== 'module' || left.name.escapedText !== 'exports') {
+			return;
+		}
+
+		// We do have module.exports =
+		const symbol = this.tsProject.getSymbolAtLocation(node.expression);
+		if (symbol === undefined) {
+			return;
+		}
+		// Make sure we have a symbol data;
+		this.dataManager.getOrCreateSymbolData(symbol);
+		const monikerPath = this.currentDocumentData.monikerPath;
+		if (monikerPath === undefined) {
+			return;
+		}
+		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression.right);
+		if (aliasedSymbol === undefined) {
+			return;
+		}
+		const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+		if (aliasedSymbolData === undefined) {
+			return;
+		}
+		aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 	}
 
 	private visitArrayType(_node: ts.ArrayTypeNode): boolean {

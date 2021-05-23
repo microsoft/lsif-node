@@ -232,7 +232,7 @@ suite('Export Tests', () => {
 			[
 				'/@test/a.ts',
 				[
-					'function foo(): void { }',
+					'function foo(path: string): void { }',
 					'export = foo;'
 				].join(os.EOL)
 			],
@@ -240,16 +240,16 @@ suite('Export Tests', () => {
 				'/@test/b.ts',
 				[
 					'import foo from "./a";',
-					'foo();'
+					'foo("p");'
 				].join(os.EOL)
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":22,"type":"edge","label":"next","outV":21,"inV":14}'),
-			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:export=","unique":"workspace","kind":"export"}'),
-			JSON.parse('{"id":24,"type":"edge","label":"moniker","outV":21,"inV":23}')
+			JSON.parse('{"id":28,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":29,"type":"edge","label":"next","outV":28,"inV":14}'),
+			JSON.parse('{"id":30,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:export=","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":31,"type":"edge","label":"moniker","outV":28,"inV":30}')
 		];
 		for (const elem of validate) {
 			assertElement(emitter.elements.get(elem.id), elem);

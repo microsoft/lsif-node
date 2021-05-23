@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "Export computed property name"
+				"-g", "module.exports"
 
 			],
 			"cwd": "${workspaceRoot}/tsc-tests",
