@@ -1,0 +1,16 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "index.d.ts",
+            "index.test-d.ts",
+            "source",
+            "test"
+        ]
+    },
+    "out": "chalk.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

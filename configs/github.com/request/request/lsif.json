@@ -1,0 +1,15 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "request.js",
+            "lib",
+            "tests"
+        ]
+    },
+    "out": "request.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}
