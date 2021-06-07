@@ -300,7 +300,7 @@ class ImportLinker {
 	}
 }
 
-export function run(options: Options): void {
+export async function run(options: Options): Promise<void> {
 
 	if (options.help) {
 		return;
@@ -404,7 +404,7 @@ export function run(options: Options): void {
 	});
 }
 
-export function main(): void {
+export function main(): Promise<void> {
 	yargs.
 		parserConfiguration({ 'camel-case-expansion': false }).
 		exitProcess(false).
