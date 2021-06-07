@@ -1,0 +1,18 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+			"karma.conf.js",
+			"index.js",
+            "lib",
+            "perf",
+            "support",
+            "test"
+        ]
+    },
+    "out": "async.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}
