@@ -1,0 +1,6 @@
+{
+	"project": "src/tsconfig.json",
+	"out": "typescript.lsif",
+	"source": "./package.json",
+	"package": "./package.json"
+}

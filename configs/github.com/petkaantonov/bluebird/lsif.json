@@ -4,17 +4,13 @@
             "rootDir": "./"
         },
         "include": [
-			"karma.conf.js",
-			"karma.conf-sauce.js",
-			"rollup-common.js",
-			"rollup-config.js",
-			"rollup-config2.js",
-			"modules",
+			"src",
+            "benchmark",
             "test",
-            "test-treeshake"
+			"tools"
         ]
     },
-    "out": "underscore.lsif",
+    "out": "debug.lsif",
     "package": "./package.json",
     "source": "./package.json"
 }
