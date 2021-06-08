@@ -3479,6 +3479,21 @@ class Visitor {
 	}
 
 	private endVisitSourceFile(sourceFile: ts.SourceFile): void {
+		if (sourceFile.endOfFileToken) {
+			// Check if we have some dangling JSDoc comments not attached
+			// to any previous statement
+			const jsDoc = tss.Node.getJsDoc(sourceFile.endOfFileToken);
+			if (jsDoc !== undefined) {
+				for (const doc of jsDoc) {
+					const tags = doc.tags;
+					if (tags !== undefined) {
+						for (const tag of tags) {
+							this.handleSymbol(this.tsProject.getSymbolAtLocation(tag), tag);
+						}
+					}
+				}
+			}
+		}
 		if (this.isFullContentIgnored(sourceFile)) {
 			return;
 		}

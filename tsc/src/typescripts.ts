@@ -272,9 +272,17 @@ interface InternalNode extends ts.Node {
 	symbol?: ts.Symbol;
 }
 
+interface InternalJSDocContainer extends ts.JSDocContainer {
+	jsDoc?: ts.JSDoc[];
+}
+
 export namespace Node {
 	export function getSymbol(node: ts.Node): ts.Symbol | undefined {
 		return (node as InternalNode).symbol;
+	}
+
+	export function getJsDoc(node: ts.Token<ts.SyntaxKind.EndOfFileToken>): ts.JSDoc[] | undefined {
+		return (node as InternalJSDocContainer).jsDoc;
 	}
 }
 
