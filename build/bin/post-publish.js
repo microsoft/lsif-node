@@ -17,7 +17,7 @@ function updateNextTag() {
 	var packageJSON = JSON.parse(fs.readFileSync('package.json').toString());
 	var name = packageJSON.name;
 	var version = packageJSON.version;
-	if (version.indexOf('next') !== -1) {
+	if (version.indexOf('next') !== -1 || version.indexOf('dev') !== -1) {
 		return;
 	}
 
