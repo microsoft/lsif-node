@@ -1830,24 +1830,24 @@ class Symbols {
 				if (parameterDeclaration !== undefined && parameterDeclaration.parent.name !== undefined) {
 					const parentSymbol = this.getSymbolAtLocation(parameterDeclaration.parent.name);
 					if (parentSymbol !== undefined) {
-						const parentValue = this.getCachedSymbolInformation(parentSymbol);
-						if (parentValue !== undefined) {
-							return isNotNamed ? null : `${parentValue}.${this.getExportSymbolName(symbol)}`;
+						const parentExportPath = this.getExportPath(parentSymbol);
+						if (parentExportPath !== undefined) {
+							return isNotNamed ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`;
 						}
 					}
 				}
 			}
 			return undefined;
 		} else {
-			const [parentValue] = this.getCachedSymbolInformation(parent);
+			const parentExportPath = this.getExportPath(parent);
 			// The parent is not exported so any member isn't either
-			if (parentValue === undefined) {
+			if (parentExportPath === undefined) {
 				return undefined;
 			} else {
 				if (Symbols.isInterface(parent) || Symbols.isClass(parent) || Symbols.isTypeLiteral(parent)) {
-					return isNotNamed || parentValue === null ? null : `${parentValue}.${this.getExportSymbolName(symbol)}`;
+					return isNotNamed || parentExportPath === null ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`;
 				} else if (this.parentExports(parent, symbol)) {
-					return isNotNamed || parentValue === null ? null : parentValue.length > 0 ? `${parentValue}.${this.getExportSymbolName(symbol)}` : this.getExportSymbolName(symbol);
+					return isNotNamed || parentExportPath === null ? null : parentExportPath.length > 0 ? `${parentExportPath}.${this.getExportSymbolName(symbol)}` : this.getExportSymbolName(symbol);
 				} else {
 					return undefined;
 				}
