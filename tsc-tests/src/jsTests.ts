@@ -37,6 +37,36 @@ suite('JavaScript Tests', () => {
 			]
 		]), compilerOptions);
 		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:export=","unique":"workspace","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
+
+	test('module.exports with liternal', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.js',
+				[
+					'function _Route(pppp) {',
+  					'	this.path = pppp;',
+					'}',
+					'module.exports = {',
+					'    Route = _Route;',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.js',
+				[
+					'const a = require("./a");',
+					'new a.Route();'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":58,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:exports.Route","unique":"workspace","kind":"export"}')
 		];
 		for (const elem of validate) {
 			assertElement(emitter.elements.get(elem.id), elem);

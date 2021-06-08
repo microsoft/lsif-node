@@ -3783,7 +3783,7 @@ class Visitor {
 		}
 
 		// We do have module.exports =
-		const symbol = this.tsProject.getSymbolAtLocation(node.expression);
+		const symbol = this.tsProject.getSymbolAtLocation(node.expression.left);
 		if (symbol === undefined) {
 			return;
 		}
