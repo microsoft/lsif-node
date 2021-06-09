@@ -1,0 +1,17 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "moment.js",
+            "moment.d.ts",
+            "src",
+            "scripts",
+			"tasks"
+        ]
+    },
+    "out": "moment.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}
