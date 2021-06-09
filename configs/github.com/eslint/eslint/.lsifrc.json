@@ -1,0 +1,21 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            ".eslintrc.js",
+            "Makefile.js",
+            "webpack.config.js",
+			"bin",
+            "conf",
+            "lib",
+			"messages",
+            "tests",
+            "tools"
+        ]
+    },
+    "out": "eslint.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}
