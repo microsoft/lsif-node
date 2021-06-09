@@ -72,4 +72,27 @@ suite('JavaScript Tests', () => {
 			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
+
+	test('JavaDoc', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.js',
+				[
+					'/**',
+ 					' * The options object parsed by Optionator.',
+ 					' * @typedef {Object} ParsedCLIOptions',
+ 					' * @property {boolean} cache Only check changed files',
+					' */'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":12,"type":"vertex","label":"range","start":{"line":2,"character":21},"end":{"line":2,"character":37},"tag":{"type":"definition","text":"ParsedCLIOptions","kind":7,"fullRange":{"start":{"line":2,"character":3},"end":{"line":4,"character":1}}}}'),
+			JSON.parse('{"id":19,"type":"vertex","label":"range","start":{"line":3,"character":23},"end":{"line":3,"character":28},"tag":{"type":"definition","text":"cache","kind":7,"fullRange":{"start":{"line":3,"character":3},"end":{"line":4,"character":1}}}}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
+
 });

@@ -3462,6 +3462,15 @@ class Visitor {
 			node.forEachChild(child => this.visit(child));
 		}
 		endVisit.call(this, node);
+		// JS Doc is not visited using forEachChild. So we look if the node
+		// has an attached JSDoc node. If so we traverse that node and see
+		// if we can find any identifiers and have a symbol.
+		const jsDocs = tss.Node.getJsDoc(node);
+		if (jsDocs !== undefined) {
+			for (const jsDoc of jsDocs) {
+				this.traverseJSDoc(jsDoc);
+			}
+		}
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
@@ -3479,21 +3488,6 @@ class Visitor {
 	}
 
 	private endVisitSourceFile(sourceFile: ts.SourceFile): void {
-		if (sourceFile.endOfFileToken) {
-			// Check if we have some dangling JSDoc comments not attached
-			// to any previous statement
-			const jsDoc = tss.Node.getJsDoc(sourceFile.endOfFileToken);
-			if (jsDoc !== undefined) {
-				for (const doc of jsDoc) {
-					const tags = doc.tags;
-					if (tags !== undefined) {
-						for (const tag of tags) {
-							this.handleSymbol(this.tsProject.getSymbolAtLocation(tag), tag);
-						}
-					}
-				}
-			}
-		}
 		if (this.isFullContentIgnored(sourceFile)) {
 			return;
 		}
@@ -3563,45 +3557,6 @@ class Visitor {
 
 	private endVisitClassOrInterfaceDeclaration(node: ts.ClassDeclaration | ts.InterfaceDeclaration): void {
 		this.endVisitDeclaration(node);
-		// const [symbol, symbolData, monikerParts] = this.getSymbolAndMonikerPartsIfExported(node);
-		// if (symbol === undefined || symbolData === undefined || monikerParts === undefined) {
-		// 	return;
-		// }
-
-		// const type = this.tsProject.getTypeOfSymbol(symbol, node);
-
-		// // We don't need t traverse the class or interface itself. Only the parents.
-		// const bases = this.tsProject.getBaseTypes(type);
-		// if (bases !== undefined) {
-		// 	for (const type of bases) {
-		// 		this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
-		// 	}
-		// }
-		// const extendz = this.tsProject.getExtendsTypes(type);
-		// if (extendz !== undefined) {
-		// 	for (const type of extendz) {
-		// 		this.emitAttachedMonikers(monikerParts.path, this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem));
-		// 	}
-		// }
-
-		// // Interface can be used to declare function or constructor signatures.
-		// if (ts.isInterfaceDeclaration(node)) {
-		// 	const type = this.tsProject.getTypeOfSymbol(symbol, node.name);
-		// 	if (tss.Type.hasCallSignature(type) || tss.Type.hasConstructSignatures(type)) {
-		// 		this.emitAttachedMonikers(
-		// 			monikerParts.path,
-		// 			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
-		// 		);
-		// 	}
-		// } else if (ts.isClassDeclaration(node)) {
-		// 	const type = this.tsProject.getTypeOfSymbol(symbol, node);
-		// 	if (tss.Type.hasConstructSignatures(type)) {
-		// 		this.emitAttachedMonikers(
-		// 			monikerParts.path,
-		// 			this.tsProject.computeAdditionalExportPaths(node.getSourceFile(), type, monikerParts.name, symbolData.moduleSystem)
-		// 		);
-		// 	}
-		// }
 	}
 
 	private visitConstructor(node: ts.ConstructorDeclaration): boolean {
@@ -3846,6 +3801,17 @@ class Visitor {
 	}
 
 	private endVisitGeneric(_node: ts.Node): void {
+	}
+
+	private traverseJSDoc(node: ts.JSDoc): void {
+		const visit = (node: ts.Node): void => {
+			if (ts.isIdentifier(node)) {
+				this.visitIdentifier(node);
+			} else {
+				node.getChildren(this.currentSourceFile).forEach(visit);
+			}
+		};
+		node.getChildren(this.currentSourceFile).forEach(visit);
 	}
 
 	private addDocumentSymbol(node: tss.Node.Declaration): boolean {

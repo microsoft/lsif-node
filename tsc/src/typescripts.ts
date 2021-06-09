@@ -281,7 +281,7 @@ export namespace Node {
 		return (node as InternalNode).symbol;
 	}
 
-	export function getJsDoc(node: ts.Token<ts.SyntaxKind.EndOfFileToken>): ts.JSDoc[] | undefined {
+	export function getJsDoc(node: ts.JSDocContainer): ts.JSDoc[] | undefined {
 		return (node as InternalJSDocContainer).jsDoc;
 	}
 }
