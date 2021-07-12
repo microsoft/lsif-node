@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id, DeclarationRange
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, EmitterContext } from './common/graph';
@@ -1327,6 +1327,45 @@ enum ChildKind {
 	members = 3
 }
 
+/**
+ * When we walk symbol we can hit cases where symbols point
+ * to declaration nodes which actually introduce a different
+ * symbol or even where a reference to another symbol (e.g.
+ * WebHoverOverlay.displayName is a reference to a symbol but
+ * also introduce a new symbol on WebHoverOverlay). We therefore
+ * check the symbol of the original declaration and skip these
+ * temporary symbols since they can't be reached in source code.
+ */
+class ExportSymbolWalkerContext {
+
+	private context: SymbolWalkerContext;
+	private symbols: Symbols;
+
+	constructor(context: SymbolWalkerContext, symbols: Symbols ) {
+		this.context = context;
+		this.symbols = symbols;
+	}
+
+	public getSymbolData(symbol: ts.Symbol): SymbolData | undefined {
+		const declarationSymbol = this.getDeclarationSymbol(symbol);
+		return declarationSymbol !== undefined && declarationSymbol !== symbol
+			? this.context.getSymbolData(declarationSymbol)
+			: this.context.getSymbolData(symbol);
+	}
+
+	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
+		const declarationSymbol = this.getDeclarationSymbol(symbol);
+		return declarationSymbol !== undefined && declarationSymbol !== symbol
+			? this.context.getOrCreateSymbolData(declarationSymbol)
+			: this.context.getOrCreateSymbolData(symbol);
+	}
+
+	private getDeclarationSymbol(symbol: ts.Symbol): ts.Symbol | undefined {
+		const declaration = Symbols.getFirstDeclarationNode(symbol);
+		return declaration === undefined ? undefined : this.symbols.getSymbolAtLocation(declaration);
+	}
+}
+
 class ExportSymbolWalker {
 
 	private readonly _result: LinkedMap<SymbolData, string>;
@@ -1339,7 +1378,7 @@ class ExportSymbolWalker {
 
 	constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, skipRoot: boolean = false) {
 		this._result = new LinkedMap();
-		this.context = context;
+		this.context = new ExportSymbolWalkerContext(context, symbols);
 		this.symbols = symbols;
 		this.locationNode = locationNode;
 		this.skipRoot = skipRoot;
@@ -2424,13 +2463,11 @@ class WorkspaceProjectDataManager extends LazyProjectDataManager {
 
 class TSConfigProjectDataManager extends ProjectDataManager {
 
-	private readonly sourceRoot: string;
 	private readonly projectFiles: Set<string>;
 	private readonly managedDocuments: Set<Document>;
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, _sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
 		super(id, context, project, reporter);
-		this.sourceRoot = sourceRoot;
 		this.projectFiles = new Set(projectFiles);
 		this.managedDocuments = new Set();
 	}
@@ -2441,7 +2478,7 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 
 	public handles(sourceFile: ts.SourceFile): boolean {
 		const fileName = sourceFile.fileName;
-		return this.projectFiles.has(fileName) || paths.isParent(this.sourceRoot, fileName);
+		return this.projectFiles.has(fileName);
 	}
 
 	public createDocumentData(fileName: string, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean, next: DocumentData | undefined): DocumentData {
@@ -3038,6 +3075,11 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		if (this.currentTSProject !== tsProject || this.currentPDM === undefined) {
 			throw new Error(`Current project is not the one passed to end.`);
 		}
+		// Make sure we close partitions opened because of type folding in global files.
+		const documents = this.currentPDM.getDocuments();
+		for (const manager of [this.workspacePDM, this.machinePDM, this.defaultLibsPDM]) {
+			manager.endPartitions(documents);
+		}
 		this.currentPDM.end();
 		this.currentPDM = undefined;
 		this.currentTSProject = undefined;
@@ -3232,6 +3274,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
+		if (symbolId === 'f6ZUvvQmRev2XzlTIWYg/w==') {
+			debugger;
+		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
