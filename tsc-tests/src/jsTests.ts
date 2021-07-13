@@ -95,4 +95,77 @@ suite('JavaScript Tests', () => {
 		}
 	});
 
+	test('exports.paramsHaveValue', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.js',
+				[
+					'function paramsHaveValue() {',
+					'}',
+					'exports.paramsHaveValue = paramsHaveValue;'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.js',
+				[
+					'const a = require("./a");',
+					'a.paramsHaveValue();'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"Y8eS7TVHlwRY6NxeVit0vw==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":16,"type":"edge","label":"moniker","outV":14,"inV":15}'),
+			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":22,"type":"edge","label":"next","outV":21,"inV":14}'),
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:paramsHaveValue","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":24,"type":"edge","label":"moniker","outV":21,"inV":23}'),
+			JSON.parse('{"id":25,"type":"vertex","label":"range","start":{"line":2,"character":8},"end":{"line":2,"character":23},"tag":{"type":"definition","text":"paramsHaveValue","kind":7,"fullRange":{"start":{"line":2,"character":0},"end":{"line":2,"character":23}}}}'),
+			JSON.parse('{"id":26,"type":"edge","label":"next","outV":25,"inV":21}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
+
+	test('exports.paramsHaveValue with indirect exports', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.js',
+				[
+					'function paramsHaveValue() {',
+					'    return { value: 10 };',
+					'}',
+					'exports.paramsHaveValue = paramsHaveValue;'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.js',
+				[
+					'const a = require("./a");',
+					'a.paramsHaveValue().value;'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		const validate: Element[] = [
+			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"jg4X3igUOm47P4m1B9f93A==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":16,"type":"edge","label":"moniker","outV":14,"inV":15}'),
+			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"GmrY/zPTHrjN6AQD23azuA==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":23,"type":"edge","label":"moniker","outV":21,"inV":22}'),
+			JSON.parse('{"id":24,"type":"vertex","label":"range","start":{"line":1,"character":13},"end":{"line":1,"character":18},"tag":{"type":"definition","text":"value","kind":7,"fullRange":{"start":{"line":1,"character":13},"end":{"line":1,"character":22}}}}'),
+			JSON.parse('{"id":25,"type":"edge","label":"next","outV":24,"inV":21}'),
+			JSON.parse('{"id":28,"type":"vertex","label":"resultSet"}'),
+			JSON.parse('{"id":29,"type":"edge","label":"next","outV":28,"inV":14}'),
+			JSON.parse('{"id":30,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:paramsHaveValue","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":31,"type":"edge","label":"moniker","outV":28,"inV":30}'),
+			JSON.parse('{"id":40,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:paramsHaveValue.__rt.value","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":41,"type":"edge","label":"attach","outV":40,"inV":22}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
 });

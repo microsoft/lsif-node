@@ -11,7 +11,9 @@ import { ValidateCommand } from './validate';
 import { Options, builder } from './args';
 
 class ConsoleDiagnosticReporter implements DiagnosticReporter {
+	hasError: boolean = false;
 	error(element: Edge | Vertex, message?: string): void {
+		this.hasError = true;
 		if (message === undefined) {
 			if (element.type === ElementTypes.edge) {
 				console.log(`Malformed edge ${JSON.stringify(element, undefined, 0)}:`);
@@ -42,7 +44,11 @@ export async function run(options: Options): Promise<void> {
 	if (options.in !== undefined && fs.existsSync(options.in)) {
 		input = fs.createReadStream(options.in, { encoding: 'utf8'});
 	}
-	await new ValidateCommand(input, {}, new ConsoleDiagnosticReporter()).run();
+	const reporter = new ConsoleDiagnosticReporter();
+	await new ValidateCommand(input, {}, reporter).run();
+	if (reporter.hasError) {
+		process.exitCode = 1;
+	}
 }
 
 export async function main(): Promise<void> {

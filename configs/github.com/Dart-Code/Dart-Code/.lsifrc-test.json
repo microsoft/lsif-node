@@ -1,0 +1,6 @@
+{
+    "project": "./tsconfig.json",
+    "out": "dart-code.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

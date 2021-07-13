@@ -530,7 +530,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 				return;
 			}
 			if (this.visibility === SymbolDataVisibility.internal) {
-				throw new Error(`Can't upgrade symbol data visibility from ${this.visibility} to ${value}`);
+				throw new Error(`Can't upgrade symbol data visibility for ${this.symbolId} from ${this.visibility} to ${value}`);
 			}
 			this.visibility = value;
 			return;
@@ -3769,31 +3769,33 @@ class Visitor {
 			return;
 		}
 		const left = node.expression.left;
-		if (!ts.isIdentifier(left.expression) || left.expression.escapedText !== 'module' || left.name.escapedText !== 'exports') {
-			return;
-		}
 
-		// We do have module.exports =
-		const symbol = this.tsProject.getSymbolAtLocation(node.expression.left);
-		if (symbol === undefined) {
-			return;
+		const isModuleExport = ts.isIdentifier(left.expression) && left.expression.escapedText === 'module' && left.name.escapedText === 'exports';
+		const isExport = ts.isIdentifier(left.expression) && left.expression.escapedText === 'exports' && ts.isIdentifier(left.name);
+
+		if (isModuleExport || isExport) {
+			// First upgrade the aliased symbol even if we can't generate a moniker for it
+			const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression.right);
+			if (aliasedSymbol === undefined) {
+				return;
+			}
+			const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
+			if (aliasedSymbolData === undefined) {
+				return;
+			}
+			aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
+
+			const symbol = this.tsProject.getSymbolAtLocation(left);
+			if (symbol === undefined) {
+				return;
+			}
+			this.dataManager.getOrCreateSymbolData(symbol);
+			const monikerPath = this.currentDocumentData.monikerPath;
+			if (monikerPath === undefined) {
+				return;
+			}
+			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 		}
-		// Make sure we have a symbol data;
-		this.dataManager.getOrCreateSymbolData(symbol);
-		const monikerPath = this.currentDocumentData.monikerPath;
-		if (monikerPath === undefined) {
-			return;
-		}
-		const aliasedSymbol = this.tsProject.getSymbolAtLocation(node.expression.right);
-		if (aliasedSymbol === undefined) {
-			return;
-		}
-		const aliasedSymbolData = this.dataManager.getOrCreateSymbolData(aliasedSymbol);
-		if (aliasedSymbolData === undefined) {
-			return;
-		}
-		aliasedSymbolData.changeVisibility(SymbolDataVisibility.indirectExported);
-		this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 	}
 
 	private visitArrayType(_node: ts.ArrayTypeNode): boolean {
