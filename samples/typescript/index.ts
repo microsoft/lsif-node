@@ -1,3 +1,3 @@
-import { URI } from 'vscode-uri';
+import * as parent from '../parent';
 
-URI.parse('file:///abc.txt');
+parent.foo();
