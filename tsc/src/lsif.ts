@@ -14,7 +14,7 @@ import * as tss from './typescripts';
 import {
 	lsp, Vertex, Edge, Project, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
-	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id, DeclarationRange
+	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
 } from 'lsif-protocol';
 
 import { VertexBuilder, EdgeBuilder, EmitterContext } from './common/graph';
@@ -247,6 +247,7 @@ class DocumentData extends LSIFData<EmitterContext> {
 	public readonly external: boolean;
 	public readonly next: DocumentData | undefined;
 	private _isClosed: boolean;
+	private readonly recorded: Set<string>;
 	private ranges: Range[];
 	private rangesEmitted: boolean;
 	private diagnostics: lsp.Diagnostic[];
@@ -262,6 +263,7 @@ class DocumentData extends LSIFData<EmitterContext> {
 		this.external = external;
 		this.next = next;
 		this._isClosed = false;
+		this.recorded = new Set();
 		this.ranges = [];
 		this.rangesEmitted = false;
 		this.diagnostics = DocumentData.EMPTY_ARRAY;
@@ -293,10 +295,25 @@ class DocumentData extends LSIFData<EmitterContext> {
 		this.emit(this.vertex.event(EventScope.document, EventKind.begin, this.document));
 	}
 
-	public addRange(range: Range): void {
+	public addRange(range: Range): boolean {
+		const key = Range.key(range);
+		// export type Uri = string;
+		// export namespace Uri { ... }
+		//
+		// In the example above the symbol for type Uri has one declaration node
+		// and the symbol for namespace Uri two, where the first one is the same
+		// as for type Uri. To avoid recording ranges twice we ignore double
+		// ranges and treat the first recorded one as the primary. This is what
+		// the TS server does as well.
+		if (this.recorded.has(key)) {
+			return false;
+		} else {
+			this.recorded.add(key);
+		}
 		this.checkClosed();
 		this.emit(range);
 		this.ranges.push(range);
+		return true;
 	}
 
 	public addDiagnostics(diagnostics: lsp.Diagnostic[]): void {
@@ -1262,7 +1279,7 @@ abstract class SymbolWalker {
 		if (symbolData !== undefined) {
 			symbolData.changeVisibility(SymbolDataVisibility.indirectExported);
 		} else {
-			this.symbols.storeSymbolInitializationData(symbol, SymbolDataVisibility.indirectExported);
+			Symbols.storeSymbolInitializationData(this.symbols.getSymbolId(symbol), SymbolDataVisibility.indirectExported);
 		}
 	}
 
@@ -1327,45 +1344,6 @@ enum ChildKind {
 	members = 3
 }
 
-/**
- * When we walk symbol we can hit cases where symbols point
- * to declaration nodes which actually introduce a different
- * symbol or even where a reference to another symbol (e.g.
- * WebHoverOverlay.displayName is a reference to a symbol but
- * also introduce a new symbol on WebHoverOverlay). We therefore
- * check the symbol of the original declaration and skip these
- * temporary symbols since they can't be reached in source code.
- */
-class ExportSymbolWalkerContext {
-
-	private context: SymbolWalkerContext;
-	private symbols: Symbols;
-
-	constructor(context: SymbolWalkerContext, symbols: Symbols ) {
-		this.context = context;
-		this.symbols = symbols;
-	}
-
-	public getSymbolData(symbol: ts.Symbol): SymbolData | undefined {
-		const declarationSymbol = this.getDeclarationSymbol(symbol);
-		return declarationSymbol !== undefined && declarationSymbol !== symbol
-			? this.context.getSymbolData(declarationSymbol)
-			: this.context.getSymbolData(symbol);
-	}
-
-	public getOrCreateSymbolData(symbol: ts.Symbol): SymbolData {
-		const declarationSymbol = this.getDeclarationSymbol(symbol);
-		return declarationSymbol !== undefined && declarationSymbol !== symbol
-			? this.context.getOrCreateSymbolData(declarationSymbol)
-			: this.context.getOrCreateSymbolData(symbol);
-	}
-
-	private getDeclarationSymbol(symbol: ts.Symbol): ts.Symbol | undefined {
-		const declaration = Symbols.getFirstDeclarationNode(symbol);
-		return declaration === undefined ? undefined : this.symbols.getSymbolAtLocation(declaration);
-	}
-}
-
 class ExportSymbolWalker {
 
 	private readonly _result: LinkedMap<SymbolData, string>;
@@ -1378,7 +1356,7 @@ class ExportSymbolWalker {
 
 	constructor(context: SymbolWalkerContext, symbols: Symbols, locationNode: ts.Node | undefined, skipRoot: boolean = false) {
 		this._result = new LinkedMap();
-		this.context = new ExportSymbolWalkerContext(context, symbols);
+		this.context = context;
 		this.symbols = symbols;
 		this.locationNode = locationNode;
 		this.skipRoot = skipRoot;
@@ -1595,12 +1573,34 @@ class Symbols {
 		return symbol.declarations !== undefined && symbol.declarations.length > 0 ? symbol.declarations[0] : undefined;
 	}
 
+	private static readonly symbolInitializationData: Map<SymbolId, SymbolDataVisibility> = new Map();
+
+	public static storeSymbolInitializationData(symbolId: SymbolId, visibility: SymbolDataVisibility): void {
+		this.symbolInitializationData.set(symbolId, visibility);
+	}
+
+	private static getVisibility(symbolId: SymbolId, symbol: ts.Symbol, exportPath: string | undefined | null): SymbolDataVisibility {
+		const initVisibility = this.symbolInitializationData.get(symbolId);
+		if (initVisibility !== undefined) {
+			this.symbolInitializationData.delete(symbolId);
+		}
+
+		// The symbol is exported.
+		if (exportPath === null || exportPath !== undefined) {
+			return SymbolDataVisibility.exported;
+		}
+		if (Symbols.isTransient(symbol)) {
+			return SymbolDataVisibility.transient;
+		}
+
+		return initVisibility ?? SymbolDataVisibility.unknown;
+	}
+
 	public readonly types: Types;
 
 	private readonly baseSymbolCache: LRUCache<string, ts.Symbol[]>;
 	private readonly baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private readonly symbolCache: LRUCache<ts.Symbol, CachedSymbolInformation>;
-	private readonly symbolInitializationData: Map<string, SymbolDataVisibility>;
 
 	private readonly sourceFilesContainingAmbientDeclarations: Set<string>;
 
@@ -1609,7 +1609,6 @@ class Symbols {
 		this.baseSymbolCache = new LRUCache(2048);
 		this.baseMemberCache = new LRUCache(2048);
 		this.symbolCache = new LRUCache(4096);
-		this.symbolInitializationData = new Map();
 
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
@@ -1947,33 +1946,11 @@ class Symbols {
 		return true;
 	}
 
-	public storeSymbolInitializationData(symbol: ts.Symbol, visibility: SymbolDataVisibility): void {
-		const key = this.getSymbolId(symbol);
-		this.symbolInitializationData.set(key, visibility);
-	}
-
 	public getSymbolInitializationData(symbol: ts.Symbol): [string | undefined, ModuleSystemKind, SymbolDataVisibility, boolean] {
 		const [exportPath, moduleSystem, ] = this.getCachedSymbolInformation(symbol);
-		const visibility = this.getVisibility(symbol, exportPath);
+		const symbolId = this.getSymbolId(symbol);
+		const visibility = Symbols.getVisibility(symbolId, symbol, exportPath);
 		return [exportPath === null ? undefined : exportPath, moduleSystem, visibility, !Symbols.isInternal(symbol)];
-	}
-
-	private getVisibility(symbol: ts.Symbol, exportPath: string | undefined | null): SymbolDataVisibility {
-		const id = this.getSymbolId(symbol);
-		const initVisibility = this.symbolInitializationData.get(id);
-		if (initVisibility !== undefined) {
-			this.symbolInitializationData.delete(id);
-		}
-
-		// The symbol is exported.
-		if (exportPath === null || exportPath !== undefined) {
-			return SymbolDataVisibility.exported;
-		}
-		if (Symbols.isTransient(symbol)) {
-			return SymbolDataVisibility.transient;
-		}
-
-		return initVisibility ?? SymbolDataVisibility.unknown;
 	}
 }
 
@@ -2842,9 +2819,10 @@ class TSProject {
 					kind: Converter.asSymbolKind(declaration),
 					fullRange: Converter.rangeFromNode(sourceFile, declaration),
 				});
-				documentData.addRange(definition);
-				symbolData.addDefinition(documentData.document, definition);
-				symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
+				if (documentData.addRange(definition)) {
+					symbolData.addDefinition(documentData.document, definition);
+					symbolData.recordDefinitionInfo(tss.createDefinitionInfo(sourceFile, identifierNode));
+				}
 				if (hover === undefined && tss.Node.isNamedDeclaration(declaration)) {
 					// let start = Date.now();
 					hover = this.getHover(declaration.name, sourceFile);
@@ -3236,8 +3214,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 
 		const reference = this.vertex.range(Converter.rangeFromNode(sourceFile, location), { type: RangeTagTypes.reference, text: location.getText() });
-		documentData.addRange(reference);
-		symbolData.addReference(documentData.document, reference, ItemEdgeProperties.references);
+		if (documentData.addRange(reference)) {
+			symbolData.addReference(documentData.document, reference, ItemEdgeProperties.references);
+		}
 	}
 
 	public getSymbolData(symbol: SymbolId | ts.Symbol): SymbolData | undefined {
@@ -3274,9 +3253,6 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
-		if (symbolId === 'f6ZUvvQmRev2XzlTIWYg/w==') {
-			debugger;
-		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);

@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 
-import { Cardinality, Edge, EdgeLabels, ElementTypes, EventKind, Id, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
+import { Cardinality, Edge, EdgeLabels, ElementTypes, EventKind, EventScope, Id, Range, V, Vertex, VertexDescriptor, VertexLabels } from 'lsif-protocol';
 
 import { Command, DiagnosticReporter } from './command';
 
@@ -22,6 +22,8 @@ export class ValidateCommand extends Command {
 	private readonly openElements: Set<Id>;
 	private readonly closedElements: Set<Id>;
 	private readonly associatedRanges: Set<Id>;
+	private readonly ranges: Map<Id, Range>;
+	private readonly rangesPreDocument: Map<Id, Set<string>>;
 
 	constructor(input: NodeJS.ReadStream | fs.ReadStream | IterableIterator<Edge | Vertex>, options: ValidateOptions, reporter: DiagnosticReporter) {
 		super(input, reporter);
@@ -33,6 +35,8 @@ export class ValidateCommand extends Command {
 		this.openElements = new Set();
 		this.closedElements = new Set();
 		this.associatedRanges = new Set();
+		this.ranges = new Map();
+		this.rangesPreDocument = new Map();
 		this.options;
 	}
 
@@ -57,10 +61,19 @@ export class ValidateCommand extends Command {
 						isClosed = vertex.data;
 					}
 					this.openElements.add(vertex.data);
+					if (vertex.scope === EventScope.document) {
+						this.rangesPreDocument.set(vertex.data, new Set());
+					}
 				} else if (vertex.kind === EventKind.end) {
 					this.openElements.delete(vertex.data);
 					this.closedElements.add(vertex.data);
+					if (vertex.scope === EventScope.document) {
+						this.rangesPreDocument.delete(vertex.data);
+					}
 				}
+			}
+			if (vertex.label === VertexLabels.range) {
+				this.ranges.set(vertex.id, vertex);
 			}
 		}
 
@@ -138,9 +151,28 @@ export class ValidateCommand extends Command {
 			if (edge.label === EdgeLabels.contains) {
 				const vertexLabel = this.vertices.get(edge.outV);
 				if (vertexLabel === VertexLabels.document) {
+					const ranges = this.rangesPreDocument.get(edge.outV);
+					if (ranges === undefined) {
+						this.reporter.error(edge, `edge points to a range vertex for which no document ranges can be found`);
+					}
 					for (const range of edge.inVs) {
 						this.associatedRanges.add(range);
+						const rangeVertex = this.ranges.get(range);
+						this.ranges.delete(range);
+						if (rangeVertex === undefined) {
+							this.reporter.error(edge, `edge points to a range vertex that can't be found.`);
+							continue;
+						}
+						if (ranges !== undefined) {
+							const key = Range.key(rangeVertex);
+							if (ranges.has(key)) {
+								this.reporter.error(edge, `a range with [${JSON.stringify(rangeVertex.start)},${JSON.stringify(rangeVertex.end)}] is emitted twice for the document with Id: ${edge.outV}`);
+							} else {
+								ranges.add(key);
+							}
+						}
 					}
+
 				}
 			}
 			if (edge.label === EdgeLabels.item) {

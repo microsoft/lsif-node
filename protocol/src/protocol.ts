@@ -693,6 +693,9 @@ export namespace Range {
 	export function is(value: any): value is Range {
 		return descriptor.validate(value);
 	}
+	export function key(value: Range): string {
+		return `${value.start.line},${value.start.character},${value.end.line},${value.end.character}`;
+	}
 }
 
 /**
