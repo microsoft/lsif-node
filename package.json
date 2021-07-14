@@ -31,9 +31,7 @@
 		"postinstall": "node ./build/bin/all.js install && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
 		"compile": "tsc -b ./tsconfig.json",
-		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",
-		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
 		"lint": "node ./build/bin/all.js run lint",
 		"clean": "node ./build/bin/all.js run clean",
 		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."

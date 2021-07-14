@@ -1,0 +1,4 @@
+[
+	{ "command": "npm", "args": ["install"] },
+	{ "command": "npm", "args": ["run update-lsif"] }
+]

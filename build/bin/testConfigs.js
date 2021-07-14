@@ -71,7 +71,7 @@ async function readInitFile(initFile) {
  */
 async function runLsifTsc(cwd, configFilePath) {
 	const out = `${uuid.v4()}.lsif`;
-	const args = [path.join(ROOT, 'tsc', 'lib', 'main.js')];
+	const args = ['--max-old-space-size=4096', path.join(ROOT, 'tsc', 'lib', 'main.js')];
 	args.push('--config', configFilePath);
 	args.push('--out', path.join(cwd, out));
 	await runCommand('node', args, cwd);
@@ -85,7 +85,7 @@ async function runLsifTsc(cwd, configFilePath) {
  * @return {Promise<void>}
  */
 async function runValidate(cwd, outFile) {
-	const args = [path.join(ROOT, 'tooling', 'lib', 'main.js'),
+	const args = ['--max-old-space-size=4096', path.join(ROOT, 'tooling', 'lib', 'main.js'),
 		'--in', `${outFile}`
 	];
 	await runCommand('node', args, cwd);
@@ -116,18 +116,43 @@ async function checkRepository(root, hub, org, repository) {
 				await runCommand(command.command, command.args ?? [], directory);
 			}
 		}
-		let configFile = path.join(root, hub, org, repository, '.lsifrc.json');
-		if (!await exists(configFile)) {
-			configFile = path.join(root, hub, org, repository, '.lsifrc-test.json');
+		// First check if the repository has its own config file.
+		const configLocations = [
+			{ own: true, path: path.join(directory), name: '.lsifrc.json' },
+			{ own: true, path: path.join(directory), name: 'lsif.json' },
+			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc.json' },
+			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc-test.json' },
+			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc-off.json' }
+		];
+
+		let config = undefined;
+		for (const elem of configLocations) {
+			const configFile = path.join(elem.path, elem.name);
+			if (await exists(configFile)) {
+				config = elem;
+				break;
+			}
 		}
-		if (await exists(configFile)) {
-			await fs.writeFile(path.join(directory, '.lsifrc.json'), await fs.readFile(configFile), { encoding: 'utf8' });
-			process.stdout.write(`Run LSIF tool\n`);
-			const out  = await runLsifTsc(directory, '.lsifrc.json');
-			process.stdout.write(`Run Validation tool\n`);
-			await runValidate(directory, out);
-			await fs.rmdir(directory, { recursive: true });
+		if (config === undefined) {
+			return 1;
 		}
+		if (config.name === '.lsifrc-off.json') {
+			return -1;
+		}
+		let name;
+		if (config.own) {
+			name = config.name;
+		} else {
+			await fs.writeFile(path.join(directory, '.lsifrc.json'), await fs.readFile(path.join(config.path, config.name)), { encoding: 'utf8' });
+			name = '.lsifrc.json';
+		}
+
+		process.stdout.write(`Run LSIF tool\n`);
+		const out  = await runLsifTsc(directory, name);
+		process.stdout.write(`Run Validation tool\n`);
+		await runValidate(directory, out);
+		await fs.rmdir(directory, { recursive: true });
+		return 0;
 	}
 }
 
@@ -145,11 +170,17 @@ async function main(configs, hub, org, repository) {
 		configs = path.join(process.cwd(), configs);
 	}
 
-	const testStats = { passed: [], failed: [] };
+	const testStats = { passed: [], failed: [], skipped: [] };
 	if (hub !== undefined && repository !== undefined) {
 		try {
-			await checkRepository(configs, hub, org, repository);
-			testStats.passed.push(`${hub}/${org}/${repository}`);
+			const code = await checkRepository(configs, hub, org, repository);
+			if (code === undefined || code === 0) {
+				testStats.passed.push(`${hub}/${org}/${repository}`);
+			} else if (code === -1) {
+				testStats.skipped.push(`${hub}/${org}/${repository}`);
+			} else {
+				testStats.failed.push(`${hub}/${org}/${repository}`);
+			}
 		} catch (error) {
 			testStats.failed.push(`${hub}/${org}/${repository}`);
 		}
@@ -173,8 +204,14 @@ async function main(configs, hub, org, repository) {
 						continue;
 					}
 					try {
-						await checkRepository(configs, hub, org, repository);
-						testStats.passed.push(`${hub}/${org}/${repository}`);
+						const code = await checkRepository(configs, hub, org, repository);
+						if (code === undefined || code === 0) {
+							testStats.passed.push(`${hub}/${org}/${repository}`);
+						}	else if (code === -1) {
+							testStats.skipped.push(`${hub}/${org}/${repository}`);
+						}  else {
+							testStats.failed.push(`${hub}/${org}/${repository}`);
+						}
 					} catch {
 						testStats.failed.push(`${hub}/${org}/${repository}`);
 					}
@@ -185,6 +222,12 @@ async function main(configs, hub, org, repository) {
 
 	process.stdout.write(`\n\nTest summary:\n`);
 	process.stdout.write(`\tPassed tests: ${testStats.passed.length}\n`);
+	process.stdout.write(`\tSkipped tests: ${testStats.skipped.length}\n`);
+	if (testStats.skipped.length > 0) {
+		for (let skipped of testStats.skipped) {
+			process.stdout.write(`\t\t${skipped}\n`);
+		}
+	}
 	process.stdout.write(`\tFailed tests: ${testStats.failed.length}\n`);
 	if (testStats.failed.length > 0) {
 		for (let failed of testStats.failed) {
@@ -195,7 +238,7 @@ async function main(configs, hub, org, repository) {
 }
 
 main(process.argv[2], process.argv[3], process.argv[4], process.argv[5]).then((error) => {
-	if (error !== undefined) {
+	if (error !== undefined ) {
 		process.exitCode = error;
 	}
 }, (_error) => {
