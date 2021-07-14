@@ -22,7 +22,7 @@ steps:
 
 - script: |
     npm run symlink
-  displayName: 'Install dependencies'
+  displayName: 'Symlink node modules'
 
 - script: |
     npm run compile
