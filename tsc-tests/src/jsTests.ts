@@ -115,7 +115,7 @@ suite('JavaScript Tests', () => {
 		]), compilerOptions);
 		const validate: Element[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"Y8eS7TVHlwRY6NxeVit0vw==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":16,"type":"edge","label":"moniker","outV":14,"inV":15}'),
 			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":22,"type":"edge","label":"next","outV":21,"inV":14}'),
@@ -150,10 +150,10 @@ suite('JavaScript Tests', () => {
 		]), compilerOptions);
 		const validate: Element[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"jg4X3igUOm47P4m1B9f93A==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":16,"type":"edge","label":"moniker","outV":14,"inV":15}'),
 			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
-			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"GmrY/zPTHrjN6AQD23azuA==","unique":"document","kind":"local"}'),
+			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":23,"type":"edge","label":"moniker","outV":21,"inV":22}'),
 			JSON.parse('{"id":24,"type":"vertex","label":"range","start":{"line":1,"character":13},"end":{"line":1,"character":18},"tag":{"type":"definition","text":"value","kind":7,"fullRange":{"start":{"line":1,"character":13},"end":{"line":1,"character":22}}}}'),
 			JSON.parse('{"id":25,"type":"edge","label":"next","outV":24,"inV":21}'),
