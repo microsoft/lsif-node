@@ -835,6 +835,36 @@ suite('Export Tests', () => {
 			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
+
+	test('Declare global', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'declare global {',
+					'    const value: number;',
+					'}',
+					'export function foo() {',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import * as a from "./a";',
+					'console.log(value)'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 136);
+		const validate: Element[] = [
+			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":value","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
 suite('Export use cases', () => {

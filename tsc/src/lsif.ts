@@ -1780,9 +1780,9 @@ class Symbols {
 		return result;
 	}
 
-	public getExportPath(symbol: ts.Symbol): string | undefined {
-		const result = this.getCachedSymbolInformation(symbol)[0];
-		return result === null ? undefined : result;
+	private getExportPath(symbol: ts.Symbol): undefined | [string , ModuleSystemKind] {
+		const [exportPath, moduleSystem] = this.getCachedSymbolInformation(symbol);
+		return (exportPath === null || exportPath === undefined) ? undefined : [exportPath, moduleSystem];
 	}
 
 	public isExported(symbol: ts.Symbol): boolean {
@@ -1805,8 +1805,9 @@ class Symbols {
 		}
 
 		const declarationSourceFiles = this.computeDeclarationSourceFiles(symbol);
-		const moduleSystem = this.computeModuleSystemKind(declarationSourceFiles);
-		const exportPath = this.computeExportPath(symbol, moduleSystem);
+		let moduleSystem = this.computeModuleSystemKind(declarationSourceFiles);
+		let exportPath: string | undefined | null;
+		[exportPath, moduleSystem] = this.computeExportPath(symbol, moduleSystem);
 		result = [exportPath, moduleSystem, declarationSourceFiles];
 		this.symbolCache.set(symbol, result);
 		return result;
@@ -1847,20 +1848,25 @@ class Symbols {
 		return ModuleSystemKind.unknown;
 	}
 
-	private computeExportPath(symbol: ts.Symbol, kind: ModuleSystemKind): string | undefined | null {
+	private computeExportPath(symbol: ts.Symbol, moduleSystem: ModuleSystemKind): [string | undefined | null, ModuleSystemKind] {
 		// For a declaration like export default function foo()
-		if (Symbols.isSourceFile(symbol) && (kind === ModuleSystemKind.module || kind === ModuleSystemKind.unknown)) {
-			return '';
+		if (Symbols.isSourceFile(symbol) && (moduleSystem === ModuleSystemKind.module || moduleSystem === ModuleSystemKind.unknown)) {
+			return ['', moduleSystem];
 		}
 		const parent = tss.Symbol.getParent(symbol);
 		const isNotNamed = (Symbols.isInternal(symbol) && (symbol.escapedName !== ts.InternalSymbolName.Default && symbol.escapedName !== ts.InternalSymbolName.ExportEquals));
 		if (parent === undefined) {
+			// If we are in a module system `declare global` adds to the global namespace.
+			// Check if we are in this case
+			if (moduleSystem === ModuleSystemKind.module && symbol.escapedName === ts.InternalSymbolName.Global) {
+				return ['', ModuleSystemKind.global];
+			}
 			// In a global module system symbol inside other namespace don't have a parent
 			// if the symbol is not exported. So we need to check if the symbol is a top
 			// level symbol
-			if (kind === ModuleSystemKind.global) {
+			else if (moduleSystem === ModuleSystemKind.global) {
 				if (this.isTopLevelSymbol(symbol)) {
-					return isNotNamed ? null : this.getExportSymbolName(symbol);
+					return [isNotNamed ? null : this.getExportSymbolName(symbol), moduleSystem];
 				}
 				// In a global module system signature can be merged across file. So even parameters
 				// must be exported to allow merging across files.
@@ -1870,24 +1876,25 @@ class Symbols {
 					if (parentSymbol !== undefined) {
 						const parentExportPath = this.getExportPath(parentSymbol);
 						if (parentExportPath !== undefined) {
-							return isNotNamed ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`;
+							return [isNotNamed ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`, moduleSystem];
 						}
 					}
 				}
 			}
-			return undefined;
+			return [undefined, moduleSystem];
 		} else {
-			const parentExportPath = this.getExportPath(parent);
+			const parentValue = this.getExportPath(parent);
 			// The parent is not exported so any member isn't either
-			if (parentExportPath === undefined) {
-				return undefined;
+			if (parentValue === undefined) {
+				return [undefined, moduleSystem];
 			} else {
+				const [parentExportPath, parentModuleSystem] = parentValue;
 				if (Symbols.isInterface(parent) || Symbols.isClass(parent) || Symbols.isTypeLiteral(parent)) {
-					return isNotNamed || parentExportPath === null ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`;
+					return [isNotNamed || parentExportPath === null ? null : `${parentExportPath}.${this.getExportSymbolName(symbol)}`, parentModuleSystem];
 				} else if (this.parentExports(parent, symbol)) {
-					return isNotNamed || parentExportPath === null ? null : parentExportPath.length > 0 ? `${parentExportPath}.${this.getExportSymbolName(symbol)}` : this.getExportSymbolName(symbol);
+					return [isNotNamed || parentExportPath === null ? null : parentExportPath.length > 0 ? `${parentExportPath}.${this.getExportSymbolName(symbol)}` : this.getExportSymbolName(symbol), parentModuleSystem];
 				} else {
-					return undefined;
+					return [undefined, moduleSystem];
 				}
 			}
 		}
@@ -2757,6 +2764,9 @@ class TSProject {
 
 	public createSymbolData(manager: ProjectDataManager, created: (data: SymbolData) => void, symbol: ts.Symbol, next: SymbolData | undefined): { symbolData: SymbolData; validateVisibilityOn?: ts.SourceFile[] } {
 		const symbolId: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
+		if (symbolId === 'DwNNI46ZNT2z+ZWYdSSgAg==') {
+			debugger;
+		}
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
 		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
@@ -2899,7 +2909,7 @@ class TSProject {
 		}
 		if (exportPath !== undefined) {
 			if (moduleSystem === undefined || moduleSystem === ModuleSystemKind.global) {
-				return tss.createMonikerIdentifier(undefined, exportPath);
+				return exportPath !== undefined && exportPath.length > 0 ? tss.createMonikerIdentifier(undefined, exportPath) : undefined;
 			}
 			if (filePath !== undefined) {
 				return tss.createMonikerIdentifier(filePath, exportPath);
