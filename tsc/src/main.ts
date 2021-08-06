@@ -117,11 +117,11 @@ interface InternalLogger extends Logger {
 	end(): void;
 }
 
-class StreamLogger extends NullLogger implements InternalLogger {
+class AbstractLogger extends NullLogger implements InternalLogger {
 
 	private reported: Set<string>;
 
-	constructor(private stream: NodeJS.WritableStream) {
+	constructor() {
 		super();
 		this.reported = new Set();
 	}
@@ -132,11 +132,52 @@ class StreamLogger extends NullLogger implements InternalLogger {
 	public end(): void {
 	}
 
-	public reportProgress(_fileName: string): void {
+	protected internalSymbolMessage(symbol: ts.Symbol, symbolId: string, location: ts.Node): string | undefined {
+		if (this.reported.has(symbolId)) {
+			return undefined;
+		}
+		this.reported.add(symbolId);
+		const buffer: string[] = [];
+		buffer.push(os.EOL);
+		buffer.push(`The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
+		buffer.push(os.EOL);
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined) {
+			buffer.push(`  The symbol has no visible declarations.`);
+			buffer.push(os.EOL);
+		} else {
+			buffer.push(`  The symbol is declared in the following files:`);
+			buffer.push(os.EOL);
+			for (const declaration of declarations) {
+				const sourceFile = declaration.getSourceFile();
+				const lc = ts.getLineAndCharacterOfPosition(sourceFile, declaration.getStart());
+				buffer.push(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+				buffer.push(os.EOL);
+			}
+		}
+		if (location !== undefined) {
+			const sourceFile = location.getSourceFile();
+			const lc = ts.getLineAndCharacterOfPosition(sourceFile, location.getStart());
+			buffer.push(`  Problem got detected while parsing the following file:`);
+			buffer.push(os.EOL);
+			buffer.push(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
+			buffer.push(os.EOL);
+		}
+		return buffer.join('');
+	}
+}
+
+class StreamLogger extends AbstractLogger implements InternalLogger {
+
+	constructor(private stream: NodeJS.WritableStream) {
+		super();
+	}
+
+	public doneIndexFile(_fileName: string): void {
 		this.stream.write('.');
 	}
 
-	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
+	public projectStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
 		this.stream.write(os.EOL);
 		this.stream.write(`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`);
 		if (time !== undefined) {
@@ -148,114 +189,101 @@ class StreamLogger extends NullLogger implements InternalLogger {
 		this.stream.write(os.EOL);
 	}
 
-	public reportInternalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
-		if (this.reported.has(symbolId)) {
+	public internalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
+		const message = this.internalSymbolMessage(symbol, symbolId, location);
+		if (message === undefined) {
 			return;
 		}
-		this.reported.add(symbolId);
-		this.stream.write(os.EOL);
-		this.stream.write(`The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
-		this.stream.write(os.EOL);
-		const declarations = symbol.getDeclarations();
-		if (declarations === undefined) {
-			this.stream.write(`  The symbol has no visible declarations.`);
-			this.stream.write(os.EOL);
-		} else {
-			this.stream.write(`  The symbol is declared in the following files:`);
-			this.stream.write(os.EOL);
-			for (const declaration of declarations) {
-				const sourceFile = declaration.getSourceFile();
-				const lc = ts.getLineAndCharacterOfPosition(sourceFile, declaration.getStart());
-				this.stream.write(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
-				this.stream.write(os.EOL);
-			}
-		}
-		if (location !== undefined) {
-			const sourceFile = location.getSourceFile();
-			const lc = ts.getLineAndCharacterOfPosition(sourceFile, location.getStart());
-			this.stream.write(`  Problem got detected while parsing the following file:`);
-			this.stream.write(os.EOL);
-			this.stream.write(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
-			this.stream.write(os.EOL);
-		}
+		this.stream.write(message);
 	}
 }
 
-class InternalNullLogger extends NullLogger implements InternalLogger {
-	constructor() {
-		super();
-	}
+class FileReporter extends AbstractLogger {
 
-	public begin(): void {
-	}
-
-	public end(): void {
-	}
-}
-
-class FileReporter extends StreamLogger {
-
-	private fileStream: fs.WriteStream;
+	private fileHandle: number;
 	private reportProgressOnStdout: boolean;
 
 	constructor(file: string, reportProgressOnStdout: boolean) {
-		const stream = fs.createWriteStream(file, { encoding: 'utf8' });
-		super(stream);
-		this.fileStream = stream;
+		super();
+		this.fileHandle = fs.openSync(file, 'w');
 		this.reportProgressOnStdout = reportProgressOnStdout;
 	}
 
-	public reportProgress(fileName: string): void {
+	public startIndexFile(fileName: string): void {
+		this.writeTime();
+		fs.writeSync(this.fileHandle, `Start indexing file: ${fileName}${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
+	}
+
+	public internalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
+		const message = this.internalSymbolMessage(symbol, symbolId, location);
+		if (message === undefined) {
+			return;
+		}
+		fs.writeSync(this.fileHandle, message);
+		fs.fdatasyncSync(this.fileHandle);
+	}
+
+	public doneIndexFile(fileName: string): void {
 		if (this.reportProgressOnStdout) {
 			process.stdout.write('.');
 		}
 		this.writeTime();
-		this.fileStream.write(`Indexing file: ${fileName}${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Done indexing file: ${fileName}${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public beginProject(name: string): void {
 		this.writeTime();
-		this.fileStream.write(`Begin project ${name}${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Begin project ${name}${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public startEndProject(name: string): void {
 		this.writeTime();
-		this.fileStream.write(`Start ending project ${name}${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Start ending project ${name}${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
-	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
+	public projectStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
 		this.writeTime();
-		this.fileStream.write(`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`);
+		const buffer: string[] = [`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`];
 		if (time !== undefined) {
-			this.fileStream.write(` in ${time}ms.`);
+			buffer.push(` in ${time}ms.`);
 		} else {
-			this.fileStream.write('.');
+			buffer.push('.');
 		}
-		this.fileStream.write(os.EOL);
+		buffer.push(os.EOL);
+		fs.writeSync(this.fileHandle, buffer.join(''));
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public doneEndProject(name: string): void {
 		this.writeTime();
-		this.fileStream.write(`Done ending project ${name}${os.EOL}${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Done ending project ${name}${os.EOL}${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public beginDataManager(): void {
 		this.writeTime();
-		this.fileStream.write(`Begin global data manager${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Begin global data manager${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public startEndDataManager(): void {
 		this.writeTime();
-		this.fileStream.write(`Start ending global data manager${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Start ending global data manager${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public doneEndDataManager(): void {
 		this.writeTime();
-		this.fileStream.write(`Done ending global data manager${os.EOL}`);
+		fs.writeSync(this.fileHandle, `Done ending global data manager${os.EOL}`);
+		fs.fdatasyncSync(this.fileHandle);
 	}
 
 	public end(): void {
-		this.fileStream.close();
+		fs.closeSync(this.fileHandle);
 		if (this.reportProgressOnStdout) {
 			process.stdout.write(os.EOL);
 		}
@@ -263,7 +291,9 @@ class FileReporter extends StreamLogger {
 
 	private writeTime(): void {
 		const date = new Date();
-		this.fileStream.write(`[${date.getFullYear()}-${this.pad(date.getMonth(), 2)}-${this.pad(date.getDay(), 2)} ${this.pad(date.getHours(), 2)}:${this.pad(date.getMinutes(), 2)}:${this.pad(date.getSeconds(), 2)}:${this.pad(date.getMilliseconds(), 3)}] `);
+		fs.writeSync(this.fileHandle,
+			`[${date.getFullYear()}-${this.pad(date.getMonth(), 2)}-${this.pad(date.getDay(), 2)} ${this.pad(date.getHours(), 2)}:${this.pad(date.getMinutes(), 2)}:${this.pad(date.getSeconds(), 2)}:${this.pad(date.getMilliseconds(), 3)}] `
+		);
 	}
 
 	private pad(value: number, digits: number): string {
@@ -624,26 +654,26 @@ export async function run(this: void, options: Options): Promise<void> {
 	capabilities.declarationProvider = false;
 	emitter.emit(capabilities);
 
-	let reporter: InternalLogger;
+	let logger: InternalLogger;
 	if (options.log === '') { // --log not provided
 		// The trace is written to stdout so we can't log anything.
 		if (options.stdout) {
-			reporter = new InternalNullLogger();
+			logger = new AbstractLogger();
 		} else {
-			reporter = new StreamLogger(process.stdout);
+			logger = new StreamLogger(process.stdout);
 		}
 	} else if (options.log === true) { // --log without a file name
 		if (options.out !== undefined) {
-			reporter = new FileReporter(`${options.out}.log`, true);
+			logger = new FileReporter(`${options.out}.log`, true);
 		} else {
-			reporter = new StreamLogger(process.stdout);
+			logger = new StreamLogger(process.stdout);
 		}
 	} else if ((typeof options.log === 'string') && options.log.length > 0) { // --log filename
-		reporter = new FileReporter(options.log, !options.stdout);
+		logger = new FileReporter(options.log, !options.stdout);
 	} else {
-		reporter = new InternalNullLogger();
+		logger = new AbstractLogger();
 	}
-	reporter.begin();
+	logger.begin();
 
 	let packageInfo: string | Map<string, string> | undefined;
 	if (options.package !== undefined) {
@@ -674,7 +704,7 @@ export async function run(this: void, options: Options): Promise<void> {
 		stdout: options.stdout,
 		dataMode: options.moniker === 'strict' ? DataMode.free : DataMode.keep,
 		packageInfo: packageInfo,
-		reporter: reporter,
+		reporter: logger,
 		processed: new Map(),
 		files: options.files
 	};
@@ -684,7 +714,7 @@ export async function run(this: void, options: Options): Promise<void> {
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();
 	emitter.end();
-	reporter.end();
+	logger.end();
 }
 
 export async function main(this: void): Promise<void> {

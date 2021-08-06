@@ -2190,12 +2190,14 @@ class TypeAliasFactory extends StandardSymbolDataFactory {
 }
 
 export interface Logger {
-	reportProgress(fileName: string): void;
-	reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void;
-	reportInternalSymbol(symbol: ts.Symbol, symbolId: SymbolId, location: ts.Node | undefined): void;
+
+	startIndexFile(fileName: string): void;
+	internalSymbol(symbol: ts.Symbol, symbolId: SymbolId, location: ts.Node | undefined): void;
+	doneIndexFile(fileName: string): void;
 
 	beginProject(projectName: string): void;
 	startEndProject(projectName: string): void;
+	projectStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void;
 	doneEndProject(projectName: string): void;
 
 	beginDataManager(): void;
@@ -2206,11 +2208,13 @@ export interface Logger {
 export class NullLogger implements Logger {
 	constructor() {
 	}
-	public reportProgress(_fileName: string): void {
+	public startIndexFile(_fileName: string): void {
 	}
-	public reportStatus(_projectName: string, _numberOfSymbols: number, _numberOfDocuments: number, _time: number | undefined): void {
+	public internalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
 	}
-	public reportInternalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
+	public doneIndexFile(_fileName: string): void {
+	}
+	public projectStatus(_projectName: string, _numberOfSymbols: number, _numberOfDocuments: number, _time: number | undefined): void {
 	}
 	public beginProject(_name: string): void {
 	}
@@ -2359,7 +2363,7 @@ abstract class ProjectDataManager {
 		} else {
 			name = this.getName();
 		}
-		this.logger.reportStatus(name, this.symbolStats, this.documentStats, this.startTime !== undefined ? Date.now() - this.startTime : undefined);
+		this.logger.projectStatus(name, this.symbolStats, this.documentStats, this.startTime !== undefined ? Date.now() - this.startTime : undefined);
 	}
 
 	protected getName(): string {
@@ -3553,7 +3557,7 @@ class Visitor {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		this.options.logger.reportProgress(sourceFile.fileName);
+		this.options.logger.startIndexFile(sourceFile.fileName);
 
 		this.currentSourceFile = sourceFile;
 		const documentData = this.dataManager.getOrCreateDocumentData(sourceFile);
@@ -3564,6 +3568,7 @@ class Visitor {
 	}
 
 	private endVisitSourceFile(sourceFile: ts.SourceFile): void {
+		this.options.logger.doneIndexFile(sourceFile.fileName);
 		if (this.isFullContentIgnored(sourceFile)) {
 			return;
 		}
