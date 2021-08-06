@@ -2189,10 +2189,41 @@ class TypeAliasFactory extends StandardSymbolDataFactory {
 	}
 }
 
-export interface Reporter {
-	reportProgress(scannedFiles: number): void;
+export interface Logger {
+	reportProgress(fileName: string): void;
 	reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void;
 	reportInternalSymbol(symbol: ts.Symbol, symbolId: SymbolId, location: ts.Node | undefined): void;
+
+	beginProject(projectName: string): void;
+	startEndProject(projectName: string): void;
+	doneEndProject(projectName: string): void;
+
+	beginDataManager(): void;
+	startEndDataManager(): void;
+	doneEndDataManager(): void;
+}
+
+export class NullLogger implements Logger {
+	constructor() {
+	}
+	public reportProgress(_fileName: string): void {
+	}
+	public reportStatus(_projectName: string, _numberOfSymbols: number, _numberOfDocuments: number, _time: number | undefined): void {
+	}
+	public reportInternalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
+	}
+	public beginProject(_name: string): void {
+	}
+	public startEndProject(_name: string): void {
+	}
+	public doneEndProject(_name: string): void {
+	}
+	public beginDataManager(): void {
+	}
+	public startEndDataManager(): void {
+	}
+	public doneEndDataManager(): void {
+	}
 }
 
 export interface Options {
@@ -2202,7 +2233,7 @@ export interface Options {
 	packageJsonFile: string | undefined;
 	stdout: boolean;
 	dataMode: DataMode;
-	reporter: Reporter;
+	logger: Logger;
 }
 
 enum ParseMode {
@@ -2221,7 +2252,7 @@ abstract class ProjectDataManager {
 
 	protected readonly context: ProjectDataManagerContext;
 	private readonly projectData: ProjectData;
-	private readonly reporter: Reporter;
+	private readonly logger: Logger;
 
 	private documentStats: number;
 	private readonly documentDataItems: DocumentData[];
@@ -2230,11 +2261,11 @@ abstract class ProjectDataManager {
 	// corresponding node is processed.
 	private readonly managedSymbolDataItems: SymbolData[];
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, logger: Logger) {
 		this.id = id;
 		this.context = context;
 		this.projectData = new ProjectData(context, project);
-		this.reporter = reporter;
+		this.logger = logger;
 		this.documentStats = 0;
 		this.documentDataItems = [];
 		this.symbolStats = 0;
@@ -2328,11 +2359,11 @@ abstract class ProjectDataManager {
 		} else {
 			name = this.getName();
 		}
-		this.reporter.reportStatus(name, this.symbolStats, this.documentStats, this.startTime !== undefined ? Date.now() - this.startTime : undefined);
+		this.logger.reportStatus(name, this.symbolStats, this.documentStats, this.startTime !== undefined ? Date.now() - this.startTime : undefined);
 	}
 
 	protected getName(): string {
-		return this.projectData.project.resource || this.projectData.project.name;
+		return this.projectData.project.resource ?? this.projectData.project.name;
 	}
 }
 
@@ -2347,8 +2378,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 	private state: LazyProjectDataManagerState;
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
-		super(id, context, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, logger: Logger) {
+		super(id, context, project, logger);
 		this.state = LazyProjectDataManagerState.start;
 	}
 
@@ -2405,8 +2436,8 @@ class LazyProjectDataManager extends ProjectDataManager {
 
 class MachineProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
-		super(id, context, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, logger: Logger) {
+		super(id, context, project, logger);
 	}
 
 	protected getName(): string {
@@ -2417,8 +2448,8 @@ class MachineProjectDataManager extends LazyProjectDataManager {
 
 class DefaultLibsProjectDataManager extends LazyProjectDataManager {
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, reporter: Reporter) {
-		super(id, context, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, logger: Logger) {
+		super(id, context, project, logger);
 	}
 
 	protected getName(): string {
@@ -2430,8 +2461,8 @@ class WorkspaceProjectDataManager extends LazyProjectDataManager {
 
 	private readonly workspaceRoot: string;
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, workspaceRoot: string, reporter: Reporter) {
-		super(id, context, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, workspaceRoot: string, logger: Logger) {
+		super(id, context, project, logger);
 		this.workspaceRoot = workspaceRoot;
 	}
 
@@ -2450,8 +2481,8 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	private readonly projectFiles: Set<string>;
 	private readonly managedDocuments: Set<Document>;
 
-	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, _sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, reporter: Reporter) {
-		super(id, context, project, reporter);
+	public constructor(id: ProjectId, context: ProjectDataManagerContext, project: Project, _sourceRoot: string, projectFiles: ReadonlyArray<string> | undefined, logger: Logger) {
+		super(id, context, project, logger);
 		this.projectFiles = new Set(projectFiles);
 		this.managedDocuments = new Set();
 	}
@@ -2577,6 +2608,17 @@ class TSProject {
 			transient: new TransientFactory(typeChecker, this.symbols, context, symbolDataContext),
 			typeAlias: new TypeAliasFactory(typeChecker, this.symbols, context, symbolDataContext)
 		};
+	}
+
+	public get name(): string {
+		if (this.config.configLocation !== undefined) {
+			const result = this.config.configLocation.startsWith(this.config.workspaceRoot)
+				? this.config.configLocation.substr(this.config.workspaceRoot.length + 1)
+				: this.config.configLocation;
+			return result.length > 0 ? result : this.config.configLocation;
+		} else {
+			return this.id.toString();
+		}
 	}
 
 	protected get vertex(): VertexBuilder {
@@ -2764,9 +2806,6 @@ class TSProject {
 
 	public createSymbolData(manager: ProjectDataManager, created: (data: SymbolData) => void, symbol: ts.Symbol, next: SymbolData | undefined): { symbolData: SymbolData; validateVisibilityOn?: ts.SourceFile[] } {
 		const symbolId: SymbolId = tss.Symbol.createKey(this.typeChecker, symbol);
-		if (symbolId === 'DwNNI46ZNT2z+ZWYdSSgAg==') {
-			debugger;
-		}
 		const factory = this.getFactory(symbol);
 		const declarations: ts.Node[] | undefined = factory.getDeclarationNodes(symbol);
 		const declarationSourceFiles: ts.SourceFile[] | undefined = factory.getDeclarationSourceFiles(symbol);
@@ -2981,7 +3020,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	private static readonly DefaultLibsId: string = '5779b280-596f-4b5d-90d8-b87441d7afa0';
 
 	private readonly context: EmitterContext;
-	private readonly reporter: Reporter;
+	private readonly logger: Logger;
 	private readonly dataMode: DataMode;
 
 	private readonly workspacePDM: WorkspaceProjectDataManager;
@@ -3002,9 +3041,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	public readonly vertex: VertexBuilder;
 	public readonly edge: EdgeBuilder;
 
-	public constructor(context: EmitterContext, workspaceRoot: string, reporter: Reporter, dataMode: DataMode) {
+	public constructor(context: EmitterContext, workspaceRoot: string, logger: Logger, dataMode: DataMode) {
 		this.context = context;
-		this.reporter = reporter;
+		this.logger = logger;
 		this.dataMode = dataMode;
 		this.documentDataItems = new Map();
 		this.symbolDataItems = new Map();
@@ -3017,9 +3056,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		this.vertex = this.context.vertex;
 		this.edge = this.context.edge;
 
-		this.workspacePDM = new WorkspaceProjectDataManager(ProjectId.next(), this, this.context.vertex.project(workspaceRoot), workspaceRoot, reporter);
-		this.machinePDM = new MachineProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.MachineId), reporter);
-		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.DefaultLibsId), reporter);
+		this.workspacePDM = new WorkspaceProjectDataManager(ProjectId.next(), this, this.context.vertex.project(workspaceRoot), workspaceRoot, logger);
+		this.machinePDM = new MachineProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.MachineId), logger);
+		this.defaultLibsPDM = new DefaultLibsProjectDataManager(ProjectId.next(), this, this.context.vertex.project(DataManager.DefaultLibsId), logger);
 	}
 
 	public emit(element: Vertex | Edge): void {
@@ -3027,6 +3066,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 	}
 
 	public begin(): void {
+		this.logger.beginDataManager();
 		this.defaultLibsPDM.begin();
 		this.machinePDM.begin();
 		this.workspacePDM.begin();
@@ -3036,8 +3076,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		if (this.currentPDM !== undefined) {
 			throw new Error(`There is already a current program data manager set`);
 		}
+		this.logger.beginProject(tsProject.name);
 		this.currentTSProject = tsProject;
-		this.currentPDM = new TSConfigProjectDataManager(tsProject.id, this, project, tsProject.getConfig().sourceRoot, tsProject.getSourceFilesToIndexFileNames(), this.reporter);
+		this.currentPDM = new TSConfigProjectDataManager(tsProject.id, this, project, tsProject.getConfig().sourceRoot, tsProject.getSourceFilesToIndexFileNames(), this.logger);
 		this.currentPDM.begin();
 	}
 
@@ -3063,6 +3104,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		if (this.currentTSProject !== tsProject || this.currentPDM === undefined) {
 			throw new Error(`Current project is not the one passed to end.`);
 		}
+		this.logger.startEndProject(tsProject.name);
 		// Make sure we close partitions opened because of type folding in global files.
 		const documents = this.currentPDM.getDocuments();
 		for (const manager of [this.workspacePDM, this.machinePDM, this.defaultLibsPDM]) {
@@ -3071,9 +3113,11 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		this.currentPDM.end();
 		this.currentPDM = undefined;
 		this.currentTSProject = undefined;
+		this.logger.doneEndProject(tsProject.name);
 	}
 
 	public end(): void {
+		this.logger.startEndDataManager();
 		const managers: ProjectDataManager[] = [this.workspacePDM, this.machinePDM, this.defaultLibsPDM];
 		for (let i = 0; i < managers.length; i++) {
 			const manager = managers[i];
@@ -3083,6 +3127,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 			}
 			manager.end();
 		}
+		this.logger.doneEndDataManager();
 	}
 
 	public getDocumentData(stringOrSourceFile: ts.SourceFile | string): DocumentData | undefined {
@@ -3508,7 +3553,7 @@ class Visitor {
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
-		this.options.reporter.reportProgress(1);
+		this.options.logger.reportProgress(sourceFile.fileName);
 
 		this.currentSourceFile = sourceFile;
 		const documentData = this.dataManager.getOrCreateDocumentData(sourceFile);

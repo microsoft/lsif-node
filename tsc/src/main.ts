@@ -30,7 +30,7 @@ import { Builder, EmitterContext } from './common/graph';
 import { Emitter, EmitterModule } from './emitters/emitter';
 
 import { TypingsInstaller } from './typings';
-import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Reporter } from './lsif';
+import { lsif, ProjectInfo, Options as LSIFOptions, DataManager, DataMode, Logger, NullLogger } from './lsif';
 import * as tss from './typescripts';
 import { Options, builder, ConfigOptions } from './args';
 import { ImportMonikers } from './npm/importMonikers';
@@ -112,16 +112,17 @@ function makeKey(config: ts.ParsedCommandLine | ConfigOptions): string {
 	return  hash.digest('base64');
 }
 
-interface InternalReporter extends Reporter {
+interface InternalLogger extends Logger {
 	begin(): void;
 	end(): void;
 }
 
-class StreamReporter implements InternalReporter {
+class StreamLogger extends NullLogger implements InternalLogger {
 
 	private reported: Set<string>;
 
 	constructor(private stream: NodeJS.WritableStream) {
+		super();
 		this.reported = new Set();
 	}
 
@@ -131,8 +132,8 @@ class StreamReporter implements InternalReporter {
 	public end(): void {
 	}
 
-	public reportProgress(scannedFiles: number): void {
-		this.stream.write('.'.repeat(scannedFiles));
+	public reportProgress(_fileName: string): void {
+		this.stream.write('.');
 	}
 
 	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
@@ -180,8 +181,9 @@ class StreamReporter implements InternalReporter {
 	}
 }
 
-class NullReporter implements InternalReporter {
+class InternalNullLogger extends NullLogger implements InternalLogger {
 	constructor() {
+		super();
 	}
 
 	public begin(): void {
@@ -189,18 +191,9 @@ class NullReporter implements InternalReporter {
 
 	public end(): void {
 	}
-
-	public reportProgress(_scannedFiles: number): void {
-	}
-
-	public reportStatus(_projectName: string, _numberOfSymbols: number, _numberOfDocuments: number, _time: number): void {
-	}
-
-	public reportInternalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
-	}
 }
 
-class FileReporter extends StreamReporter {
+class FileReporter extends StreamLogger {
 
 	private fileStream: fs.WriteStream;
 	private reportProgressOnStdout: boolean;
@@ -212,6 +205,55 @@ class FileReporter extends StreamReporter {
 		this.reportProgressOnStdout = reportProgressOnStdout;
 	}
 
+	public reportProgress(fileName: string): void {
+		if (this.reportProgressOnStdout) {
+			process.stdout.write('.');
+		}
+		this.writeTime();
+		this.fileStream.write(`Indexing file: ${fileName}${os.EOL}`);
+	}
+
+	public beginProject(name: string): void {
+		this.writeTime();
+		this.fileStream.write(`Begin project ${name}${os.EOL}`);
+	}
+
+	public startEndProject(name: string): void {
+		this.writeTime();
+		this.fileStream.write(`Start ending project ${name}${os.EOL}`);
+	}
+
+	public reportStatus(projectName: string, numberOfSymbols: number, numberOfDocuments: number, time: number | undefined): void {
+		this.writeTime();
+		this.fileStream.write(`Processed ${numberOfSymbols} symbols in ${numberOfDocuments} files for project ${projectName}`);
+		if (time !== undefined) {
+			this.fileStream.write(` in ${time}ms.`);
+		} else {
+			this.fileStream.write('.');
+		}
+		this.fileStream.write(os.EOL);
+	}
+
+	public doneEndProject(name: string): void {
+		this.writeTime();
+		this.fileStream.write(`Done ending project ${name}${os.EOL}${os.EOL}`);
+	}
+
+	public beginDataManager(): void {
+		this.writeTime();
+		this.fileStream.write(`Begin global data manager${os.EOL}`);
+	}
+
+	public startEndDataManager(): void {
+		this.writeTime();
+		this.fileStream.write(`Start ending global data manager${os.EOL}`);
+	}
+
+	public doneEndDataManager(): void {
+		this.writeTime();
+		this.fileStream.write(`Done ending global data manager${os.EOL}`);
+	}
+
 	public end(): void {
 		this.fileStream.close();
 		if (this.reportProgressOnStdout) {
@@ -219,10 +261,13 @@ class FileReporter extends StreamReporter {
 		}
 	}
 
-	public reportProgress(scannedFiles: number): void {
-		if (this.reportProgressOnStdout) {
-			process.stdout.write('.'.repeat(scannedFiles));
-		}
+	private writeTime(): void {
+		const date = new Date();
+		this.fileStream.write(`[${date.getFullYear()}-${this.pad(date.getMonth(), 2)}-${this.pad(date.getDay(), 2)} ${this.pad(date.getHours(), 2)}:${this.pad(date.getMinutes(), 2)}:${this.pad(date.getSeconds(), 2)}:${this.pad(date.getMilliseconds(), 3)}] `);
+	}
+
+	private pad(value: number, digits: number): string {
+		return ('00' + value).slice(-1 * digits);
 	}
 }
 
@@ -234,7 +279,7 @@ interface ProcessProjectOptions {
 	packageInfo?: Map<string /* tsConfig */, string /* packageJson */>;
 	stdout: boolean;
 	dataMode: DataMode;
-	reporter: Reporter;
+	reporter: Logger;
 	processed: Map<String, ProjectInfo>;
 	files?: Map<string, string>;
 }
@@ -413,7 +458,7 @@ async function processProject(pclOrOptions: ts.ParsedCommandLine | ConfigOptions
 		tsConfigFile: configFilePath,
 		packageJsonFile: packageJsonFile,
 		stdout: options.stdout,
-		reporter: options.reporter,
+		logger: options.reporter,
 		dataMode: options.dataMode,
 	};
 
@@ -579,24 +624,24 @@ export async function run(this: void, options: Options): Promise<void> {
 	capabilities.declarationProvider = false;
 	emitter.emit(capabilities);
 
-	let reporter: InternalReporter;
+	let reporter: InternalLogger;
 	if (options.log === '') { // --log not provided
 		// The trace is written to stdout so we can't log anything.
 		if (options.stdout) {
-			reporter = new NullReporter();
+			reporter = new InternalNullLogger();
 		} else {
-			reporter = new StreamReporter(process.stdout);
+			reporter = new StreamLogger(process.stdout);
 		}
 	} else if (options.log === true) { // --log without a file name
 		if (options.out !== undefined) {
 			reporter = new FileReporter(`${options.out}.log`, true);
 		} else {
-			reporter = new StreamReporter(process.stdout);
+			reporter = new StreamLogger(process.stdout);
 		}
 	} else if ((typeof options.log === 'string') && options.log.length > 0) { // --log filename
 		reporter = new FileReporter(options.log, !options.stdout);
 	} else {
-		reporter = new NullReporter();
+		reporter = new InternalNullLogger();
 	}
 	reporter.begin();
 
