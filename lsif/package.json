@@ -1,7 +1,7 @@
 {
 	"name": "lsif",
 	"description": "Wrapper tool to start lsif based sub tools",
-	"version": "0.6.0-next.16",
+	"version": "0.6.0-next.17",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -20,7 +20,7 @@
 		"lsif-npm": "0.6.0-next.7",
 		"lsif-sqlite": "0.6.0-next.7",
 		"lsif-tooling": "0.6.0-next.8",
-		"lsif-tsc": "0.6.0-next.15",
+		"lsif-tsc": "0.6.0-next.16",
 		"yargs": "^16.2.0"
 	},
 	"devDependencies": {},
