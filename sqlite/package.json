@@ -17,14 +17,14 @@
 		"lsif-sqlite": "./bin/lsif-sqlite"
 	},
 	"dependencies": {
-		"better-sqlite3": "^7.1.2",
+		"better-sqlite3": "^7.4.3",
 		"lsif-protocol": "0.6.0-next.6",
 		"uuid": "^8.3.2",
 		"vscode-uri": "^3.0.2",
 		"yargs": "16.2.0"
 	},
 	"devDependencies": {
-		"@types/better-sqlite3": "^5.4.1",
+		"@types/better-sqlite3": "^5.4.3",
 		"@types/uuid": "^8.3.0"
 	},
 	"scripts": {
