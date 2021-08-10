@@ -117,19 +117,26 @@ interface InternalLogger extends Logger {
 	end(): void;
 }
 
-class AbstractLogger extends NullLogger implements InternalLogger {
-
-	private reported: Set<string>;
+class InternalNullLogger extends NullLogger implements InternalLogger {
 
 	constructor() {
 		super();
-		this.reported = new Set();
 	}
 
 	public begin(): void {
 	}
 
 	public end(): void {
+	}
+}
+
+class AbstractLogger extends InternalNullLogger implements InternalLogger {
+
+	private reported: Set<string>;
+
+	constructor() {
+		super();
+		this.reported = new Set();
 	}
 
 	protected internalSymbolMessage(symbol: ts.Symbol, symbolId: string, location: ts.Node): string | undefined {
@@ -198,7 +205,7 @@ class StreamLogger extends AbstractLogger implements InternalLogger {
 	}
 }
 
-class FileReporter extends AbstractLogger {
+class FileLogger extends AbstractLogger {
 
 	private fileHandle: number;
 	private reportProgressOnStdout: boolean;
@@ -658,20 +665,22 @@ export async function run(this: void, options: Options): Promise<void> {
 	if (options.log === '') { // --log not provided
 		// The trace is written to stdout so we can't log anything.
 		if (options.stdout) {
-			logger = new AbstractLogger();
+			logger = new InternalNullLogger();
 		} else {
 			logger = new StreamLogger(process.stdout);
 		}
 	} else if (options.log === true) { // --log without a file name
-		if (options.out !== undefined) {
-			logger = new FileReporter(`${options.out}.log`, true);
+		if (options.stdout === undefined && options.out !== undefined) {
+			logger = new FileLogger(`${options.out}.log`, true);
+		} else if (options.stdout) {
+			logger = new InternalNullLogger();
 		} else {
 			logger = new StreamLogger(process.stdout);
 		}
 	} else if ((typeof options.log === 'string') && options.log.length > 0) { // --log filename
-		logger = new FileReporter(options.log, !options.stdout);
+		logger = new FileLogger(options.log, !options.stdout);
 	} else {
-		logger = new AbstractLogger();
+		logger = new InternalNullLogger();
 	}
 	logger.begin();
 
