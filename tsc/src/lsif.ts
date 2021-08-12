@@ -1766,7 +1766,8 @@ class Symbols {
 			if (baseResult.size > 0) {
 				result = Array.from(baseResult.values());
 			}
-		} else if (symbol.members) {
+		}
+		if (result === undefined && symbol.members !== undefined) {
 			const member = symbol.members.get(memberName as ts.__String);
 			if (member !== undefined) {
 				result = [member];

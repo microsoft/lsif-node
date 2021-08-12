@@ -181,7 +181,7 @@ export namespace Symbol {
 				return a.k - b.k;
 			});
 		}
-		let hash = crypto.createHash('md5');
+		const hash = crypto.createHash('md5');
 		if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
 			hash.update(JSON.stringify({ trans: true }, undefined, 0));
 		}

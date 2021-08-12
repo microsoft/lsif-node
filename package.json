@@ -34,6 +34,7 @@
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"lint": "node ./build/bin/all.js run lint",
 		"clean": "node ./build/bin/all.js run clean",
-		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd .."
+		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd ..",
+		"test:configs": "node ./build/bin/testConfigs.js ./configs"
 	}
 }
