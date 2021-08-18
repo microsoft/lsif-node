@@ -4,6 +4,10 @@ trigger:
     include:
     - '*'
 
+pr:
+- main
+- release/*
+
 jobs:
 - job: Linux
   pool:
