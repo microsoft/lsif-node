@@ -148,6 +148,15 @@ export namespace Options {
 		if (typeof options.package === 'string') {
 			result.package = makeAbsolute(options.package);
 		}
+		if (typeof options.source === 'string') {
+			result.source = makeAbsolute(options.source);
+		}
+		if (typeof options.p === 'string') {
+			result.p = makeAbsolute(options.p);
+		}
+		if (typeof options.out === 'string') {
+			result.out = makeAbsolute(options.out);
+		}
 		if (Array.isArray(options.publishedPackages)) {
 			result.publishedPackages = [];
 			for (const item of options.publishedPackages) {
