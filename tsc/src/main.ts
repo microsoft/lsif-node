@@ -38,17 +38,17 @@ import { ExportMonikers } from './npm/exportMonikers';
 import { PackageJson } from './npm/package';
 
 function loadConfigFile(file: string): ts.ParsedCommandLine {
-	let absolute = path.resolve(file);
+	const absolute = path.resolve(file);
 
-	let readResult = ts.readConfigFile(absolute, ts.sys.readFile);
+	const readResult = ts.readConfigFile(absolute, ts.sys.readFile);
 	if (readResult.error) {
 		throw new Error(ts.formatDiagnostics([readResult.error], ts.createCompilerHost({})));
 	}
-	let config = readResult.config;
+	const config = readResult.config;
 	if (config.compilerOptions !== undefined) {
 		config.compilerOptions = Object.assign(config.compilerOptions, tss.getDefaultCompilerOptions(file));
 	}
-	let result = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(absolute));
+	const result = ts.parseJsonConfigFileContent(config, ts.sys, path.dirname(absolute));
 	if (result.errors.length > 0) {
 		throw new Error(ts.formatDiagnostics(result.errors, ts.createCompilerHost({})));
 	}
@@ -64,7 +64,7 @@ function parseConfigFileContent(options: ConfigOptions, basePath: string): ts.Pa
 	if (config.compilerOptions !== undefined) {
 		config.compilerOptions = Object.assign(config.compilerOptions, tss.getDefaultCompilerOptions(configFileName));
 	}
-	let result = ts.parseJsonConfigFileContent(config, ts.sys, basePath);
+	const result = ts.parseJsonConfigFileContent(config, ts.sys, basePath);
 	if (result.errors.length > 0) {
 		throw new Error(ts.formatDiagnostics(result.errors, ts.createCompilerHost({})));
 	}
@@ -107,9 +107,9 @@ function createIdGenerator(options: Options): () => Id {
 }
 
 function makeKey(config: ts.ParsedCommandLine | ConfigOptions): string {
-	let hash = crypto.createHash('md5');
+	const hash = crypto.createHash('md5');
 	hash.update(JSON.stringify(ConfigOptions.is(config) ? config : config.options, undefined, 0));
-	return  hash.digest('base64');
+	return hash.digest('base64');
 }
 
 interface InternalLogger extends Logger {
@@ -377,7 +377,7 @@ async function processProject(pclOrOptions: ts.ParsedCommandLine | ConfigOptions
 	}
 
 	// Bind all symbols
-	let scriptSnapshots: Map<string, ts.IScriptSnapshot> = new Map();
+	const scriptSnapshots: Map<string, ts.IScriptSnapshot> = new Map();
 	const host: ts.LanguageServiceHost = {
 		getScriptFileNames: () => {
 			return config.fileNames;
@@ -445,7 +445,7 @@ async function processProject(pclOrOptions: ts.ParsedCommandLine | ConfigOptions
 	const dependsOn: ProjectInfo[] = [];
 	const references = options.noProjectReferences ? undefined : program.getResolvedProjectReferences();
 	if (references) {
-		for (let reference of references) {
+		for (const reference of references) {
 			if (reference) {
 				const result = await processProject(reference.commandLine, emitter, typingsInstaller, dataManager, importMonikers, exportMonikers, options);
 				if (typeof result === 'number') {
