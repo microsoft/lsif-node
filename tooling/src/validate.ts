@@ -42,8 +42,20 @@ export class ValidateCommand extends Command {
 
 	protected async process(element: Edge | Vertex ): Promise<void> {
 		if (element.type === ElementTypes.edge) {
+			// Filter deprecated belongsTo edge
+			if ((element.label as string) === 'belongsTo') {
+				this.reporter.warn(element);
+				this.reporter.warn(element, `edge belongsTo is deprecated`);
+				return;
+			}
 			this.validateEdge(element as Edge);
 		} else if (element.type === ElementTypes.vertex) {
+			// Filter deprecated group vertex
+			if((element.label as string) === 'group') {
+				this.reporter.warn(element);
+				this.reporter.warn(element, `vertex group is deprecated`);
+				return;
+			}
 			this.validateVertex(element as Vertex);
 		}
 	}
