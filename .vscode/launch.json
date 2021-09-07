@@ -12,7 +12,7 @@
 			"stopOnEntry": false,
 			"args": [
 				"--timeout", "999999",
-				"-g", "JavaDoc"
+				"-g", "Export\\ as\\ namespace"
 
 			],
 			"cwd": "${workspaceRoot}/tsc-tests",

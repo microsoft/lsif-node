@@ -1249,6 +1249,8 @@ abstract class SymbolWalker {
 				// First walk the type to handle unnamed types correctly
 				this.walkType(type, mode, markOnly, this.symbols.getModuleSystemKind(symbol), newPath, level +1);
 			}
+			// Consider skipping the globalThis here since it contains a lot of exports
+			// which we should have handled correctly before.
 			if (symbol.exports !== undefined) {
 				const iterator = symbol.exports.values();
 				for (let item = iterator.next(); !item.done; item = iterator.next()) {
@@ -1532,15 +1534,17 @@ class Symbols {
 		return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ExportStar) !== 0;
 	}
 
+	public static isNamespaceExportDeclaration(symbol: ts.Symbol): boolean  {
+		const declarations = symbol.declarations;
+		return declarations !== undefined && declarations.length === 1 && declarations[0].kind === ts.SyntaxKind.NamespaceExportDeclaration;
+	}
+
 	public static isVariableDeclaration(symbol: ts.Symbol): boolean {
 		if (!Symbols.isBlockScopedVariable(symbol)) {
 			return false;
 		}
 		const declarations = symbol.declarations;
-		if (declarations === undefined || declarations.length !== 1) {
-			return false;
-		}
-		return declarations[0].kind === ts.SyntaxKind.VariableDeclaration;
+		return declarations !== undefined && declarations.length === 1 && declarations[0].kind === ts.SyntaxKind.VariableDeclaration;
 	}
 
 	public static isPrivate(symbol: ts.Symbol): boolean {
@@ -1884,6 +1888,11 @@ class Symbols {
 			}
 			return [undefined, moduleSystem];
 		} else {
+			// `export as namespace` create a global symbol also defined in a module file.
+			// This is comparable to declare global.
+			if (Symbols.isSourceFile(parent) && Symbols.isNamespaceExportDeclaration(symbol)) {
+				return [this.getExportSymbolName(symbol), ModuleSystemKind.global];
+			}
 			const parentValue = this.getExportPath(parent);
 			// The parent is not exported so any member isn't either
 			if (parentValue === undefined) {
@@ -1916,9 +1925,9 @@ class Symbols {
 		return escapedName;
 	}
 
+	private static indirectExportFlags = ts.SymbolFlags.Property | ts.SymbolFlags.Function | ts.SymbolFlags.Method  | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface | ts.SymbolFlags.Class;
 	public needsIndirectExportCheck(symbol: ts.Symbol): boolean {
-		const flags = ts.SymbolFlags.Property | ts.SymbolFlags.Function | ts.SymbolFlags.Method  | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface | ts.SymbolFlags.Class;
-		return (symbol.getFlags() & flags) !== 0 || Symbols.isVariableDeclaration(symbol) ||
+		return (symbol.getFlags() & Symbols.indirectExportFlags) !== 0 || Symbols.isVariableDeclaration(symbol) ||
 			(symbol.name === ts.InternalSymbolName.ExportEquals && (symbol.getFlags() & ts.SymbolFlags.Assignment) !== 0);
 	}
 
@@ -3313,9 +3322,6 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
-		if (symbolId === "iQWPdWTR1/fAGhTmQ7r48g==") {
-			debugger;
-		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
@@ -3510,6 +3516,9 @@ class Visitor {
 				break;
 			case ts.SyntaxKind.ExpressionStatement:
 				this.doVisit(this.visitExpressionStatement, this.endVisitExpressionStatement, node as ts.ExpressionStatement);
+				break;
+			case ts.SyntaxKind.NamespaceExportDeclaration:
+				this.doVisit(this.visitNamespaceExportDeclaration, this.endVisitNamespaceExportDeclaration, node as ts.NamespaceExportDeclaration);
 				break;
 			case ts.SyntaxKind.VariableStatement:
 				this.doVisit(this.visitGeneric, this.endVisitGeneric, node as ts.VariableStatement);
@@ -3860,6 +3869,31 @@ class Visitor {
 			}
 			this.tsProject.exportSymbol(aliasedSymbol, monikerPath, this.tsProject.getExportSymbolName(symbol), this.currentSourceFile);
 		}
+	}
+
+	private visitNamespaceExportDeclaration(_node: ts.NamespaceExportDeclaration): boolean {
+		return true;
+	}
+
+	private endVisitNamespaceExportDeclaration(node: ts.NamespaceExportDeclaration): void {
+		if (!ts.isSourceFile(node.parent)) {
+			return;
+		}
+		const symbol = this.tsProject.getSymbolAtLocation(node.name);
+		if (symbol === undefined || !Symbols.isAliasSymbol(symbol)) {
+			return;
+		}
+
+		const symbolData = this.dataManager.getOrCreateSymbolData(symbol);
+		if (symbolData.moduleSystem !== ModuleSystemKind.global) {
+			return;
+		}
+
+		const aliased = this.tsProject.getAliasedSymbol(symbol);
+		if (aliased === undefined || aliased.escapedName !== symbol.escapedName) {
+			return;
+		}
+		this.tsProject.exportSymbol(aliased, '', this.tsProject.getExportSymbolName(aliased), this.currentSourceFile);
 	}
 
 	private visitArrayType(_node: ts.ArrayTypeNode): boolean {

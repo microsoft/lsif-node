@@ -865,6 +865,40 @@ suite('Export Tests', () => {
 			assertElement(emitter.elements.get(elem.id), elem);
 		}
 	});
+
+	test('Export as namespace', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.d.ts',
+				[
+					'export as namespace M;',
+					'export = M;',
+					'declare namespace M {',
+					'    function foo(): void;',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import * as a from "./a";',
+					'console.log(a.foo)'
+				].join(os.EOL)
+			]
+		]), { });
+		assert.deepEqual(emitter.lastId, 146);
+		const validate: Element[] = [
+			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":M","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":36,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":M.foo","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":37,"type":"edge","label":"attach","outV":36,"inV":30}'),
+			JSON.parse('{"id":40,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:export=","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":44,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:export=.foo","unique":"workspace","kind":"export"}'),
+			JSON.parse('{"id":45,"type":"edge","label":"attach","outV":44,"inV":30}'),
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
 });
 
 suite('Export use cases', () => {
