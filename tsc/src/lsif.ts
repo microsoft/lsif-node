@@ -2828,14 +2828,14 @@ class TSProject {
 		});
 		const { symbolData, moduleSystem, exportParts, validateVisibilityOn } = result;
 		const [fileParts, external] = this.getMonikerFileParts(declarationSourceFiles);
-		const monikerIdentifer = this.createMonikerIdentifier(fileParts, exportParts, Symbols.isSourceFile(symbol), moduleSystem);
+		const monikerIdentifier = this.createMonikerIdentifier(fileParts, exportParts, Symbols.isSourceFile(symbol), moduleSystem);
 
 
-		if (monikerIdentifer === undefined) {
+		if (monikerIdentifier === undefined) {
 			symbolData.addMoniker(symbolId, MonikerKind.local);
 		} else {
 			if (external === true) {
-				const tscMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.import);
+				const tscMoniker = symbolData.addMoniker(monikerIdentifier, MonikerKind.import);
 				// If it comes from an external package from node_modules then the symbol can only
 				// have on declaration file. Merging with external modules is not possible.
 				if (declarationSourceFiles !== undefined && declarationSourceFiles.length === 1) {
@@ -2846,7 +2846,7 @@ class TSProject {
 					}
 				}
 			} else {
-				const tscMoniker = symbolData.addMoniker(monikerIdentifer, MonikerKind.export);
+				const tscMoniker = symbolData.addMoniker(monikerIdentifier, MonikerKind.export);
 				if (this.exportMonikers !== undefined && typeof fileParts === 'string' && exportParts !== undefined) {
 					this.exportMonikers.attachMoniker(tscMoniker, fileParts, exportParts);
 				}
@@ -3313,6 +3313,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 		this.assertTSProject(this.currentTSProject);
 		const symbolId = this.currentTSProject.getSymbolId(symbol);
+		if (symbolId === "iQWPdWTR1/fAGhTmQ7r48g==") {
+			debugger;
+		}
 		const factory = this.currentTSProject.getFactory(symbol);
 		const sourceFiles = factory.getDeclarationSourceFiles(symbol);
 		const useGlobalProjectDataManager = factory.useGlobalProjectDataManager(symbol);
