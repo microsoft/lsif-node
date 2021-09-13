@@ -5,14 +5,14 @@
 	"description": "",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Microsoft/language-server-index-format.git"
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
 	},
 	"author": "MS",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/Microsoft/language-server-index-format/issues"
+		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"homepage": "https://github.com/Microsoft/language-server-index-format#readme",
+	"homepage": "https://microsoft.github.io/language-server-protocol/overviews/lsif/overview/",
 	"devDependencies": {
 		"@types/node": "^12.12.29",
 		"@types/shelljs": "^0.8.8",
