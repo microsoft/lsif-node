@@ -1,0 +1,5 @@
+{
+	"init": [
+		{ "command": "yarn", "args": ["install"] }
+	]
+}

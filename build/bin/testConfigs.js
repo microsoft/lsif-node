@@ -57,7 +57,7 @@ async function runCommand(command, args, cwd) {
 
 /**
  * @param {string} file
- * @returns { { command: string; args: string[]; }[] }
+ * @returns { { init: { command: string; args: string[]; }[] } }
  */
 async function readInitFile(initFile) {
 	return JSON.parse(await fs.readFile(initFile, { encoding: 'utf8' }));
@@ -109,11 +109,13 @@ async function checkRepository(root, hub, org, repository) {
 			await fs.rmdir(directory, { recursive: true });
 		}
 		await runCommand('git', ['clone', '--depth 1', url, directory]);
-		const initFile = path.join(root, hub, org, repository, 'init.json');
-		if (await exists(initFile)) {
-			const content = await readInitFile(initFile);
-			for (const command of content) {
-				await runCommand(command.command, command.args ?? [], directory);
+		const setupFile = path.join(root, hub, org, repository, 'setup.json');
+		if (await exists(setupFile)) {
+			const content = await readInitFile(setupFile);
+			if (Array.isArray(content.init)) {
+				for (const command of content.init) {
+					await runCommand(command.command, command.args ?? [], directory);
+				}
 			}
 		}
 		// First check if the repository has its own config file.
@@ -197,7 +199,13 @@ async function main(configs, hub, org, repository) {
 					continue;
 				}
 
-				const repositories = await fs.readdir(path.join(configs, hub, org));
+				const orgPath = path.join(configs, hub, org);
+				const stat = await fs.stat(orgPath);
+				if (!stat.isDirectory()) {
+					continue;
+				}
+
+				const repositories = await fs.readdir(orgPath);
 
 				for (const repository of repositories) {
 					if (repository === '.' || repository === '..') {
@@ -241,6 +249,7 @@ main(process.argv[2], process.argv[3], process.argv[4], process.argv[5]).then((e
 	if (error !== undefined ) {
 		process.exitCode = error;
 	}
-}, (_error) => {
+}, (error) => {
+	console.error(error);
 	process.exitCode = 1;
 });

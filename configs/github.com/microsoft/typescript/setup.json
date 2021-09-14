@@ -1,0 +1,5 @@
+{
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	]
+}
