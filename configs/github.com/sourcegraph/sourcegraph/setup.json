@@ -1,6 +1,6 @@
 {
 	"init": [
-		{ "command": "npm", "args": ["install", "--ignore-engines"] }
+		{ "command": "yarn", "args": ["install", "--ignore-engines" ] }
 	],
 	"tags": [
 		{ "type": "semver", "pattern": "v((?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))", "kind": "release" },

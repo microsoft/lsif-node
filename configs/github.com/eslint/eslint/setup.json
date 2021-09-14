@@ -3,7 +3,6 @@
 		{ "command": "npm", "args": ["install", "--force"] }
 	],
 	"tags": [
-		// "v(1.0.0)"
 		{ "type": "semver", "pattern": "v((?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))", "kind": "release" },
 		{ "type": "semver", "pattern": "v(?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:alpha|beta|rc)\\.(?:0|[1-9]\\d*)", "kind": "pre-release" }
 	]

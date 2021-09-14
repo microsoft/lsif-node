@@ -122,6 +122,7 @@ async function checkRepository(root, hub, org, repository) {
 		const configLocations = [
 			{ own: true, path: path.join(directory), name: '.lsifrc.json' },
 			{ own: true, path: path.join(directory), name: 'lsif.json' },
+			{ own: true, path: path.join(directory), name: path.join('.github', 'workflow-resources', '.lsifrc.json') },
 			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc.json' },
 			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc-test.json' },
 			{ own: false, path: path.join(root, hub, org, repository), name: '.lsifrc-off.json' }
