@@ -17,12 +17,12 @@
 		"lsif-tsc": "./bin/lsif-tsc"
 	},
 	"dependencies": {
-		"latest-version": "5.1.0",
+		"latest-version": "^6.0.0",
 		"lsif-protocol": "0.6.0-next.6",
 		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.4.2-lsif.1/lsif-typescript-4.4.2-lsif.1.tgz",
 		"uuid": "^8.3.2",
 		"vscode-uri": "^3.0.2",
-		"yargs": "16.2.0"
+		"yargs": "^17.2.1"
 	},
 	"devDependencies": {
 		"@types/uuid": "^8.3.0"

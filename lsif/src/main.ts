@@ -72,7 +72,7 @@ export async function main(): Promise<void> {
 				boolean: true
 			}).
 			wrap(Math.min(100, yargs.terminalWidth())).
-			argv;
+			parseSync();
 		if (commandCalled) {
 			return;
 		}

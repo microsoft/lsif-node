@@ -266,7 +266,7 @@ export function builder(yargs: yargs.Argv): yargs.Argv {
 		config('config', 'Specifies a JSON file to read the LSIF configuration from.', (configPath) => {
 			try {
 				return JSON.parse(stripComments(fs.readFileSync(configPath, { encoding: 'utf8'})));
-			} catch (error) {
+			} catch (error: any) {
 				if (typeof error.message === 'string') {
 					console.log(error.message);
 				} else {

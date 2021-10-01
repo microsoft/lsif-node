@@ -735,10 +735,6 @@ export async function main(this: void): Promise<void> {
 		version(false).
 		wrap(Math.min(100, yargs.terminalWidth()));
 	const parsed = builder(yargs).argv;
-	if (typeof parsed.exitCode === 'number') {
-		process.exitCode = parsed.exitCode;
-		return;
-	}
 	const options: Options = Object.assign({}, Options.defaults, parsed);
 	return run(Options.sanitize(options));
 }
