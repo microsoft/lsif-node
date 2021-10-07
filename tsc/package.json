@@ -17,7 +17,7 @@
 		"lsif-tsc": "./bin/lsif-tsc"
 	},
 	"dependencies": {
-		"latest-version": "^6.0.0",
+		"latest-version": "^5.1.0",
 		"lsif-protocol": "0.6.0-next.6",
 		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.4.2-lsif.1/lsif-typescript-4.4.2-lsif.1.tgz",
 		"uuid": "^8.3.2",

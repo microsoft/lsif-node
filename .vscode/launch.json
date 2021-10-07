@@ -140,10 +140,7 @@
 			"cwd": "${workspaceFolder}",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
-				 "-p", "./tsconfig.json",
-				 "--group", ".",
-				 "--outputFormat", "line",
-				 "--stdout"
+				 "--config", "./.lsifrc.json"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
