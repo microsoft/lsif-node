@@ -2541,6 +2541,7 @@ class TSProject {
 	private context: TSProjectContext;
 	private languageService: ts.LanguageService;
 	private typeChecker: ts.TypeChecker;
+	public hover: number;
 	public readonly references: ProjectInfo[];
 	private readonly exportMonikers: ExportMonikers | undefined;
 	private readonly importMonikers: ImportMonikers;
@@ -2561,6 +2562,7 @@ class TSProject {
 	};
 
 	constructor(context: TSProjectContext, languageService: ts.LanguageService, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, references: ProjectInfo[], options: Options, symbolDataContext: SymbolDataContext) {
+		this.hover = 0;
 		this.id = ProjectId.next();
 		this.context = context;
 		this.languageService = languageService;
@@ -2666,10 +2668,6 @@ class TSProject {
 
 	public getConfig(): TSProjectConfig {
 		return this.config;
-	}
-
-	public setSymbolChainCache(cache: ts.SymbolChainCache): void {
-		this.typeChecker.setSymbolChainCache(cache);
 	}
 
 	public getProgram(): ts.Program {
@@ -2987,6 +2985,7 @@ class TSProject {
 		// 	at Object.runWithCancellationToken (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:31637:28)
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
+		const start = Date.now();
 		try {
 			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
 			if (quickInfo === undefined) {
@@ -2995,6 +2994,8 @@ class TSProject {
 			return Converter.asHover(sourceFile, quickInfo);
 		} catch (err) {
 			return undefined;
+		} finally {
+			this.hover += Date.now() - start;
 		}
 	}
 
@@ -3128,6 +3129,7 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		this.currentPDM = undefined;
 		this.currentTSProject = undefined;
 		this.logger.doneEndProject(tsProject.name);
+		console.log(`Computing hovers took: ${tsProject.hover} ms`);
 	}
 
 	public end(): void {
@@ -3381,47 +3383,6 @@ export interface ProjectInfo {
 	references: ProjectInfo[];
 }
 
-export class SimpleSymbolChainCache implements ts.SymbolChainCache {
-
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
-		return [key.symbol];
-	}
-	public cache(_key: ts.SymbolChainCacheKey, _value: ts.Symbol[]): void {
-		// do nothing;
-	}
-}
-
-export class FullSymbolChainCache implements ts.SymbolChainCache {
-
-	private store: LRUCache<string, ts.Symbol[]> = new LRUCache(4096);
-
-	constructor(private typeChecker: ts.TypeChecker) {
-	}
-
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] | undefined {
-		if (key.endOfChain) {
-			return undefined;
-		}
-		let sKey = this.makeKey(key);
-		let result = this.store.get(sKey);
-		//process.stdout.write(result === undefined ? '0' : '1');
-		return result;
-	}
-	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
-		if (key.endOfChain) {
-			return;
-		}
-		let sKey = this.makeKey(key);
-		this.store.set(sKey, value);
-	}
-
-	private makeKey(key: ts.SymbolChainCacheKey): string {
-		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
-		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
-		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
-	}
-}
-
 class Visitor {
 
 	private tsProject: TSProject;
@@ -3445,13 +3406,7 @@ class Visitor {
 	}
 
 	public visitProgram(): ProjectInfo {
-		const program = this.tsProject.getProgram();
-		let sourceFiles = program.getSourceFiles();
-		if (sourceFiles.length > 256) {
-			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
-		}
 		for (const sourceFile of this.tsProject.getSourceFilesToIndex()) {
-
 			this.visit(sourceFile);
 		}
 		const config = this.tsProject.getConfig();
