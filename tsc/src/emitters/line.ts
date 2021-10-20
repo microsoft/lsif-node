@@ -7,11 +7,11 @@ import { Vertex, Edge } from 'lsif-protocol';
 import { Writer } from '../common/writer';
 
 
-export const create: Create = (writer: Writer): Emitter => {
+export const create: Create = (_writer: Writer): Emitter => {
 	return {
 		start: () => {},
-		emit: (element: Vertex | Edge) => {
-			writer.writeln(JSON.stringify(element, undefined, 0));
+		emit: (_element: Vertex | Edge) => {
+			// writer.writeln(JSON.stringify(element, undefined, 0));
 		},
 		end: () => {}
 	};
