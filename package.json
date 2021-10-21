@@ -35,6 +35,7 @@
 		"lint": "node ./build/bin/all.js run lint",
 		"clean": "node ./build/bin/all.js run clean",
 		"test": "cd util && npm run test:ci && cd ../tsc && npm run test && cd ..",
-		"test:configs": "node ./build/bin/testConfigs.js ./configs"
+		"test:configs": "node ./build/bin/testConfigs.js ./configs",
+		"cleanAll": "git clean -xfd . && npm install && npm run symlink && npm run compile && npm run test"
 	}
 }

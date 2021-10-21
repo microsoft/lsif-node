@@ -34,6 +34,10 @@ namespace Is {
 	export function symbolKind(value: any): value is lsp.SymbolKind {
 		return typeof value === 'number' || value instanceof Number;
 	}
+
+	export function symbolTag(value: any): value is lsp.SymbolTag {
+		return typeof value === 'number' || value instanceof Number;
+	}
 }
 
 interface Validator<T> {
@@ -511,7 +515,14 @@ export interface DeclarationTag {
 	kind: lsp.SymbolKind;
 
 	/**
+	 * Additional tags for the definition.
+	 */
+	tags?: lsp.SymbolTag[];
+
+	/**
 	 * Indicates if this symbol is deprecated.
+	 *
+	 * @deprecated Use tags instead.
 	 */
 	deprecated?: boolean;
 
@@ -532,6 +543,7 @@ export namespace DeclarationTag {
 		type: new Property(value => value === RangeTagTypes.declaration),
 		text: new StringProperty(),
 		kind: new Property(Is.symbolKind),
+		tags: new Property(Is.symbolTag, PropertyFlags.optional),
 		deprecated: new BooleanProperty(PropertyFlags.optional),
 		fullRange: new Property(lsp.Range.is),
 		detail: new StringProperty(PropertyFlags.optional)
@@ -561,7 +573,14 @@ export interface DefinitionTag {
 	kind: lsp.SymbolKind;
 
 	/**
+	 * Additional tags for the definition.
+	 */
+	tags?: lsp.SymbolTag[];
+
+	/**
 	 * Indicates if this symbol is deprecated.
+	 *
+	 * @deprecated Use tags instead.
 	 */
 	deprecated?: boolean;
 
@@ -582,6 +601,7 @@ export namespace DefinitionTag {
 		type: new Property(value => value === RangeTagTypes.definition),
 		text: new StringProperty(),
 		kind: new Property(Is.symbolKind),
+		tags: new Property(Is.symbolTag, PropertyFlags.optional),
 		deprecated: new BooleanProperty(PropertyFlags.optional),
 		fullRange: new Property(lsp.Range.is),
 		detail: new StringProperty(PropertyFlags.optional)
@@ -1235,8 +1255,11 @@ export namespace PackageInformation {
 
 /**
  * A range based document symbol. This allows to reuse already
- * emitted ranges with a `declaration` tag in a document symbol
- * result.
+ * emitted ranges with a `declaration` or 'definition` tag in a
+ * document symbol result.
+ *
+ * When converting these into a LSP document symbol the range's
+ * text should be mapped to the document symbol's name.
  */
 export interface RangeBasedDocumentSymbol {
 	/**
