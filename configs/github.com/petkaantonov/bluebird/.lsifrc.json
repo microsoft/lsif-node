@@ -10,7 +10,7 @@
 			"tools"
         ]
     },
-    "out": "debug.lsif",
+    "out": "bluebird.lsif",
     "package": "./package.json",
     "source": "./package.json"
 }
