@@ -1222,8 +1222,8 @@ abstract class SymbolWalker {
 		if (tss.Type.isConditionalType(type)) {
 			this.walkType(type.checkType, mode, markOnly, moduleSystem, path, level + 1);
 			this.walkType(type.extendsType, mode, markOnly, moduleSystem, path, level + 1);
-			this.walkType(type.resolvedTrueType, mode, markOnly, moduleSystem, path, level + 1);
-			this.walkType(type.resolvedFalseType, mode, markOnly, moduleSystem, path, level + 1);
+			type.resolvedTrueType !== undefined && this.walkType(type.resolvedTrueType, mode, markOnly, moduleSystem, path, level + 1);
+			type.resolvedFalseType !== undefined && this.walkType(type.resolvedFalseType, mode, markOnly, moduleSystem, path, level + 1);
 		}
 
 		const symbol = type.getSymbol();
