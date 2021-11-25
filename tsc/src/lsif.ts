@@ -3079,6 +3079,10 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		this.context.emit(element);
 	}
 
+	public flush(): Promise<void> {
+		return this.context.flush();
+	}
+
 	public begin(): void {
 		this.logger.beginDataManager();
 		this.defaultLibsPDM.begin();
@@ -3444,15 +3448,15 @@ class Visitor {
 		this.dataManager.beginProject(this.tsProject, this.project);
 	}
 
-	public visitProgram(): ProjectInfo {
+	public async visitProgram(): Promise<ProjectInfo> {
 		const program = this.tsProject.getProgram();
 		let sourceFiles = program.getSourceFiles();
 		if (sourceFiles.length > 256) {
 			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
 		for (const sourceFile of this.tsProject.getSourceFilesToIndex()) {
-
 			this.visit(sourceFile);
+			await this.emitter.flush();
 		}
 		const config = this.tsProject.getConfig();
 		return {
@@ -3463,8 +3467,9 @@ class Visitor {
 		};
 	}
 
-	public endVisitProgram(): void {
+	public async endVisitProgram(): Promise<void> {
 		this.dataManager.endProject(this.tsProject);
+		await this.emitter.flush();
 	}
 
 	protected visit(node: ts.Node): void {
@@ -3999,9 +4004,9 @@ class Visitor {
 	}
 }
 
-export function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, dependsOn: ProjectInfo[], options: Options): ProjectInfo | number {
+export async function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, dependsOn: ProjectInfo[], options: Options): Promise<ProjectInfo | number> {
 	let visitor = new Visitor(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, options);
-	let result = visitor.visitProgram();
-	visitor.endVisitProgram();
+	let result = await visitor.visitProgram();
+	await visitor.endVisitProgram();
 	return result;
 }

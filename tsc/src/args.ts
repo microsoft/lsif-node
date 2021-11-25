@@ -69,6 +69,7 @@ export type Options = {
 		write(...data: string[]): void;
 		writeEOL(): void;
 		writeln(...data: string[]): void;
+		flush(): Promise<void>;
 	} | undefined;
 };
 

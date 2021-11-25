@@ -286,10 +286,14 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 				inData.push(inEdge);
 			}
 		},
-		end: () => {
+		flush: () => {
+			return writer.flush();
+		},
+		end: (): Promise<void> => {
 			for (let vertex of vertices.values()) {
 				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}
+			return writer.flush();
 		}
 	};
 };

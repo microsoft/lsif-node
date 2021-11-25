@@ -166,7 +166,12 @@ class TestEmitter implements Emitter {
 		this._lastId = element.id;
 	}
 
-	public end(): void {
+	public flush(): Promise<void> {
+		return Promise.resolve();
+	}
+
+	public end(): Promise<void> {
+		return Promise.resolve();
 	}
 
 	public toString(): string {
@@ -196,6 +201,9 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 		},
 		emit(element: Vertex | Edge): void {
 			emitter.emit(element);
+		},
+		flush(): Promise<void> {
+			return emitter.flush();
 		}
 	};
 	const reporter: Logger = new NullLogger();
@@ -205,7 +213,7 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	const dataManager: DataManager = new DataManager(emitterContext, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();
-		_lsif(emitterContext, languageService, dataManager, new ImportMonikers(emitterContext, lsifOptions.workspaceRoot), undefined, [], lsifOptions);
+		await _lsif(emitterContext, languageService, dataManager, new ImportMonikers(emitterContext, lsifOptions.workspaceRoot), undefined, [], lsifOptions);
 	} finally {
 		dataManager.end();
 	}

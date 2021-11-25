@@ -499,7 +499,7 @@ async function processProject(pclOrOptions: ts.ParsedCommandLine | ConfigOptions
 		dataMode: options.dataMode,
 	};
 
-	const result = lsif(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, lsifOptions);
+	const result = await lsif(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, lsifOptions);
 	if (typeof result !== 'number') {
 		options.processed.set(key, result);
 	}
@@ -627,6 +627,9 @@ export async function run(this: void, options: Options): Promise<void> {
 		},
 		emit(element: Vertex | Edge): void {
 			emitter.emit(element);
+		},
+		flush():  Promise<void> {
+			return emitter.flush();
 		}
 	};
 	const metaData = builder.vertex.metaData(Version);
@@ -722,7 +725,7 @@ export async function run(this: void, options: Options): Promise<void> {
 	dataManager.begin();
 	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
 	dataManager.end();
-	emitter.end();
+	await emitter.end();
 	logger.end();
 }
 
