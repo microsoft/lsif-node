@@ -27,7 +27,7 @@ export const create: Create = (writer: Writer): Emitter => {
 				writer.writeEOL();
 			}
 			writer.writeln(']');
-			return writer.flush();
+			return writer.close();
 		}
 	};
 };

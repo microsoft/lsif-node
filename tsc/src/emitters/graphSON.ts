@@ -293,7 +293,7 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 			for (let vertex of vertices.values()) {
 				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}
-			return writer.flush();
+			return writer.close();
 		}
 	};
 };

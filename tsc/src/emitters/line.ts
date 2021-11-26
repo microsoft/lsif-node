@@ -14,6 +14,6 @@ export const create: Create = (writer: Writer): Emitter => {
 			writer.writeln(JSON.stringify(element, undefined, 0));
 		},
 		flush: () => { return writer.flush(); },
-		end: () => { return writer.flush(); }
+		end: () => { return writer.close(); }
 	};
 };

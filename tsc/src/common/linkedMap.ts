@@ -57,6 +57,7 @@ export class LinkedList<V> {
 			this._tail.next = item;
 		}
 		this._tail = item;
+		this._size++;
 		this._state++;
 	}
 

@@ -551,7 +551,7 @@ export async function run(this: void, options: Options): Promise<void> {
 		if (options.stdout) {
 			writer = new StdoutWriter();
 		} else if (options.out) {
-			writer = new FileWriter(fs.openSync(options.out, 'w'));
+			writer = new FileWriter(options.out);
 		}
 	}
 

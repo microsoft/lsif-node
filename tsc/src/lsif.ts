@@ -3562,7 +3562,7 @@ class Visitor {
 		endVisit.call(this, node);
 		// JS Doc is not visited using forEachChild. So we look if the node
 		// has an attached JSDoc node. If so we traverse that node and see
-		// if we can find any identifiers and have a symbol.
+		// if we can find any identifiers that have a symbol.
 		const jsDocs = tss.Node.getJsDoc(node);
 		if (jsDocs !== undefined) {
 			for (const jsDoc of jsDocs) {

@@ -107,7 +107,7 @@ export const create: Create = (writer: Writer): Emitter => {
 		},
 		end: () => {
 			writer.write(JSON.stringify(data, undefined, 4));
-			return writer.flush();
+			return writer.close();
 		}
 	};
 };
