@@ -6,7 +6,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 
-import { Connection } from './writerMessages';
+import { Connection } from './connection';
+import { Requests, Notifications } from './writerMessages';
 
 const __stdout = process.stdout;
 const __eol = os.EOL;
@@ -55,17 +56,17 @@ export class FileWriter implements Writer {
 	private static BufferSize: number = 65536;
 
 	private worker: Worker;
-	private connection: Connection;
+	private connection: Connection<Requests, Notifications>;
 
 	private buffer: Buffer | undefined;
 	private bytesAdded: number;
 
 	public constructor(fileName: string) {
 		this.worker = new Worker(path.join(__dirname, './writerWorker.js'));
-		this.worker.terminate
+		this.worker.terminate;
 		this.connection = new Connection(this.worker);
 		this.connection.listen();
-		this.connection.sendRequest({ method: 'open', fileName });
+		this.connection.sendNotification('open', { fileName });
 		this.buffer = Buffer.alloc(FileWriter.BufferSize);
 		this.bytesAdded = 0;
 	}
@@ -95,12 +96,13 @@ export class FileWriter implements Writer {
 	}
 
 	async flush(): Promise<void> {
-		await this.connection.sendRequest({ method: 'flush' });
+		await this.connection.sendRequest('flush');
 	}
 
 	async close(): Promise<void> {
 		this.sendBuffer(true);
-		await this.connection.sendRequest({ method: 'close' });
+		await this.connection.sendRequest('close');
+		this.worker.terminate();
 	}
 
 	private writeBuffer(chunk: Buffer): void {
@@ -109,7 +111,7 @@ export class FileWriter implements Writer {
 		}
 		if (chunk.length > FileWriter.BufferSize) {
 			this.sendBuffer();
-			this.connection.sendRequest({ method: 'write', data: chunk.buffer, length: chunk.length });
+			this.connection.sendNotification('write', { data: chunk.buffer, length: chunk.length });
 		} else if (this.bytesAdded + chunk.length < FileWriter.BufferSize) {
 			chunk.copy(this.buffer, this.bytesAdded);
 			this.bytesAdded += chunk.length;
@@ -124,7 +126,7 @@ export class FileWriter implements Writer {
 		if (this.bytesAdded === 0 || this.buffer === undefined) {
 			return;
 		}
-		this.connection.sendRequest({ method: 'write', data: this.buffer.buffer, length: this.bytesAdded });
+		this.connection.sendNotification('write', { data: this.buffer.buffer, length: this.bytesAdded });
 		if (!end) {
 			this.buffer = Buffer.alloc(FileWriter.BufferSize);
 			this.bytesAdded = 0;

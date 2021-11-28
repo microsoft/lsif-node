@@ -11,23 +11,22 @@ const fs = {
 };
 
 import { LinkedList } from './linkedMap';
-import { Connection } from './writerMessages';
+import { Connection } from './connection';
+import { Requests, Notifications } from './writerMessages';
 
 if (parentPort === null) {
 	process.exit();
 }
 
-const connection = new Connection(parentPort);
+const connection = new Connection<Requests, Notifications>(parentPort);
 let fileWriter!: FileWriter;
 
-connection.onRequest('open', async (message) => {
-	if (message.method !== 'open') { return; }
-	fileWriter = new FileWriter(message.fileName);
+connection.onNotification('open', (params) => {
+	fileWriter = new FileWriter(params.fileName);
 });
 
-connection.onRequest('write', async (message) => {
-	if (message.method !== 'write') { return; }
-	fileWriter.write(message.data, message.length);
+connection.onNotification('write', (params) => {
+	fileWriter.write(params.data, params.length);
 });
 
 connection.onRequest('flush', async () => {
