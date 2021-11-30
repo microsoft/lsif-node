@@ -111,7 +111,7 @@ export class FileWriter implements Writer {
 		}
 		if (chunk.length > FileWriter.BufferSize) {
 			this.sendBuffer();
-			this.connection.sendNotification('write', { data: chunk.buffer, length: chunk.length });
+			this.connection.sendNotification('write', { data: chunk.buffer, length: chunk.length }, chunk.buffer);
 		} else if (this.bytesAdded + chunk.length < FileWriter.BufferSize) {
 			chunk.copy(this.buffer, this.bytesAdded);
 			this.bytesAdded += chunk.length;

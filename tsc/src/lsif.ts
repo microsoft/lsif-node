@@ -694,7 +694,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 
 	public abstract endPartition(shard: Shard): void;
 
-	public abstract endPartitions(shards: Set<Shard>): void;
+	public abstract endPartitions(shards: Set<Shard['id']>): void;
 
 	public abstract end(forceSingle?: boolean): void;
 }
@@ -805,22 +805,42 @@ class StandardSymbolData extends SymbolData {
 		if (this.partitions === undefined) {
 			return;
 		}
-		const partition = this.partitions.get(shard.id);
+		this.doEndPartition(shard.id);
+	}
+
+	public endPartitions(shards: Set<Shard['id']>): void {
+		if (this.partitions === null) {
+			throw new Error (`The partitions for symbol ${this.symbolId} have already been cleared.`);
+		}
+		if (this.partitions === undefined) {
+			return;
+		}
+		// We need to compute the intersection between shards and partitions.
+		// Iterate over the smaller set.
+		if (this.partitions.size <= shards.size) {
+			for (const id of this.partitions.keys()) {
+				if (shards.has(id)) {
+					this.doEndPartition(id);
+				}
+			}
+		} else {
+			for (const id of shards.values()) {
+				this.doEndPartition(id);
+			}
+		}
+	}
+
+	private doEndPartition(id: Shard['id']): void {
+		const partition = this.partitions!.get(id);
 		if (partition === undefined) {
 			return;
 		}
-		this.partitions.delete(shard.id);
+		this.partitions!.delete(id);
 		partition.end();
 		if (this.clearedPartitions === undefined) {
 			this.clearedPartitions = new Set();
 		}
-		this.clearedPartitions.add(shard.id);
-	}
-
-	public endPartitions(shards: Set<Shard>): void {
-		for (const shard of shards) {
-			this.endPartition(shard);
-		}
+		this.clearedPartitions.add(id);
 	}
 
 	public end(forceSingle: boolean = false): void {
@@ -2292,8 +2312,8 @@ abstract class ProjectDataManager {
 		this.managedSymbolDataItems.push(symbolData);
 	}
 
-	public getDocuments(): Set<Document> {
-		const result = new Set<Document>();
+	public getDocumentShardIds(): Set<Shard['id']> {
+		const result = new Set<Shard['id']>();
 		for (const data of this.documentDataItems) {
 			// The documents are used to end partitions in lower level
 			// projects. So flush the ranges so that we can use them
@@ -2301,7 +2321,7 @@ abstract class ProjectDataManager {
 			if (!data.isClosed) {
 				data.flushRanges();
 			}
-			result.add(data.document);
+			result.add(data.document.id);
 		}
 		return result;
 	}
@@ -2333,25 +2353,25 @@ abstract class ProjectDataManager {
 		return result;
 	}
 
-	public endPartitions(documents: Set<Document>): void {
+	public endPartitions(shardIds: Set<Shard['id']>): void {
 		for (const symbolData of this.managedSymbolDataItems) {
-			symbolData.endPartitions(documents);
+			symbolData.endPartitions(shardIds);
 		}
 	}
 
 	public abstract end(): void;
 
-	protected doEnd(documents: Set<Document> | undefined): void {
+	protected doEnd(shardIds: Set<Shard['id']> | undefined): void {
 		for (const data of this.documentDataItems) {
 			if (!data.isClosed) {
 				data.flushRanges();
 			}
 		}
 		for (const symbolData of this.managedSymbolDataItems) {
-			if (documents === undefined) {
+			if (shardIds === undefined) {
 				symbolData.end();
 			} else {
-				symbolData.endPartitions(documents);
+				symbolData.endPartitions(shardIds);
 			}
 		}
 		for (const data of this.documentDataItems) {
@@ -2516,7 +2536,11 @@ class TSConfigProjectDataManager extends ProjectDataManager {
 	}
 
 	public end(): void {
-		this.doEnd(this.managedDocuments);
+		const shardIds = new Set<Shard['id']>();
+		for (const document of this.managedDocuments) {
+			shardIds.add(document.id);
+		}
+		this.doEnd(shardIds);
 	}
 }
 
@@ -3124,9 +3148,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		}
 		this.logger.startEndProject(tsProject.name);
 		// Make sure we close partitions opened because of type folding in global files.
-		const documents = this.currentPDM.getDocuments();
+		const documentShardIds = this.currentPDM.getDocumentShardIds();
 		for (const manager of [this.workspacePDM, this.machinePDM, this.defaultLibsPDM]) {
-			manager.endPartitions(documents);
+			manager.endPartitions(documentShardIds);
 		}
 		this.currentPDM.end();
 		this.currentPDM = undefined;
@@ -3139,9 +3163,9 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		const managers: ProjectDataManager[] = [this.workspacePDM, this.machinePDM, this.defaultLibsPDM];
 		for (let i = 0; i < managers.length; i++) {
 			const manager = managers[i];
-			const documents = manager.getDocuments();
+			const documentShardIds = manager.getDocumentShardIds();
 			for (let y = i + 1; y < managers.length; y++) {
-				managers[y].endPartitions(documents);
+				managers[y].endPartitions(documentShardIds);
 			}
 			manager.end();
 		}

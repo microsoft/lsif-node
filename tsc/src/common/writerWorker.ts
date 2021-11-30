@@ -18,7 +18,7 @@ if (parentPort === null) {
 	process.exit();
 }
 
-const connection = new Connection<Requests, Notifications>(parentPort);
+const connection = new Connection<undefined, undefined, Requests, Notifications>(parentPort);
 let fileWriter!: FileWriter;
 
 connection.onNotification('open', (params) => {
@@ -67,6 +67,9 @@ export class FileWriter {
 	}
 
 	async flush(): Promise<void> {
+		if (this.pendingWrite === undefined && this.queue.size === 0) {
+			return;
+		}
 		try {
 			this.mode = 'flush';
 			if (this.pendingWrite !== undefined) {

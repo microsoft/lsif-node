@@ -6,26 +6,33 @@
 import { MessagePort, Worker, TransferListItem } from 'worker_threads';
 
 
-export interface Message {
+export type MessageType = {
 	method: string;
 	params?: null | object;
-}
+};
 
-export interface Request extends Message {
-	result?: null | any;
-	error?: null | any;
-}
+export type RequestType = MessageType & ({
+	result: null | any;
+	error?: undefined;
+} | {
+	result?: undefined;
+	error: null | any;
+});
 
-export interface Notification extends Message {
-}
+export type NotificationType = MessageType;
 
-interface _Request extends Request {
+type Message = {
+	method: string;
+	params?: null | undefined | object;
+};
+
+type Request = {
 	id: number;
-}
+} & Message;
 
-namespace _Request {
-	export function is(value: any): value is _Request {
-		const candidate: _Request = value;
+namespace Request {
+	export function is(value: any): value is Request {
+		const candidate: Request = value;
 		return candidate !== undefined && candidate !== null && typeof candidate.id === 'number' && typeof candidate.method === 'string';
 	}
 }
@@ -34,12 +41,11 @@ type RequestHandler = {
 	(params: any): Promise<any>;
 };
 
-interface _Notification extends Notification {
-}
+type Notification = Message;
 
-namespace _Notification {
-	export function is(value: any): value is Notification {
-		const candidate: Notification & { id: undefined } = value;
+namespace Notification {
+	export function is(value: any): value is NotificationType {
+		const candidate: NotificationType & { id: undefined } = value;
 		return candidate !== undefined && candidate !== null && typeof candidate.method === 'string' && candidate.id === undefined;
 	}
 }
@@ -48,15 +54,15 @@ type NotificationHandler = {
 	(params: any): void;
 };
 
-interface _Response {
+interface Response {
 	id: number;
 	result?: any;
 	error?: any
 };
 
-namespace _Response {
-	export function is(value: any): value is _Response {
-		const candidate: _Response = value;
+namespace Response {
+	export function is(value: any): value is Response {
+		const candidate: Response = value;
 		return candidate !== undefined && candidate !== null && typeof candidate.id === 'number' && (candidate.error !== undefined || candidate.result !== undefined);
 	}
 }
@@ -70,35 +76,43 @@ type ResponsePromise = {
 type UnionToIntersection<U> =
 	(U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never;
 
-type MethodKeys<Messages extends Message> = {
+type MethodKeys<Messages extends MessageType> = {
 	[M in Messages as M['method']]: M['method'];
 };
 
-type SendRequestSignatures<Requests extends Request> = UnionToIntersection<{
+type _SendRequestSignatures<Requests extends RequestType> = UnionToIntersection<{
  	[R in Requests as R['method']]: R['params'] extends null | undefined
 	 	? (method: R['method']) => Promise<R['result'] extends null | undefined ? void : R['result']>
-		: (method: R['method'], params: R['params'], transferList?: ReadonlyArray<TransferListItem>) => Promise<R['result'] extends null | undefined ? void : R['result']>;
+		: (method: R['method'], params: R['params'], ...transferList: ReadonlyArray<TransferListItem>) => Promise<R['result'] extends null | undefined ? void : R['result']>;
 }[keyof MethodKeys<Requests>]>;
 
-type HandleRequestSignatures<Requests extends Request> = UnionToIntersection<{
+type SendRequestSignatures<Requests extends RequestType | undefined> = [Requests] extends [RequestType] ? _SendRequestSignatures<Requests> : undefined;
+
+type _HandleRequestSignatures<Requests extends RequestType> = UnionToIntersection<{
  	[R in Requests as R['method']]: R['params'] extends null | undefined
 	 	? (method: R['method'], handler: () => Promise<R['result'] extends null | undefined ? void : R['result']>) => void
 		: (method: R['method'], handler: (params: R['params']) => Promise<R['result'] extends null | undefined ? void : R['result']>) => void;
 }[keyof MethodKeys<Requests>]>;
 
-type SendNotificationSignatures<Notifications extends Notification> = UnionToIntersection<{
+type HandleRequestSignatures<Requests extends RequestType | undefined> = [Requests] extends [RequestType] ?_HandleRequestSignatures<Requests> : undefined;
+
+type _SendNotificationSignatures<Notifications extends NotificationType> = UnionToIntersection<{
 	[N in Notifications as N['method']]: N['params'] extends null | undefined
 		? (method: N['method']) => void
-		: (method: N['method'], params: N['params'], transferList?: ReadonlyArray<TransferListItem>) => void;
+		: (method: N['method'], params: N['params'], ...transferList: ReadonlyArray<TransferListItem>) => void;
 }[keyof MethodKeys<Notifications>]>;
 
-type HandleNotificationSignatures<Notifications extends Notification> = UnionToIntersection<{
+type SendNotificationSignatures<Notifications extends NotificationType | undefined> = [Notifications] extends [NotificationType] ? _SendNotificationSignatures<Notifications> : undefined;
+
+type _HandleNotificationSignatures<Notifications extends NotificationType> = UnionToIntersection<{
 	[N in Notifications as N['method']]: N['params'] extends null | undefined
 		? (method: N['method'], handler: () => void) => void
 		: (method: N['method'], handler: (params: N['params']) => void) => void;
 }[keyof MethodKeys<Notifications>]>;
 
-export class Connection<Requests extends Request, Notifications extends Notification> {
+type HandleNotificationSignatures<Notifications extends NotificationType | undefined> = [Notifications] extends [NotificationType] ? _HandleNotificationSignatures<Notifications> : undefined;
+
+export class Connection<Requests extends RequestType | undefined, Notifications extends NotificationType | undefined, RequestHandlers extends RequestType | undefined = undefined, NotificationHandlers extends NotificationType | undefined = undefined> {
 
 	private readonly port: MessagePort | Worker;
 	private id: number;
@@ -114,14 +128,15 @@ export class Connection<Requests extends Request, Notifications extends Notifica
 		this.notificationHandlers = new Map();
 	}
 
-	get sendRequest(): SendRequestSignatures<Requests> {
-		return this._sendRequest as SendRequestSignatures<Requests>;
-	}
+	public readonly sendRequest: SendRequestSignatures<Requests> = this._sendRequest as SendRequestSignatures<Requests>;
 
-	private _sendRequest(method: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): Promise<any> {
+	private _sendRequest(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): Promise<any> {
+		if (method === undefined) {
+			return Promise.resolve();
+		}
 		return new Promise((resolve, reject) => {
 			const id = this.id++;
-			const _request: _Request = { id, method };
+			const _request: Request = { id, method };
 			if (params !== undefined) {
 				_request.params = params;
 			}
@@ -130,37 +145,40 @@ export class Connection<Requests extends Request, Notifications extends Notifica
 		});
 	}
 
-	public get onRequest(): HandleRequestSignatures<Requests> {
-		return this._onRequest as HandleRequestSignatures<Requests>;
-	}
+	public readonly onRequest: HandleRequestSignatures<RequestHandlers> = this._onRequest as HandleRequestSignatures<RequestHandlers>;
 
-	private _onRequest(method: string, handler: RequestHandler): void {
+	private _onRequest(method?: string, handler?: RequestHandler): void {
+		if (method === undefined || handler === undefined) {
+			return;
+		}
 		this.requestHandlers.set(method, handler);
 	}
 
-	public get sendNotification(): SendNotificationSignatures<Notifications> {
-		return this._sendNotification as SendNotificationSignatures<Notifications>;
-	}
+	public readonly sendNotification: SendNotificationSignatures<Notifications> = this._sendNotification as SendNotificationSignatures<Notifications>;
 
-	private _sendNotification(method: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): void {
-		const _notification: _Notification = { method };
+	private _sendNotification(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): void {
+		if (method === undefined) {
+			return;
+		}
+		const _notification: Notification = { method };
 		if (params !== undefined) {
 			_notification.params = params;
 		}
 		this.port.postMessage(_notification, transferList);
 	}
 
-	public get onNotification(): HandleNotificationSignatures<Notifications> {
-		return this._onNotification as HandleNotificationSignatures<Notifications>;
-	}
+	public readonly onNotification: HandleNotificationSignatures<NotificationHandlers> = this._onNotification as HandleNotificationSignatures<NotificationHandlers>;
 
-	private _onNotification(method: string, handler: NotificationHandler): void {
+	private _onNotification(method?: string, handler?: NotificationHandler): void {
+		if (method === undefined || handler === undefined) {
+			return;
+		}
 		this.notificationHandlers.set(method, handler);
 	}
 
 	public listen(): void {
 		this.port.on('message', async (value) => {
-			if (_Request.is(value)) {
+			if (Request.is(value)) {
 				const id = value.id;
 				const handler = this.requestHandlers.get(value.method);
 				if (handler !== undefined) {
@@ -171,12 +189,12 @@ export class Connection<Requests extends Request, Notifications extends Notifica
 						this.sendErrorResponse(id, error);
 					}
 				}
-			} else if (_Notification.is(value)) {
+			} else if (Notification.is(value)) {
 				const handler = this.notificationHandlers.get(value.method);
 				if (handler !== undefined) {
 					handler(value.params);
 				}
-			} else if (_Response.is(value)) {
+			} else if (Response.is(value)) {
 				const id = value.id;
 				const promise = this.responsePromises.get(id);
 				if (promise !== undefined) {
@@ -186,7 +204,7 @@ export class Connection<Requests extends Request, Notifications extends Notifica
 					} else if (value.error !== undefined) {
 						promise.reject(typeof value.error === 'string' ? new Error(value.error) : value.error);
 					} else {
-						promise.reject(new Error('Response hs neither a result nor an error value'));
+						promise.reject(new Error('Response has neither a result nor an error value'));
 					}
 				}
 			}
@@ -194,12 +212,12 @@ export class Connection<Requests extends Request, Notifications extends Notifica
 	}
 
 	private sendResultResponse(id: number, result: any): void {
-		const response: _Response =  { id, result: result === undefined ? null : result };
+		const response: Response =  { id, result: result === undefined ? null : result };
 		this.port.postMessage(response);
 	}
 
 	private sendErrorResponse(id: number, error: any): void {
-		const response: _Response =  { id, error: error === undefined ? 'Unknown error' : error instanceof Error ? error.message : error };
+		const response: Response =  { id, error: error === undefined ? 'Unknown error' : error instanceof Error ? error.message : error };
 		this.port.postMessage(response);
 	}
 }
