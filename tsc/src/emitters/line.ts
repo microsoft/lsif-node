@@ -13,6 +13,7 @@ export const create: Create = (writer: Writer): Emitter => {
 		emit: (element: Vertex | Edge) => {
 			writer.writeln(JSON.stringify(element, undefined, 0));
 		},
-		end: () => {}
+		flush: () => { return writer.flush(); },
+		end: () => { return writer.close(); }
 	};
 };

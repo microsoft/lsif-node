@@ -545,4 +545,5 @@ export interface EmitterContext {
 	vertex: VertexBuilder;
 	edge: EdgeBuilder;
 	emit(element: Vertex | Edge): void;
+	flush(): Promise<void>;
 }

@@ -14,16 +14,20 @@ export const create: Create = (writer: Writer): Emitter => {
 		},
 		emit: (element: Vertex | Edge) => {
 			if (!isFirst) {
-				writer.writeln(',')
+				writer.writeln(',');
 			}
 			writer.write('\t', JSON.stringify(element, undefined, 0));
 			isFirst = false;
+		},
+		flush: () => {
+			return writer.flush();
 		},
 		end: () => {
 			if (!isFirst) {
 				writer.writeEOL();
 			}
 			writer.writeln(']');
+			return writer.close();
 		}
 	};
 };
