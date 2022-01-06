@@ -1,8 +1,0 @@
-{ "id": 1, "type": "vertex", "label": "document", "contents": "THISTERRIBLESTRINGISLONGANDUGLYANDWEDONTWANTTOSEEITINOURGRAPHNOMATTERWHAT" }
-{ "id": 2, "type": "vertex", "label": "hoverResult", "result": { "contents": [ { "language": "go", "value": "package \"fmt\""}, "fmt.Printf(\"%v\\n\", i)"] }}
-{ "id": 3, "type": "vertex", "label": "range" }
-{ "id": 4, "type": "vertex", "label": "range", "tag": { "text": "foo" } }
-{ "id": 5, "type": "edge", "label": "contains", "outV": 1, "inV": 2 }
-{ "id": 6, "type": "edge", "label": "contains", "outV": 1, "inVs": [ 3 ] }
-{ "id": 7, "type": "vertex", "label": "referenceResult" }
-{ "id": 8, "type": "edge", "label": "item", "property": "references", "outV": 6, "inVs": [ 3 ], "document": "1" }
