@@ -9,7 +9,7 @@
 		"enable": false
 	},
 	"include": [
-		"./index.ts"
-		// "./provide.ts"
+		"./index.ts",
+		"./provide.ts"
 	]
 }

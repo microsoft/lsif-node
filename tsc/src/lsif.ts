@@ -2692,9 +2692,9 @@ class TSProject {
 		return this.config;
 	}
 
-	public setSymbolChainCache(cache: ts.SymbolChainCache): void {
-		this.typeChecker.setSymbolChainCache(cache);
-	}
+	// public setSymbolChainCache(cache: ts.SymbolChainCache): void {
+	// 	this.typeChecker.setSymbolChainCache(cache);
+	// }
 
 	public getProgram(): ts.Program {
 		return this.languageService.getProgram()!;
@@ -3409,46 +3409,46 @@ export interface ProjectInfo {
 	references: ProjectInfo[];
 }
 
-export class SimpleSymbolChainCache implements ts.SymbolChainCache {
+// export class SimpleSymbolChainCache implements ts.SymbolChainCache {
 
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
-		return [key.symbol];
-	}
-	public cache(_key: ts.SymbolChainCacheKey, _value: ts.Symbol[]): void {
-		// do nothing;
-	}
-}
+// 	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
+// 		return [key.symbol];
+// 	}
+// 	public cache(_key: ts.SymbolChainCacheKey, _value: ts.Symbol[]): void {
+// 		// do nothing;
+// 	}
+// }
 
-export class FullSymbolChainCache implements ts.SymbolChainCache {
+// export class FullSymbolChainCache implements ts.SymbolChainCache {
 
-	private store: LRUCache<string, ts.Symbol[]> = new LRUCache(4096);
+// 	private store: LRUCache<string, ts.Symbol[]> = new LRUCache(4096);
 
-	constructor(private typeChecker: ts.TypeChecker) {
-	}
+// 	constructor(private typeChecker: ts.TypeChecker) {
+// 	}
 
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] | undefined {
-		if (key.endOfChain) {
-			return undefined;
-		}
-		let sKey = this.makeKey(key);
-		let result = this.store.get(sKey);
-		//process.stdout.write(result === undefined ? '0' : '1');
-		return result;
-	}
-	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
-		if (key.endOfChain) {
-			return;
-		}
-		let sKey = this.makeKey(key);
-		this.store.set(sKey, value);
-	}
+// 	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] | undefined {
+// 		if (key.endOfChain) {
+// 			return undefined;
+// 		}
+// 		let sKey = this.makeKey(key);
+// 		let result = this.store.get(sKey);
+// 		//process.stdout.write(result === undefined ? '0' : '1');
+// 		return result;
+// 	}
+// 	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
+// 		if (key.endOfChain) {
+// 			return;
+// 		}
+// 		let sKey = this.makeKey(key);
+// 		this.store.set(sKey, value);
+// 	}
 
-	private makeKey(key: ts.SymbolChainCacheKey): string {
-		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
-		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
-		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
-	}
-}
+// 	private makeKey(key: ts.SymbolChainCacheKey): string {
+// 		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
+// 		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
+// 		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
+// 	}
+// }
 
 class Visitor {
 
@@ -3473,11 +3473,11 @@ class Visitor {
 	}
 
 	public async visitProgram(): Promise<ProjectInfo> {
-		const program = this.tsProject.getProgram();
-		let sourceFiles = program.getSourceFiles();
-		if (sourceFiles.length > 256) {
-			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
-		}
+		// const program = this.tsProject.getProgram();
+		// let sourceFiles = program.getSourceFiles();
+		// if (sourceFiles.length > 256) {
+		// 	this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
+		// }
 		for (const sourceFile of this.tsProject.getSourceFilesToIndex()) {
 			this.visit(sourceFile);
 			await this.emitter.flush();

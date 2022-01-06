@@ -1,3 +1,3 @@
-import * as parent from '../parent';
+import { render } from './provide';
 
-parent.foo();
+render({ value: 'dirk '});
