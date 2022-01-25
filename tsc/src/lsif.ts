@@ -165,6 +165,8 @@ namespace ProjectId {
 }
 
 interface SymbolDataContext extends EmitterContext {
+	getDataMode(): DataMode;
+	getLogger(): Logger;
 	getDocumentData(fileName: string): DocumentData | undefined;
 	managePartitionLifeCycle(shard: Shard, symbolData: SymbolData): void;
 }
@@ -530,7 +532,11 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 				return;
 			}
 			if (this.visibility === SymbolDataVisibility.internal) {
-				throw new Error(`Can't upgrade symbol data visibility for ${this.symbolId} from ${this.visibility} to ${value}`);
+				if (this.context.getDataMode() === DataMode.free) {
+					throw new Error(`Can't upgrade symbol data visibility for ${this.symbolId} from ${this.visibility} to ${value}`);
+				} else {
+					this.context.getLogger().upgradeSymbolData(this.symbolId);
+				}
 			}
 			this.visibility = value;
 			return;
@@ -540,7 +546,11 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 				return;
 			}
 			if (this.visibility === SymbolDataVisibility.indirectExported || this.visibility === SymbolDataVisibility.exported) {
-				throw new Error(`Can't downgrade symbol data visibility from ${this.visibility} to ${value}`);
+				if (this.context.getDataMode() === DataMode.free) {
+					throw new Error(`Can't downgrade symbol data visibility from ${this.visibility} to ${value}`);
+				} else {
+					this.context.getLogger().upgradeSymbolData(this.symbolId);
+				}
 			}
 			this.visibility = value;
 			return;
@@ -2223,6 +2233,8 @@ export interface Logger {
 
 	startIndexFile(fileName: string): void;
 	internalSymbol(symbol: ts.Symbol, symbolId: SymbolId, location: ts.Node | undefined): void;
+	upgradeSymbolData(symbolId: SymbolId): void;
+	downSymbolData(symbolId: SymbolId): void;
 	doneIndexFile(fileName: string): void;
 
 	beginProject(projectName: string): void;
@@ -2241,6 +2253,10 @@ export class NullLogger implements Logger {
 	public startIndexFile(_fileName: string): void {
 	}
 	public internalSymbol(_symbol: ts.Symbol, _symbolId: string, _location: ts.Node): void {
+	}
+	public upgradeSymbolData(_symbolId: SymbolId): void {
+	}
+	public downSymbolData(_symbolId: SymbolId): void {
 	}
 	public doneIndexFile(_fileName: string): void {
 	}
@@ -3128,6 +3144,14 @@ export class DataManager implements SymbolDataContext, ProjectDataManagerContext
 		if (value === undefined) {
 			throw new Error(`No current TS project set.`);
 		}
+	}
+
+	public getDataMode(): DataMode {
+		return this.dataMode;
+	}
+
+	public getLogger(): Logger {
+		return this.logger;
 	}
 
 	public getProjectData(): ProjectData {

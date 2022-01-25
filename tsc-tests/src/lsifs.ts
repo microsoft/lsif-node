@@ -209,7 +209,10 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	const reporter: Logger = new NullLogger();
 	const source = builder.vertex.source(URI.file(cwd).toString(true));
 	emitterContext.emit(source);
-	const lsifOptions: LSIFOptions = { stdout: true, workspaceRoot: cwd, projectName: cwd, tsConfigFile: undefined, packageJsonFile: undefined, logger: reporter, dataMode: DataMode.free };
+	const lsifOptions: LSIFOptions = {
+		stdout: true, workspaceRoot: cwd, projectName: cwd, tsConfigFile: undefined,
+		packageJsonFile: undefined, logger: reporter, dataMode: DataMode.keep
+	};
 	const dataManager: DataManager = new DataManager(emitterContext, cwd, reporter, lsifOptions.dataMode);
 	try {
 		dataManager.begin();

@@ -132,21 +132,25 @@ class InternalNullLogger extends NullLogger implements InternalLogger {
 
 class AbstractLogger extends InternalNullLogger implements InternalLogger {
 
-	private reported: Set<string>;
+	private readonly internal: Set<string>;
+	private readonly upgrade: Set<string>;
+	private readonly downgrade: Set<string>;
 
 	constructor() {
 		super();
-		this.reported = new Set();
+		this.internal = new Set();
+		this.upgrade = new Set();
+		this.downgrade = new Set();
 	}
 
-	protected internalSymbolMessage(symbol: ts.Symbol, symbolId: string, location: ts.Node): string | undefined {
-		if (this.reported.has(symbolId)) {
+	protected internalSymbolMessage(symbol: ts.Symbol, symbolId: string, location?: ts.Node): string | undefined {
+		if (this.internal.has(symbolId)) {
 			return undefined;
 		}
-		this.reported.add(symbolId);
+		this.internal.add(symbolId);
 		const buffer: string[] = [];
 		buffer.push(os.EOL);
-		buffer.push(`The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside`);
+		buffer.push(`[warn]: The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside. The symbol will not be reachable using a moniker.`);
 		buffer.push(os.EOL);
 		const declarations = symbol.getDeclarations();
 		if (declarations === undefined) {
@@ -170,6 +174,30 @@ class AbstractLogger extends InternalNullLogger implements InternalLogger {
 			buffer.push(`    ${sourceFile.fileName} at location [${lc.line},${lc.character}]`);
 			buffer.push(os.EOL);
 		}
+		return buffer.join('');
+	}
+
+	protected upgradeSymbolDataMessage(symbolId: string): string | undefined {
+		if (this.upgrade.has(symbolId)) {
+			return undefined;
+		}
+		this.upgrade.add(symbolId);
+		const buffer: string[] = [];
+		buffer.push(os.EOL);
+		buffer.push(`[warn]: the symbol with id ${symbolId} is internal and its visibility can't be upgraded. The symbol will not be reachable using a moniker.`);
+		buffer.push(os.EOL);
+		return buffer.join('');
+	}
+
+	protected downgradeSymbolDataMessage(symbolId: string): string | undefined {
+		if (this.downgrade.has(symbolId)) {
+			return undefined;
+		}
+		this.downgrade.add(symbolId);
+		const buffer: string[] = [];
+		buffer.push(os.EOL);
+		buffer.push(`[warn]: the symbol with id ${symbolId} is visible and can't be downgraded.`);
+		buffer.push(os.EOL);
 		return buffer.join('');
 	}
 }
@@ -203,6 +231,21 @@ class StreamLogger extends AbstractLogger implements InternalLogger {
 		}
 		this.stream.write(message);
 	}
+
+	public upgradeSymbolData(symbolId: string): void {
+		const message = this.upgradeSymbolDataMessage(symbolId);
+		if (message === undefined) {
+			return;
+		}
+		this.stream.write(message);
+	}
+	public downgradeSymbolData(symbolId: string): void {
+		const message = this.downgradeSymbolDataMessage(symbolId);
+		if (message === undefined) {
+			return;
+		}
+		this.stream.write(message);
+	}
 }
 
 class FileLogger extends AbstractLogger {
@@ -224,6 +267,24 @@ class FileLogger extends AbstractLogger {
 
 	public internalSymbol(symbol: ts.Symbol, symbolId: string, location: ts.Node): void {
 		const message = this.internalSymbolMessage(symbol, symbolId, location);
+		if (message === undefined) {
+			return;
+		}
+		fs.writeSync(this.fileHandle, message);
+		fs.fdatasyncSync(this.fileHandle);
+	}
+
+	public upgradeSymbolData(symbolId: string): void {
+		const message = this.upgradeSymbolDataMessage(symbolId);
+		if (message === undefined) {
+			return;
+		}
+		fs.writeSync(this.fileHandle, message);
+		fs.fdatasyncSync(this.fileHandle);
+	}
+
+	public downgradeSymbolData(symbolId: string): void {
+		const message = this.downgradeSymbolDataMessage(symbolId);
 		if (message === undefined) {
 			return;
 		}
