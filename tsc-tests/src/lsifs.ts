@@ -211,7 +211,7 @@ export async function lsif(cwd: string, scripts: Map<string, string>, options: t
 	emitterContext.emit(source);
 	const lsifOptions: LSIFOptions = {
 		stdout: true, workspaceRoot: cwd, projectName: cwd, tsConfigFile: undefined,
-		packageJsonFile: undefined, logger: reporter, dataMode: DataMode.keep
+		packageJsonFile: undefined, logger: reporter, dataMode: DataMode.free
 	};
 	const dataManager: DataManager = new DataManager(emitterContext, cwd, reporter, lsifOptions.dataMode);
 	try {
