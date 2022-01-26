@@ -137,7 +137,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 96);
+		assert.strictEqual(emitter.lastId, 96);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
@@ -172,7 +172,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 78);
+		assert.strictEqual(emitter.lastId, 78);
 		const validate: Element[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
@@ -203,7 +203,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 85);
+		assert.strictEqual(emitter.lastId, 85);
 		const validate: Element[] = [
 			// _foo
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
@@ -361,7 +361,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 85);
+		assert.strictEqual(emitter.lastId, 85);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":28,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.touch","unique":"workspace","kind":"export"}')
@@ -386,7 +386,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 94);
+		assert.strictEqual(emitter.lastId, 94);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":28,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.touch","unique":"workspace","kind":"export"}')
@@ -411,7 +411,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 96);
+		assert.strictEqual(emitter.lastId, 96);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
@@ -438,7 +438,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 135);
+		assert.strictEqual(emitter.lastId, 135);
 		const validate: Element[] = [
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
@@ -466,7 +466,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 144);
+		assert.strictEqual(emitter.lastId, 144);
 		const validate: Element[] = [
 			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.bar.__rt.toString","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":29}'),
@@ -497,7 +497,7 @@ suite('Export Tests', () => {
 		]), compilerOptions);
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
-		assert.deepEqual(emitter.lastId, 135);
+		assert.strictEqual(emitter.lastId, 135);
 	});
 	test('Export type via property signature', async () => {
 		const emitter = await lsif('/@test', new Map([
@@ -517,7 +517,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 133);
+		assert.strictEqual(emitter.lastId, 133);
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
@@ -538,7 +538,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 117);
+		assert.strictEqual(emitter.lastId, 117);
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
@@ -559,7 +559,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 132);
+		assert.strictEqual(emitter.lastId, 132);
 		// There will not be a moniker for a:Bar.foo.touch since interface Foo is named.
 		// However symbol data must survive for b.ts
 	});
@@ -580,7 +580,7 @@ suite('Export Tests', () => {
 			]
 		]), compilerOptions);
 		// Tests that the LSIF tool doesn't throw due to data recreation.
-		assert.deepEqual(emitter.lastId, 140);
+		assert.strictEqual(emitter.lastId, 140);
 	});
 	test('Export function with callback signature', async () => {
 		const emitter = await lsif('/@test', new Map([
@@ -598,7 +598,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 177);
+		assert.strictEqual(emitter.lastId, 177);
 		const validate: Element[] = [
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.__arg.callback.__arg.entry.key","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":22}'),
@@ -626,7 +626,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 167);
+		assert.strictEqual(emitter.lastId, 167);
 		const validate: Element[] = [
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Func.__arg.callback.__arg.entry.key","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":22}'),
@@ -653,7 +653,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 179);
+		assert.strictEqual(emitter.lastId, 179);
 		const validate: Element[] = [
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo.__rt.__arg.entry.key","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":22}'),
@@ -686,7 +686,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 132);
+		assert.strictEqual(emitter.lastId, 132);
 		const validate: Element[] = [
 		];
 		for (const elem of validate) {
@@ -713,7 +713,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 99);
+		assert.strictEqual(emitter.lastId, 99);
 		const validate: Element[] = [
 			JSON.parse('{"id":21,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"*","unique":"document","kind":"local"}'),
@@ -743,7 +743,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 164);
+		assert.strictEqual(emitter.lastId, 164);
 		const validate: Element[] = [
 			JSON.parse('{"id":35,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:Foo.__arg.callback.__arg.entry.key","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"edge","label":"attach","outV":35,"inV":22}'),
@@ -772,7 +772,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 157);
+		assert.strictEqual(emitter.lastId, 157);
 		const validate: Element[] = [
 			JSON.parse('{"id":31,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.__arg.callback.__arg.entry.key","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":32,"type":"edge","label":"attach","outV":31,"inV":18}'),
@@ -807,7 +807,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 148);
+		assert.strictEqual(emitter.lastId, 148);
 		const validate: (Vertex | Edge)[] = [
 			JSON.parse('{"id":14,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}'),
@@ -856,7 +856,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 136);
+		assert.strictEqual(emitter.lastId, 136);
 		const validate: Element[] = [
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":value","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":29,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:foo","unique":"workspace","kind":"export"}')
@@ -886,7 +886,7 @@ suite('Export Tests', () => {
 				].join(os.EOL)
 			]
 		]), { });
-		assert.deepEqual(emitter.lastId, 146);
+		assert.strictEqual(emitter.lastId, 146);
 		const validate: Element[] = [
 			JSON.parse('{"id":23,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":M","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":36,"type":"vertex","label":"moniker","scheme":"tsc","identifier":":M.foo","unique":"workspace","kind":"export"}'),
@@ -927,7 +927,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 112);
+		assert.strictEqual(emitter.lastId, 112);
 		const validate: Element[] = [
 			JSON.parse('{"id":45,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default.x","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":46,"type":"edge","label":"attach","outV":45,"inV":33}'),
@@ -956,7 +956,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 141);
+		assert.strictEqual(emitter.lastId, 141);
 		const validate: Element[] = [
 			JSON.parse('{"id":42,"type":"vertex","label":"resultSet"}'),
 			JSON.parse('{"id":43,"type":"edge","label":"next","outV":42,"inV":14}'),
@@ -1007,7 +1007,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), Object.assign<ts.CompilerOptions, ts.CompilerOptions, ts.CompilerOptions>({}, compilerOptions, { 'lib': [ 'es2017' ] }));
-		assert.deepEqual(emitter.lastId, 253);
+		assert.strictEqual(emitter.lastId, 253);
 		for (const elem of emitter.sequence) {
 			if (elem.type === ElementTypes.vertex && elem.label === VertexLabels.moniker) {
 				if (elem.identifier.indexOf('__arg') !== -1 || elem.identifier.indexOf('__rt') !== -1) {
@@ -1035,7 +1035,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 193);
+		assert.strictEqual(emitter.lastId, 193);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:MyConsole.warn","unique":"workspace","kind":"export"}'),
@@ -1065,7 +1065,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 136);
+		assert.strictEqual(emitter.lastId, 136);
 		// There is no a:RAL.Buffer.end since _Buffer is named.
 		const validate: Element[] = [
 			JSON.parse('{"id":46,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:default","unique":"workspace","kind":"export"}'),
@@ -1095,7 +1095,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 149);
+		assert.strictEqual(emitter.lastId, 149);
 		// Ensure that be sees enabled.
 	});
 	test('Property with ReadonlyArray<string>', async () => {
@@ -1117,7 +1117,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 124);
+		assert.strictEqual(emitter.lastId, 124);
 		const validate: Element[] = [
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.providedCodeActionKinds","unique":"workspace","kind":"export"}')
 		];
@@ -1144,7 +1144,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 158);
+		assert.strictEqual(emitter.lastId, 158);
 		const validate: Element[] = [
 			JSON.parse('{"id":42,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:CodeActionProvider.documentation.kind","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":29}'),
@@ -1177,7 +1177,7 @@ suite('Export use cases', () => {
 				].join(os.EOL)
 			]
 		]), compilerOptions);
-		assert.deepEqual(emitter.lastId, 158);
+		assert.strictEqual(emitter.lastId, 158);
 		const validate: Element[] = [
 			JSON.parse('{"id":15,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":22,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent.ranges","unique":"workspace","kind":"export"}'),
@@ -1185,6 +1185,33 @@ suite('Export use cases', () => {
 			JSON.parse('{"id":43,"type":"edge","label":"attach","outV":42,"inV":29}'),
 			JSON.parse('{"id":44,"type":"vertex","label":"moniker","scheme":"tsc","identifier":"a:IModelTokensChangedEvent.ranges.toLineNumber","unique":"workspace","kind":"export"}'),
 			JSON.parse('{"id":45,"type":"edge","label":"attach","outV":44,"inV":36}')
+		];
+		for (const elem of validate) {
+			assertElement(emitter.elements.get(elem.id), elem);
+		}
+	});
+	test.skip('Type Reference', async () => {
+		const emitter = await lsif('/@test', new Map([
+			[
+				'/@test/a.ts',
+				[
+					'export class FindReplaceState<T extends { update: (value: T) => void; } = { update: () => {} } {',
+					'}'
+				].join(os.EOL)
+			],
+			[
+				'/@test/b.ts',
+				[
+					'import { FindReplaceState } from "./a";',
+					'export class FindModelBoundToEditorModel {',
+					'   constructor(_state: FindReplaceState) {',
+					'   }',
+					'}'
+				].join(os.EOL)
+			]
+		]), compilerOptions);
+		//		assert.strictEqual(emitter.lastId, 158);
+		const validate: Element[] = [
 		];
 		for (const elem of validate) {
 			assertElement(emitter.elements.get(elem.id), elem);
