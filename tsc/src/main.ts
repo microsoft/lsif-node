@@ -150,7 +150,7 @@ class AbstractLogger extends InternalNullLogger implements InternalLogger {
 		this.internal.add(symbolId);
 		const buffer: string[] = [];
 		buffer.push(os.EOL);
-		buffer.push(`[warn]: The symbol ${symbol.name} with id ${symbolId} is treated as internal although it is referenced outside. The symbol will not be reachable using a moniker.`);
+		buffer.push(`[warn]: the symbol ${symbol.name} with id ${symbolId} is marked as internal although it is referenced outside. The symbol will not be reachable using a moniker.`);
 		buffer.push(os.EOL);
 		const declarations = symbol.getDeclarations();
 		if (declarations === undefined) {
@@ -184,7 +184,7 @@ class AbstractLogger extends InternalNullLogger implements InternalLogger {
 		this.upgrade.add(symbolId);
 		const buffer: string[] = [];
 		buffer.push(os.EOL);
-		buffer.push(`[warn]: the symbol with id ${symbolId} is internal and its visibility can't be upgraded. The symbol will not be reachable using a moniker.`);
+		buffer.push(`[warn]: the symbol with id ${symbolId} is marked as internal and its visibility can't be upgraded. The symbol will not be reachable using a moniker.`);
 		buffer.push(os.EOL);
 		return buffer.join('');
 	}
@@ -196,7 +196,7 @@ class AbstractLogger extends InternalNullLogger implements InternalLogger {
 		this.downgrade.add(symbolId);
 		const buffer: string[] = [];
 		buffer.push(os.EOL);
-		buffer.push(`[warn]: the symbol with id ${symbolId} is visible and can't be downgraded.`);
+		buffer.push(`[warn]: the symbol with id ${symbolId} is marked as visible and can't be downgraded. The symbol might have an ambiguous moniker.`);
 		buffer.push(os.EOL);
 		return buffer.join('');
 	}
