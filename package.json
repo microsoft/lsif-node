@@ -15,16 +15,16 @@
 	"homepage": "https://microsoft.github.io/language-server-protocol/overviews/lsif/overview/",
 	"devDependencies": {
 		"@types/node": "^14.17.20",
-		"@types/shelljs": "^0.8.9",
-		"@types/uuid": "^8.3.1",
-		"@types/yargs": "^17.0.3",
+		"@types/shelljs": "^0.8.11",
+		"@types/uuid": "^8.3.4",
+		"@types/yargs": "^17.0.8",
 		"@typescript-eslint/eslint-plugin": "^4.32.0",
 		"@typescript-eslint/parser": "^4.32.0",
 		"eslint": "^7.32.0",
-		"mocha": "^9.1.2",
+		"mocha": "^9.2.0",
 		"rimraf": "^3.0.2",
 		"shelljs": "^0.8.5",
-		"typescript": "^4.5.2",
+		"typescript": "^4.5.5",
 		"uuid": "^8.3.2"
 	},
 	"scripts": {
@@ -36,6 +36,8 @@
 		"clean": "node ./build/bin/all.js run clean",
 		"test": "cd tsc && npm run test && cd ..",
 		"test:configs": "node ./build/bin/testConfigs.js ./configs",
-		"cleanAll": "git clean -xfd . && npm install && npm run symlink && npm run compile && npm run test"
+		"cleanAll": "git clean -xfd . && npm install && npm run symlink && npm run compile && npm run test",
+		"audit:all": "node ./build/bin/all.js audit",
+		"audit:all:fix": "node ./build/bin/all.js audit fix"
 	}
 }
