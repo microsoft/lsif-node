@@ -1,7 +1,7 @@
 {
-	"name": "lsif-tsc",
+	"name": "@azure/lsif-tsc",
 	"description": "Tool to create an LSIF dump for TypeScript projects.",
-	"version": "0.6.0-next.21",
+	"version": "0.6.0-node.12.0",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {

@@ -3,8 +3,13 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import { MessagePort, Worker, TransferListItem } from 'worker_threads';
+import { MessagePort, Worker, /*TransferListItem*/ } from 'worker_threads';
+// import { FileHandle} from ''
+// import { X509Certificate } from 'crypto';
+// import { FileHandle } from 'promises';
+// import { Blob } from 'buffer';
 
+type TransferListItem = ArrayBuffer | MessagePort; //| FileHandle | X509Certificate | Blob;
 
 export type MessageType = {
 	method: string;
@@ -130,7 +135,7 @@ export class Connection<Requests extends RequestType | undefined, Notifications 
 
 	public readonly sendRequest: SendRequestSignatures<Requests> = this._sendRequest as SendRequestSignatures<Requests>;
 
-	private _sendRequest(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): Promise<any> {
+	private _sendRequest(method?: string, params?: any, transferList?: Array<ArrayBuffer | MessagePort>): Promise<any> {
 		if (method === undefined) {
 			return Promise.resolve();
 		}
@@ -156,7 +161,7 @@ export class Connection<Requests extends RequestType | undefined, Notifications 
 
 	public readonly sendNotification: SendNotificationSignatures<Notifications> = this._sendNotification as SendNotificationSignatures<Notifications>;
 
-	private _sendNotification(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): void {
+	private _sendNotification(method?: string, params?: any, transferList?: Array<TransferListItem>): void {
 		if (method === undefined) {
 			return;
 		}

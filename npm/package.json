@@ -1,7 +1,7 @@
 {
-	"name": "lsif-npm",
+	"name": "@azure/lsif-npm",
 	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.6.0-next.8",
+	"version": "0.6.0-node.12.0",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
