@@ -6,6 +6,7 @@
 import * as assert from 'assert';
 import * as os from 'os';
 import * as path from 'path';
+import * as fs from 'fs';
 
 import { URI } from 'vscode-uri';
 
@@ -27,6 +28,16 @@ export function assertElement(actual: Element | undefined, expected: Element): v
 		actual.identifier = '*';
 	}
 	assert.deepEqual(actual, expected);
+}
+
+export async function assertValid(inputFilePath: string): Promise<void> {
+	const inputFile = fs.createReadStream(inputFilePath, { encoding: 'utf8'});
+	const testReporter = new TestDiagnosticReporter();
+	const validate: ValidateCommand = new ValidateCommand(inputFile, {}, testReporter);
+	await validate.run();
+	if (testReporter.buffer.length !== 0) {
+		throw new Error(`Validation failed:${os.EOL}${testReporter.buffer.join(os.EOL)}`);
+	}
 }
 
 class TestDiagnosticReporter implements DiagnosticReporter {

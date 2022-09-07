@@ -40,7 +40,25 @@ export class ValidateCommand extends Command {
 		this.options;
 	}
 
-	protected async process(element: Edge | Vertex ): Promise<void> {
+	protected async process(elements: IterableIterator<Edge | Vertex>): Promise<void> {
+		for (const element of elements) {
+			this.processElement(element);
+		}
+		
+		for (const element of elements) {
+			this.postValidate(element);
+		}
+	}
+
+	private postValidate(element: Edge | Vertex): void {
+		if (element.type === ElementTypes.edge) {
+			this.postValidateEdge(element as Edge);
+		} else if (element.type === ElementTypes.vertex) {
+			this.postValidateVertex(element as Vertex);
+		}
+	}
+
+	private processElement(element: Edge | Vertex): void {
 		if (element.type === ElementTypes.edge) {
 			// Filter deprecated belongsTo edge
 			if ((element.label as string) === 'belongsTo') {
@@ -112,7 +130,6 @@ export class ValidateCommand extends Command {
 		let cardinalityCorrect: boolean = true;
 		let isOpen: boolean = true;
 		let isClosed: boolean = false;
-		let freeRanges: Id[] = [];
 
 		if (valid) {
 			const referencedVertices: [VertexLabels | undefined, VertexLabels | undefined][] = [];
@@ -187,18 +204,8 @@ export class ValidateCommand extends Command {
 
 				}
 			}
-			if (edge.label === EdgeLabels.item) {
-				isOpen = this.openElements.has(edge.shard)!!;
-				isClosed = this.closedElements.has(edge.shard)!!;
-				for (const inV of edge.inVs) {
-					const vertexLabel = this.vertices.get(inV);
-					if (vertexLabel === VertexLabels.range && !this.associatedRanges.has(inV)) {
-						freeRanges.push(inV);
-					}
-				}
-			}
 		}
-		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen || !cardinalityCorrect || freeRanges.length > 0) {
+		if (!valid || !sameInVs || !verticesEmitted || !inOutCorrect || !isOpen || !cardinalityCorrect) {
 			this.reporter.error(edge);
 			if (!valid) {
 				this.reporter.error(edge, 'edge has invalid property values.');
@@ -225,10 +232,26 @@ export class ValidateCommand extends Command {
 					this.reporter.error(edge, `the vertex referenced via the shard property is not open yet.`);
 				}
 			}
+		}
+	}
+
+	private postValidateEdge(edge: Edge): void {
+		if (edge.label === EdgeLabels.item) {
+			const freeRanges: Id[] = [];
+			for (const inV of edge.inVs) {
+				const vertexLabel = this.vertices.get(inV);
+				if (vertexLabel === VertexLabels.range && !this.associatedRanges.has(inV)) {
+					freeRanges.push(inV);
+				}
+			}
 			if (freeRanges.length > 0) {
 				this.reporter.error(edge, `the ranges [${freeRanges.join(',')}] referenced via the edge are not associated with a document.`);
 			}
 		}
+	}
+
+	private postValidateVertex(_vertex: Vertex): void {
+		// Post validation for vertexes, once content is added we can remove the leading underscore from _vertex
 	}
 
 	private getEdgeDescriptions(edge: Edge): Map<VertexDescriptor<V>, Set<VertexDescriptor<V>>> {

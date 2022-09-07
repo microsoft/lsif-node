@@ -32,36 +32,40 @@ export abstract class Command {
 		}
 		const input = this.input;
 		if (isIterable(input)) {
-			for (const element of input) {
-				this.process(element);
-			}
+			this.process(input);
 		} else {
-			const rd = readline.createInterface(input);
-			return new Promise((resolve, _reject) => {
-				rd.on('line', (line) => {
-					if (!line) {
-						return;
-					}
-					let element: Edge | Vertex;
-					try {
-						element = JSON.parse(line);
-					} catch (err) {
-						console.error(`Parsing failed for line:\n${line}`);
-						throw err;
-					}
-					try {
-						this.process(element);
-					} catch (err) {
-						console.error(`Processing failed for line:\n${line}`);
-						throw err;
-					}
-				});
-				rd.on('close', () => {
-					resolve();
-				});
-			});
+			const elements = await this.extractElementsFromFile(input);
+			this.process(elements);
 		}
 	}
 
-	protected abstract process(element: Edge | Vertex): Promise<void>;
+	protected abstract process(elements: IterableIterator<Edge | Vertex>): Promise<void>;
+
+	private async extractElementsFromFile(input: any) {
+		const rd = readline.createInterface(input);
+		return new Promise<IterableIterator<Edge | Vertex>>((resolve, _reject) => {
+			const elements = new Array<Edge | Vertex>();
+			rd.on('line', (line) => {
+				if (!line) {
+					return;
+				}
+				let element: Edge | Vertex;
+				try {
+					element = JSON.parse(line);
+				} catch (err) {
+					console.error(`Parsing failed for line:\n${line}`);
+					throw err;
+				}
+				try {
+					elements.push(element);
+				} catch (err) {
+					console.error(`Processing failed for line:\n${line}`);
+					throw err;
+				}
+			});
+			rd.on('close', () => {
+				resolve(elements.values());
+			});
+		});
+	}
 }
