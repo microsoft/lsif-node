@@ -13,3 +13,26 @@ See also the [Language Server Index Format Specification](https://github.com/Mic
 
 ### How to Run the Tool
 
+Installation
+
+```
+npm install
+```
+
+Build
+
+```
+npm run compile
+```
+
+Run
+
+```
+node lib/main.js --in <your lsif file>
+```
+
+See Other Options
+```
+node lib/main.js -h
+```
+
