@@ -19,8 +19,6 @@ namespace pcp {
 	export const exec = promisify(cp.exec);
 }
 
-import latestVersion from 'latest-version';
-
 interface Dictionary<T> {
 	[key: string]: T
 }
@@ -205,6 +203,7 @@ export class TypingsInstaller {
 		if (typings.length === 0) {
 			return typings;
 		}
+		const latestVersion = (await import('latest-version')).default;
 		const promises: Promise<string | undefined>[] = [];
 		for (let typing of typings) {
 			try {
