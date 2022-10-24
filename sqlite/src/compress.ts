@@ -308,7 +308,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 						if (type === 'number' || type === 'string' || type === 'boolean') {
 							return value;
 						}
-						throw new Error(`Any compression kind can't infer conversion for property ${item.name}`);
+						throw new Error(`Any compression kind can't infer conversion for property ${String(item.name)}`);
 					};
 					let convertedAny: any;
 					if (Array.isArray(value)) {

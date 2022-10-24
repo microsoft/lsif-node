@@ -125,8 +125,10 @@ export class InMemoryLanguageServiceHost implements ts.LanguageServiceHost {
 	}
 
 	public fileExists(path: string): boolean {
-		const result = ts.sys.fileExists(path);
-		return result;
+		if (path.startsWith('/@test')) {
+			return this.scripts.has(path);
+		}
+		return ts.sys.fileExists(path);
 	}
 
 	public readFile(path: string, encoding?:string): string | undefined {

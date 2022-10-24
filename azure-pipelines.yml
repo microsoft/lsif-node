@@ -17,13 +17,13 @@ jobs:
 
 - job: Windows
   pool:
-    vmImage: VS2017-Win2016
+    vmImage: 'windows-latest'
   steps:
   - template: build/azure-pipelines/win32/build.yml
 
 - job: Indexing
   pool:
-    vmImage: VS2017-Win2016
+    vmImage: 'windows-latest'
   steps:
   - template: build/azure-pipelines/index/build.yml
 

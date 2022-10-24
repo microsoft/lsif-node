@@ -1628,7 +1628,7 @@ export enum Cardinality {
 	'many2many' = 'N:N'
 }
 
-export class EdgeDescriptor<T> extends ObjectDescriptor<T> {
+export class EdgeDescriptor<T extends Object> extends ObjectDescriptor<T> {
 	public readonly edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][];
 	public readonly cardinality: Cardinality;
 	constructor(description: ObjectDescription<T>, cardinality: Cardinality, edgeDescriptions: [VertexDescriptor<V>, VertexDescriptor<V>][]) {

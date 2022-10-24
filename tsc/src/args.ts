@@ -101,7 +101,7 @@ export namespace Options {
 	export function sanitize(options: Options): Options {
 		const result = Object.assign({}, options);
 		if (options.p !== undefined && typeof options.p !== 'string') {
-			result.p = Object.assign<unknown, unknown, ConfigOptions>({}, options.p, { __brand: 'inlineConfig', configFilePath: getConfigFilePath(options)});
+			result.p = Object.assign<object, unknown, ConfigOptions>({}, options.p, { __brand: 'inlineConfig', configFilePath: getConfigFilePath(options)});
 		}
 		if (!Array.isArray(result.publishedPackages)) {
 			result.publishedPackages = undefined;
