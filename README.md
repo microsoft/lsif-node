@@ -27,7 +27,7 @@ Both tools support --help to get information about their command line arguments.
 
 ## LSIF utility tools
 
-You can validate or visualize LSIF output using the [LSIF utility tools](util/README.md).
+You can validate LSIF output using the [LSIF utility tools](tooling/README.md).
 
 ## LSIF extension
 
