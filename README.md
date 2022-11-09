@@ -41,7 +41,7 @@ There is also an [extension for VS Code](https://github.com/Microsoft/vscode-lsi
 - open the workspace on vscode-lsif-extension using code.
 - switch to the debug viewlet and launch `Launch Client`
 - in the launch version of VS Code open the command palette and execute the command: `Open LSIF Database`
-- in the open file picker dialog nativate to a created dump and select it.
+- in the open file picker dialog navigate to a created dump and select it.
 
 ![The extension](./images/extension.png)
 
