@@ -126,12 +126,13 @@ export function flattenDiagnosticMessageText(diag: string | ts.DiagnosticMessage
 
 interface InternalSymbol extends ts.Symbol {
 	parent?: ts.Symbol;
-	containingType?: ts.UnionOrIntersectionType;
+	links?: InternalSymbolLinks;
 	__symbol__data__key__: string | undefined;
 }
 
 interface InternalSymbolLinks {
 	type?: ts.Type;
+	containingType?: ts.UnionOrIntersectionType;
 }
 
 export namespace Symbol {
@@ -196,10 +197,8 @@ export namespace Symbol {
 	}
 
 	export function getTypeFromSymbolLink(symbol: ts.Symbol): ts.Type | undefined {
-		// Symbol links are merged into transient symbols. See
-		// https://github.com/microsoft/TypeScript/blob/master/src/compiler/types.ts#L4871
 		if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
-			return (symbol as InternalSymbolLinks).type;
+			return (symbol as InternalSymbol).links?.type;
 		}
 		return undefined;
 	}
@@ -272,8 +271,12 @@ interface InternalNode extends ts.Node {
 	symbol?: ts.Symbol;
 }
 
+interface InternalJSDocArray extends Array<ts.JSDoc> {
+	jsDocCache?: readonly ts.JSDocTag[];
+}
+
 interface InternalJSDocContainer extends ts.JSDocContainer {
-	jsDoc?: ts.JSDoc[];
+	jsDoc?: InternalJSDocArray;
 }
 
 export namespace Node {
@@ -288,11 +291,11 @@ export namespace Node {
 
 
 interface InternalSourceFile extends ts.SourceFile {
-	resolvedModules?: ts.Map<ts.ResolvedModuleFull | undefined>;
+	resolvedModules?: ts.ModeAwareCache<ts.ResolvedModuleWithFailedLookupLocations>;
 }
 
 export namespace SourceFile {
-	export function getResolvedModules(sourceFile: ts.SourceFile): ts.Map<ts.ResolvedModuleFull | undefined> | undefined {
+	export function getResolvedModules(sourceFile: ts.SourceFile): ts.ModeAwareCache<ts.ResolvedModuleWithFailedLookupLocations> | undefined {
 		return (sourceFile as InternalSourceFile).resolvedModules;
 	}
 }
@@ -320,10 +323,8 @@ export function createDefinitionInfo(sourceFile: ts.SourceFile, node: ts.Node): 
 	};
 }
 
-
-
 export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol): boolean {
-	const containingType = (symbol as InternalSymbol).containingType;
+	const containingType = (symbol as InternalSymbol).links?.containingType;
 	if (containingType !== undefined && containingType.isUnionOrIntersection()) {
 		return true;
 	}
@@ -344,7 +345,7 @@ export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.
 			return;
 		}
 		processed.add(symbolKey);
-		const containingType = (symbol as InternalSymbol).containingType;
+		const containingType = (symbol as InternalSymbol).links?.containingType;
 		if (containingType !== undefined) {
 			for (let typeElem of containingType.types) {
 				const symbolElem = typeElem.getProperty(symbol.getName());
@@ -391,8 +392,7 @@ export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined)
 
 interface InternalProgram extends ts.Program {
 	getCommonSourceDirectory(): string;
-	sourceFileToPackageName: ts.ESMap<string, string>;
-	getResolvedModuleWithFailedLookupLocationsFromCache(moduleName: string, containingFile: string): ts.ResolvedModuleWithFailedLookupLocations | undefined;
+	sourceFileToPackageName: Map<ts.Path, string>;
 }
 
 export namespace Program {
@@ -410,25 +410,7 @@ export namespace Program {
 			throw new Error(`Program is missing sourceFileToPackageName`);
 		}
 		// The file names are keyed by lower case. Not sure why
-		return internal.sourceFileToPackageName.get(sourceFile.fileName.toLowerCase());
-	}
-
-	export function getResolvedModule(program: ts.Program,  sourceFile: ts.SourceFile): ts.ResolvedModuleFull | undefined {
-		const internal: InternalProgram = program as InternalProgram;
-		if (internal.sourceFileToPackageName === undefined) {
-			throw new Error(`Program is missing sourceFileToPackageName`);
-		}
-		// The file names are keyed by lower case. Not sure why
-		const moduleName =  internal.sourceFileToPackageName.get(sourceFile.fileName.toLowerCase());
-		if (moduleName === undefined) {
-			return undefined;
-		}
-
-		if (typeof internal.getResolvedModuleWithFailedLookupLocationsFromCache !== 'function') {
-			throw new Error(`Program is missing getResolvedModuleWithFailedLookupLocationsFromCache`);
-		}
-		const value = internal.getResolvedModuleWithFailedLookupLocationsFromCache(moduleName, sourceFile.fileName);
-		return value && value.resolvedModule;
+		return internal.sourceFileToPackageName.get(sourceFile.fileName.toLowerCase() as ts.Path);
 	}
 }
 

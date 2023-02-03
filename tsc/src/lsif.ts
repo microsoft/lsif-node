@@ -2708,10 +2708,6 @@ class TSProject {
 		return this.config;
 	}
 
-	public setSymbolChainCache(cache: ts.SymbolChainCache): void {
-		this.typeChecker.setSymbolChainCache(cache);
-	}
-
 	public getProgram(): ts.Program {
 		return this.languageService.getProgram()!;
 	}
@@ -3028,7 +3024,7 @@ class TSProject {
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
 		try {
-			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
+			let quickInfo = this.languageService.getQuickInfoAtPosition(node as any, sourceFile as any);
 			if (quickInfo === undefined) {
 				return undefined;
 			}
@@ -3433,47 +3429,6 @@ export interface ProjectInfo {
 	references: ProjectInfo[];
 }
 
-export class SimpleSymbolChainCache implements ts.SymbolChainCache {
-
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] {
-		return [key.symbol];
-	}
-	public cache(_key: ts.SymbolChainCacheKey, _value: ts.Symbol[]): void {
-		// do nothing;
-	}
-}
-
-export class FullSymbolChainCache implements ts.SymbolChainCache {
-
-	private store: LRUCache<string, ts.Symbol[]> = new LRUCache(4096);
-
-	constructor(private typeChecker: ts.TypeChecker) {
-	}
-
-	public lookup(key: ts.SymbolChainCacheKey): ts.Symbol[] | undefined {
-		if (key.endOfChain) {
-			return undefined;
-		}
-		let sKey = this.makeKey(key);
-		let result = this.store.get(sKey);
-		//process.stdout.write(result === undefined ? '0' : '1');
-		return result;
-	}
-	public cache(key: ts.SymbolChainCacheKey, value: ts.Symbol[]): void {
-		if (key.endOfChain) {
-			return;
-		}
-		let sKey = this.makeKey(key);
-		this.store.set(sKey, value);
-	}
-
-	private makeKey(key: ts.SymbolChainCacheKey): string {
-		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
-		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
-		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
-	}
-}
-
 class Visitor {
 
 	private tsProject: TSProject;
@@ -3497,11 +3452,6 @@ class Visitor {
 	}
 
 	public async visitProgram(): Promise<ProjectInfo> {
-		const program = this.tsProject.getProgram();
-		let sourceFiles = program.getSourceFiles();
-		if (sourceFiles.length > 256) {
-			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
-		}
 		for (const sourceFile of this.tsProject.getSourceFilesToIndex()) {
 			this.visit(sourceFile);
 			await this.emitter.flush();
@@ -3611,7 +3561,7 @@ class Visitor {
 		// JS Doc is not visited using forEachChild. So we look if the node
 		// has an attached JSDoc node. If so we traverse that node and see
 		// if we can find any identifiers that have a symbol.
-		const jsDocs = tss.Node.getJsDoc(node);
+		const jsDocs = tss.Node.getJsDoc(node as unknown as ts.JSDocContainer);
 		if (jsDocs !== undefined) {
 			for (const jsDoc of jsDocs) {
 				this.traverseJSDoc(jsDoc);
@@ -3657,7 +3607,7 @@ class Visitor {
 		}
 
 		// Folding ranges
-		const spans = this.languageService.getOutliningSpans(sourceFile as any);
+		const spans = this.languageService.getOutliningSpans(sourceFile.fileName);
 		if (ts.textSpanEnd.length > 0) {
 			const foldingRanges: lsp.FoldingRange[] = [];
 			for (const span of spans) {
