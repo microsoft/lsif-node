@@ -21,7 +21,7 @@
 		"lsif-sqlite": "0.6.0-next.9",
 		"lsif-tooling": "0.6.0-next.10",
 		"lsif-tsc": "0.6.0-next.21",
-		"yargs": "^17.6.0"
+		"yargs": "^17.6.2"
 	},
 	"devDependencies": {},
 	"scripts": {
