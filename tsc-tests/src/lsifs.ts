@@ -172,8 +172,8 @@ class TestEmitter implements Emitter {
 		return Promise.resolve();
 	}
 
-	public end(): Promise<void> {
-		return Promise.resolve();
+	public end(): Promise<number> {
+		return Promise.resolve(0);
 	}
 
 	public toString(): string {

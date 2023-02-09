@@ -70,7 +70,7 @@ export type Options = {
 		writeEOL(): void;
 		writeln(...data: string[]): void;
 		flush(): Promise<void>;
-		close(): Promise<void>;
+		close(): Promise<number>;
 	} | undefined;
 };
 

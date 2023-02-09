@@ -784,9 +784,12 @@ export async function run(this: void, options: Options): Promise<void> {
 	const dataManager: DataManager = new DataManager(emitterContext, processProjectOptions.workspaceRoot, processProjectOptions.reporter, processProjectOptions.dataMode);
 	const importMonikers: ImportMonikers = new ImportMonikers(emitterContext, processProjectOptions.workspaceRoot);
 	dataManager.begin();
-	await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
-	dataManager.end();
-	await emitter.end();
+	try {
+		await processProject(config, emitterContext, new TypingsInstaller(), dataManager, importMonikers, exportMonikers, processProjectOptions);
+	} finally {
+		dataManager.end();
+		await emitter.end();
+	}
 	logger.end();
 }
 
