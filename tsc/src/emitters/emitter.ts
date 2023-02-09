@@ -9,7 +9,7 @@ export interface Emitter {
 	start(): void;
 	emit(element: Vertex | Edge): void;
 	flush(): Promise<void>;
-	end(): Promise<void>;
+	end(): Promise<number>;
 }
 
 export interface Create {

@@ -289,7 +289,7 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 		flush: () => {
 			return writer.flush();
 		},
-		end: (): Promise<void> => {
+		end: (): Promise<number> => {
 			for (let vertex of vertices.values()) {
 				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}

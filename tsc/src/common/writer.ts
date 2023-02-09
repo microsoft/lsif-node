@@ -18,7 +18,7 @@ export interface Writer {
 	writeEOL(): void;
 	writeln(...data: string[]): void;
 	flush(): Promise<void>;
-	close(): Promise<void>;
+	close(): Promise<number>;
 }
 
 export class StdoutWriter implements Writer {
@@ -46,8 +46,8 @@ export class StdoutWriter implements Writer {
 		return Promise.resolve();
 	}
 
-	close(): Promise<void> {
-		return Promise.resolve();
+	close(): Promise<number> {
+		return Promise.resolve(0);
 	}
 }
 
@@ -99,10 +99,13 @@ export class FileWriter implements Writer {
 		await this.connection.sendRequest('flush');
 	}
 
-	async close(): Promise<void> {
-		this.sendBuffer(true);
-		await this.connection.sendRequest('close');
-		this.worker.terminate();
+	async close(): Promise<number> {
+		try {
+			this.sendBuffer(true);
+			await this.connection.sendRequest('close');
+		} finally {
+			return this.worker.terminate();
+		}
 	}
 
 	private writeBuffer(chunk: Buffer): void {
