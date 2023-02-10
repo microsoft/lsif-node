@@ -1,3 +1,5 @@
+# no PR triggers
+pr: none
 trigger: none
 
 schedules:
