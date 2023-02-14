@@ -11,6 +11,7 @@
 	"rules": {
         "semi": "off",
         "@typescript-eslint/semi": "error",
+		"no-extra-semi": "warn",
 		"curly": "warn",
 		"quotes": ["error", "single", { "allowTemplateLiterals": true } ],
 		"eqeqeq": "error",
