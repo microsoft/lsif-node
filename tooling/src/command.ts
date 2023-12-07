@@ -33,12 +33,12 @@ export abstract class Command {
 		const input = this.input;
 		if (isIterable(input)) {
 			for (const element of input) {
-				this.process(element);
+				await this.process(element);
 			}
 		} else {
 			const rd = readline.createInterface(input);
 			return new Promise((resolve, _reject) => {
-				rd.on('line', (line) => {
+				rd.on('line', async (line) => {
 					if (!line) {
 						return;
 					}
@@ -50,7 +50,7 @@ export abstract class Command {
 						throw err;
 					}
 					try {
-						this.process(element);
+						await this.process(element);
 					} catch (err) {
 						console.error(`Processing failed for line:\n${line}`);
 						throw err;

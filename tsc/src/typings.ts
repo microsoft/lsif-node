@@ -20,11 +20,11 @@ namespace pcp {
 }
 
 interface Dictionary<T> {
-	[key: string]: T
+	[key: string]: T;
 }
 
 interface PackageJson {
-	devDependencies: Dictionary<string>
+	devDependencies: Dictionary<string>;
 	dependencies: Dictionary<string>;
 }
 
@@ -70,7 +70,7 @@ export class TypingsInstaller {
 		if (typings.length === 0) {
 			return;
 		}
-		let stat = await fs.stat(start);
+		const stat = await fs.stat(start);
 		let startDirectory: string;
 		let key: string;
 
@@ -96,7 +96,7 @@ export class TypingsInstaller {
 		typings = typings.map(typing => typing.startsWith('@types/') ? typing : `@types/${typing}`);
 
 		while (startDirectory.length >= projectRoot.length) {
-			let packageFile = path.join(startDirectory, 'package.json');
+			const packageFile = path.join(startDirectory, 'package.json');
 			if (await fs.exist(packageFile)) {
 				typings = await this.filterTypingsToInstall(packageFile, typings);
 				if (typings.length === 0) {
@@ -122,12 +122,12 @@ export class TypingsInstaller {
 		}
 
 		while (startDirectory.length >= projectRoot.length) {
-			let packageFile = path.join(startDirectory, 'package.json');
+			const packageFile = path.join(startDirectory, 'package.json');
 			if (this.handledPackages.has(packageFile)) {
 				return;
 			}
 			if (await fs.exist(packageFile)) {
-				let typings = await this.findTypingsToInstall(packageFile);
+				const typings = await this.findTypingsToInstall(packageFile);
 				if (typings.length === 0) {
 					continue;
 				}
@@ -145,19 +145,19 @@ export class TypingsInstaller {
 		const packageJson: PackageJson = JSON.parse(stripComments(await fs.readFile(packageFile, 'utf8')));
 
 		if (packageJson.devDependencies) {
-			for (let pack of Object.keys(packageJson.devDependencies)) {
+			for (const pack of Object.keys(packageJson.devDependencies)) {
 				if (pack.startsWith('@types/')) {
 					typings.add(pack);
 				}
 			}
 		}
 		if (packageJson.dependencies !== undefined) {
-			for (let pack of Object.keys(packageJson.dependencies)) {
+			for (const pack of Object.keys(packageJson.dependencies)) {
 				if (pack.startsWith('@types/')) {
 					typings.add(pack);
 				}
 			}
-			for (let pack of Object.keys(packageJson.dependencies)) {
+			for (const pack of Object.keys(packageJson.dependencies)) {
 				if (pack.startsWith('@types/')) {
 					continue;
 				}
@@ -177,21 +177,21 @@ export class TypingsInstaller {
 		const packageJson: PackageJson = JSON.parse(stripComments(await fs.readFile(packageFile, 'utf8')));
 
 		if (packageJson.devDependencies) {
-			for (let pack of Object.keys(packageJson.devDependencies)) {
+			for (const pack of Object.keys(packageJson.devDependencies)) {
 				if (pack.startsWith('@types/')) {
 					typings.add(pack);
 				}
 			}
 		}
 		if (packageJson.dependencies !== undefined) {
-			for (let pack of Object.keys(packageJson.dependencies)) {
+			for (const pack of Object.keys(packageJson.dependencies)) {
 				if (pack.startsWith('@types/')) {
 					typings.add(pack);
 				}
 			}
 		}
-		let result: string[] = [];
-		for (let typing of toInstall) {
+		const result: string[] = [];
+		for (const typing of toInstall) {
 			if (!typings.has(typing)) {
 				result.push(typing);
 			}
@@ -205,7 +205,7 @@ export class TypingsInstaller {
 		}
 		const latestVersion = (await import('latest-version')).default;
 		const promises: Promise<string | undefined>[] = [];
-		for (let typing of typings) {
+		for (const typing of typings) {
 			try {
 				promises.push(latestVersion(typing).then(() => typing, (_error) => undefined));
 			} catch (error) {
@@ -214,7 +214,7 @@ export class TypingsInstaller {
 		}
 		const all = await Promise.all(promises);
 		const result: string[] = [];
-		for (let elem of all) {
+		for (const elem of all) {
 			if (elem !== undefined) {
 				result.push(elem);
 			}

@@ -61,9 +61,9 @@ export async function main(): Promise<void> {
 		wrap(Math.min(100, yargs.terminalWidth()));
 
 	const options: Options = Object.assign({}, Options.defaults, builder(yargs).argv);
-	run(options);
+	return run(options);
 }
 
 if (require.main === module) {
-	main();
+	main().catch(console.error);
 }

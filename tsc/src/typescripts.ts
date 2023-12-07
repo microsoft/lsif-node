@@ -16,12 +16,12 @@ export namespace Node {
 	ts.MethodSignature | ts.ParameterDeclaration | ts.PropertyDeclaration | ts.PropertySignature;
 
 	export function isNamedDeclaration(node: ts.Node): node is (ts.NamedDeclaration  & { name: ts.DeclarationName }) {
-		let candidate = node as ts.NamedDeclaration;
+		const candidate = node as ts.NamedDeclaration;
 		return candidate !== undefined && candidate.name !== undefined;
 	}
 
 	export function isNode(value: any): value is ts.Node {
-		let candidate: ts.Node = value;
+		const candidate: ts.Node = value;
 		return candidate !== undefined && Is.number(candidate.flags) && Is.number(candidate.kind);
 	}
 }
@@ -64,7 +64,7 @@ export function toOutLocation(path: string, rootDir: string, outDir: string): st
 }
 
 export function computeMonikerPath(from: string, to: string): string {
-	let result = path.posix.relative(from, to);
+	const result = path.posix.relative(from, to);
 	if (result.endsWith('.d.ts')) {
 		return result.substring(0, result.length - 5);
 	} else if (result.endsWith('.ts') || result.endsWith('.js')) {
@@ -145,7 +145,7 @@ export namespace Symbol {
 		if (result !== undefined) {
 			return result;
 		}
-		let declarations = symbol.getDeclarations();
+		const declarations = symbol.getDeclarations();
 		if (declarations === undefined) {
 			if (typeChecker.isUnknownSymbol(symbol)) {
 				return Unknown;
@@ -155,8 +155,8 @@ export namespace Symbol {
 				return None;
 			}
 		}
-		let fragments: { f: string; s: number; e: number; k: number }[] = [];
-		for (let declaration of declarations) {
+		const fragments: { f: string; s: number; e: number; k: number }[] = [];
+		for (const declaration of declarations) {
 			fragments.push({
 				f: declaration.getSourceFile().fileName,
 				s: declaration.getStart(),
@@ -302,7 +302,7 @@ export interface DefinitionInfo {
 	file: string;
 	kind: ts.SyntaxKind;
 	start: number;
-	end: number
+	end: number;
 }
 
 export namespace DefinitionInfo {
@@ -346,7 +346,7 @@ export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.
 		processed.add(symbolKey);
 		const containingType = (symbol as InternalSymbol).containingType;
 		if (containingType !== undefined) {
-			for (let typeElem of containingType.types) {
+			for (const typeElem of containingType.types) {
 				const symbolElem = typeElem.getProperty(symbol.getName());
 				if (symbolElem !== undefined) {
 					_getCompositeLeafSymbols(result, processed, typeChecker, symbolElem);
@@ -357,7 +357,7 @@ export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.
 			const type = typeChecker.getDeclaredTypeOfSymbol(symbol);
 			// we have something like x: A | B;
 			if (type.isUnionOrIntersection()) {
-				for (let typeElem of type.types) {
+				for (const typeElem of type.types) {
 					const symbolElem = typeElem.symbol;
 					// This happens for base types like undefined, number, ....
 					if (symbolElem !== undefined) {
@@ -379,11 +379,11 @@ export function getCompositeLeafSymbols(typeChecker: ts.TypeChecker, symbol: ts.
 }
 
 export function getUniqueSourceFiles(declarations: ts.Declaration[] | undefined): Set<ts.SourceFile> {
-	let result: Set<ts.SourceFile> = new Set();
+	const result: Set<ts.SourceFile> = new Set();
 	if (declarations === undefined || declarations.length === 0) {
 		return result;
 	}
-	for (let declaration of declarations) {
+	for (const declaration of declarations) {
 		result.add(declaration.getSourceFile());
 	}
 	return result;

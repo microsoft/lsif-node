@@ -22,7 +22,7 @@ class PackageJson {
 	static read(filename: string): PackageJson | undefined {
 		try {
 			if (fs.existsSync(filename)) {
-				let content: PackageJson = new PackageJson(filename, JSON.parse(fs.readFileSync(filename, { encoding: 'utf8' })));
+				const content: PackageJson = new PackageJson(filename, JSON.parse(fs.readFileSync(filename, { encoding: 'utf8' })));
 				if (Is.string(content.name)) {
 					return content;
 				}

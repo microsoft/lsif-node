@@ -23,7 +23,7 @@ export class StdoutWriter implements Writer {
 	}
 
 	write(...data: string[]): void {
-		for (let chunk of data) {
+		for (const chunk of data) {
 			__stdout.write(chunk);
 		}
 	}
@@ -33,7 +33,7 @@ export class StdoutWriter implements Writer {
 	}
 
 	writeln(...data: string[]): void {
-		for (let chunk of data) {
+		for (const chunk of data) {
 			__stdout.write(chunk);
 		}
 		__stdout.write(__eol);
@@ -49,7 +49,7 @@ export class FileWriter implements Writer{
 		if (data.length === 0) {
 			return;
 		}
-		for (let chunk of data) {
+		for (const chunk of data) {
 			this.writeBuffer(Buffer.from(chunk, 'utf8'));
 		}
 	}
@@ -63,7 +63,7 @@ export class FileWriter implements Writer{
 			this.writeEOL();
 			return;
 		}
-		for (let chunk of data) {
+		for (const chunk of data) {
 			this.writeBuffer(Buffer.from(chunk, 'utf8'));
 		}
 		this.writeEOL();

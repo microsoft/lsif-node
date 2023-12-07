@@ -869,7 +869,7 @@ export interface MetaData extends V {
 	 * positions and ranges. Currently only 'utf-16' is support due to the
 	 * limitations in LSP.
 	 */
-	positionEncoding: 'utf-16'
+	positionEncoding: 'utf-16';
 
 	/**
 	 * Information about the tool that created the dump
@@ -1235,7 +1235,7 @@ export interface PackageInformation extends V {
 	/**
 	 * Optional information about the repository containing the source of the package.
 	 */
-	repository?: RepositoryInfo
+	repository?: RepositoryInfo;
 }
 
 export namespace PackageInformation {
@@ -1265,7 +1265,7 @@ export interface RangeBasedDocumentSymbol {
 	/**
 	 * The range to reference.
 	 */
-	id: RangeId
+	id: RangeId;
 
 	/**
 	 * The child symbols.
@@ -2080,12 +2080,12 @@ export type Edge =
 
 export namespace Edge {
 	export function is11(edge: Edge): edge is (Edge & { inV: Id }) {
-		let candidate = edge as E11<any, any, any>;
+		const candidate = edge as E11<any, any, any>;
 		return candidate && candidate.inV !== undefined;
 	}
 
 	export function is1N(edge: Edge): edge is (Edge & {inVs: Id[]}) {
-		let candidate = edge as E1N<any, any, any>;
+		const candidate = edge as E1N<any, any, any>;
 		return candidate && Array.isArray(candidate.inVs);
 
 	}

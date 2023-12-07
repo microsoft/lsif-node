@@ -34,7 +34,7 @@ export class GraphStore extends Store {
 	private monikerInserter: Inserter;
 
 	private source: Source | undefined;
-	private pendingDocumentInserts: Map<Id, { uri: string, hash: string }>;
+	private pendingDocumentInserts: Map<Id, { uri: string; hash: string }>;
 	private pendingRangeInserts: Map<Id, Range>;
 
 	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, private mode: Mode) {
@@ -286,7 +286,7 @@ export class GraphStore extends Store {
 		} else if (Edge.is1N(edge)) {
 			const id = this.transformId(edge.id);
 			const outV = this.transformId(edge.outV);
-			for (let inV of edge.inVs) {
+			for (const inV of edge.inVs) {
 				this.edgeInserter.do(id, label, outV, this.transformId(inV));
 			}
 		}
@@ -297,7 +297,7 @@ export class GraphStore extends Store {
 		const id = this.transformId(contains.id);
 		const outV = this.transformId(contains.outV);
 
-		for (let element of contains.inVs) {
+		for (const element of contains.inVs) {
 			const inV = this.transformId(element);
 			const document = this.pendingDocumentInserts.get(inV);
 			const range = this.pendingRangeInserts.get(inV);
@@ -320,7 +320,7 @@ export class GraphStore extends Store {
 		const id = this.transformId(item.id);
 		const outV = this.transformId(item.outV);
 		const shard = this.transformId(item.shard);
-		for (let element of item.inVs) {
+		for (const element of item.inVs) {
 			const inV = this.transformId(element);
 			if (item.property !== undefined) {
 				this.itemInserter.do(id, outV, inV, shard, itemPropertyShortForms.get(item.property));
