@@ -6,6 +6,6 @@
   "author": "MS",
   "license": "MIT",
   "dependencies": {
-    "is": "3.2.1"
+    "is": "3.3.0"
   }
 }

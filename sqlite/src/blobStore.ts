@@ -545,7 +545,7 @@ export class BlobStore extends Store implements DataProvider {
 		this.hoverInserter = new Inserter(this.db, 'Insert Into hovers (scheme, identifier, hoverHash)', 3, 128);
 
 		if (!forceDelete) {
-			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all();
+			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all() as { hash: string }[];
 			for (let item of hashes) {
 				this.knownHashes.add(item.hash);
 			}

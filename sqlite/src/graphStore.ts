@@ -43,13 +43,13 @@ export class GraphStore extends Store {
 		this.pendingRangeInserts = new Map();
 		if (mode === 'import' && fs.existsSync(filename)) {
 			this.db = new Sqlite(filename);
-			const format = this.db.prepare('Select * from format f').get().format;
+			const format = (this.db.prepare('Select * from format f').get() as any).format;
 			if (format !== 'graph') {
 				this.db.close();
 				throw new Error(`Can only import an additional dump into a graph DB. Format was ${format}`);
 			}
-			const maxVertices: Id | undefined = this.db.prepare('Select Max([id]) as max from vertices').get().max;
-			const maxEdges: Id | undefined = this.db.prepare('Select Max([id]) as max from edges').get().max;
+			const maxVertices: Id | undefined = (this.db.prepare('Select Max([id]) as max from vertices').get() as any).max;
+			const maxEdges: Id | undefined = (this.db.prepare('Select Max([id]) as max from edges').get() as any).max;
 			if (typeof maxVertices === 'number' && typeof maxEdges === 'number') {
 				const delta = Math.max(maxVertices, maxEdges);
 				this.setIdTransformer((value: Id) => {
@@ -197,7 +197,7 @@ export class GraphStore extends Store {
 			const value = this.compress(vertex);
 			this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 		} else {
-			const stored: MetaData = JSON.parse(this.db.prepare(`Select id, value from meta`).get().value);
+			const stored: MetaData = JSON.parse((this.db.prepare(`Select id, value from meta`).get() as any).value);
 			if (vertex.version !== stored.version || vertex.positionEncoding !== stored.positionEncoding) {
 				this.db.close();
 				throw new Error(`Index can't be merged into DB. Version, position encoding or project root differs.`);
