@@ -1046,7 +1046,7 @@ export namespace Project {
 	export const descriptor = new VertexDescriptor<Project>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.project),
 		kind: new StringProperty(),
-		name: new StringProperty(),
+		name: new StringProperty(PropertyFlags.optional),
 		resource: new UriProperty(PropertyFlags.optional),
 		contents: new StringProperty(PropertyFlags.optional)
 	}));
