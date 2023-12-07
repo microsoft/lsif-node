@@ -120,8 +120,8 @@ namespace LiteralMap {
 	}
 
 	export function values<T>(map: LiteralMap<T>): T[] {
-		let result: T[] = [];
-		for (let key of Object.keys(map)) {
+		const result: T[] = [];
+		for (const key of Object.keys(map)) {
 			result.push(map[key]);
 		}
 		return result;
@@ -362,16 +362,16 @@ class DocumentData {
 			return [range.start.line, range.start.character, range.end.line, range.end.character];
 		};
 
-		let externalDeclarations: ExternalDeclaration[] = [];
-		for (let declaration of this.declarations) {
+		const externalDeclarations: ExternalDeclaration[] = [];
+		for (const declaration of this.declarations) {
 			externalDeclarations.push({ scheme: declaration.moniker.scheme, indentifier: declaration.moniker.identifier, ranges: declaration.data.values.map(id2InlineRange) });
 		}
-		let externalDefinitions: ExternalDefinition[] = [];
-		for (let definition of this.definitions) {
+		const externalDefinitions: ExternalDefinition[] = [];
+		for (const definition of this.definitions) {
 			externalDefinitions.push({ scheme: definition.moniker.scheme, indentifier: definition.moniker.identifier, ranges: definition.data.values.map(id2InlineRange) });
 		}
-		let externalReferences: ExternalReference[] = [];
-		for (let reference of this.references) {
+		const externalReferences: ExternalReference[] = [];
+		for (const reference of this.references) {
 			externalReferences.push({
 				scheme: reference.moniker.scheme, indentifier: reference.moniker.identifier,
 				declarations : reference.data.declarations ? reference.data.declarations.map(id2InlineRange) : undefined,
@@ -394,12 +394,12 @@ class DocumentData {
 		const options: CompressorOptions = { mode: 'hash' };
 		const compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.range));
 		const rangeHashes: Map<Id, string> = new Map();
-		for (let key of Object.keys(this.blob.ranges)) {
+		for (const key of Object.keys(this.blob.ranges)) {
 			const range = this.blob.ranges[key];
 			const rangeHash = crypto.createHash('md5').update(JSON.stringify(compressor.compress(range, options), undefined, 0)).digest('base64');
 			rangeHashes.set(Number(key), rangeHash);
 		}
-		for (let item of Array.from(rangeHashes.values()).sort(Strings.compare)) {
+		for (const item of Array.from(rangeHashes.values()).sort(Strings.compare)) {
 			hash.update(item);
 		}
 
@@ -407,7 +407,7 @@ class DocumentData {
 		if (this.blob.monikers !== undefined) {
 			const monikers = LiteralMap.values(this.blob.monikers).sort(Monikers.compare);
 			const compressor = assertDefined(Compressor.getVertexCompressor(VertexLabels.moniker));
-			for (let moniker of monikers) {
+			for (const moniker of monikers) {
 				const compressed = compressor.compress(moniker, options);
 				hash.update(JSON.stringify(compressed, undefined, 0));
 			}
@@ -416,7 +416,7 @@ class DocumentData {
 		// Assume that folding ranges are already sorted
 		if (this.blob.foldingRanges) {
 			const compressor = foldingRangeCompressor;
-			for (let range of this.blob.foldingRanges) {
+			for (const range of this.blob.foldingRanges) {
 				const compressed = compressor.compress(range, options);
 				hash.update(JSON.stringify(compressed, undefined, 0));
 			}
@@ -434,15 +434,15 @@ class DocumentData {
 				item.push(rangeHash);
 				if (value.children && value.children.length > 0) {
 					const children: any[] = [];
-					for (let child of value.children) {
+					for (const child of value.children) {
 						inline(children, child);
 					}
 					item.push(children);
 				}
 				result.push(item);
 			};
-			let compressed: any[] = [];
-			for (let symbol of (this.blob.documentSymbols as RangeBasedDocumentSymbol[])) {
+			const compressed: any[] = [];
+			for (const symbol of (this.blob.documentSymbols as RangeBasedDocumentSymbol[])) {
 				inline(compressed, symbol);
 			}
 			hash.update(JSON.stringify(compressed, undefined, 0));
@@ -452,8 +452,8 @@ class DocumentData {
 		if (this.blob.diagnostics && this.blob.diagnostics.length > 0) {
 			this.blob.diagnostics = this.blob.diagnostics.sort(Diagnostics.compare);
 			const compressor = diagnosticCompressor;
-			for (let diagnostic of this.blob.diagnostics) {
-				let compressed = compressor.compress(diagnostic, options);
+			for (const diagnostic of this.blob.diagnostics) {
+				const compressed = compressor.compress(diagnostic, options);
 				hash.update(JSON.stringify(compressed, undefined, 0));
 			}
 		}
@@ -545,8 +545,8 @@ export class BlobStore extends Store implements DataProvider {
 		this.hoverInserter = new Inserter(this.db, 'Insert Into hovers (scheme, identifier, hoverHash)', 3, 128);
 
 		if (!forceDelete) {
-			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all();
-			for (let item of hashes) {
+			const hashes: { hash: string }[] = this.db.prepare('Select hash From blobs').all() as { hash: string }[];
+			for (const item of hashes) {
 				this.knownHashes.add(item.hash);
 			}
 		}
@@ -676,7 +676,7 @@ export class BlobStore extends Store implements DataProvider {
 	}
 
 	public getAndDeleteHoverData(id: Id): lsp.Hover | undefined {
-		let result = this.hoverDatas.get(id);
+		const result = this.hoverDatas.get(id);
 		if (result !== undefined) {
 			// We don't delete the hover right now.
 			// See https://github.com/microsoft/lsif-node/issues/57
@@ -728,7 +728,7 @@ export class BlobStore extends Store implements DataProvider {
 		if (!this.forceDelete) {
 			return;
 		}
-		let value = JSON.stringify(vertex, undefined, 0);
+		const value = JSON.stringify(vertex, undefined, 0);
 		this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 		this.db.exec(`Insert into format (format) Values ('blob')`);
 	}
@@ -737,7 +737,7 @@ export class BlobStore extends Store implements DataProvider {
 		if (event.scope === EventScope.project) {
 
 		} else if (event.scope === EventScope.document) {
-			let documentEvent = event as DocumentEvent;
+			const documentEvent = event as DocumentEvent;
 			switch (event.kind) {
 				case EventKind.begin:
 					this.handleDocumentBegin(documentEvent);
@@ -759,17 +759,17 @@ export class BlobStore extends Store implements DataProvider {
 	}
 
 	private handleRange(range: Range): void {
-		let data: RangeData = { start: range.start, end: range.end, tag: range.tag };
+		const data: RangeData = { start: range.start, end: range.end, tag: range.tag };
 		this.rangeDatas.set(range.id, data);
 	}
 
 	private handleResultSet(set: ResultSet): void {
-		let data: ResultSetData = {};
+		const data: ResultSetData = {};
 		this.resultSetDatas.set(set.id, data);
 	}
 
 	private handleMoniker(moniker: Moniker): void {
-		let data: MonikerData = { scheme: moniker.scheme, identifier: moniker.identifier, kind: moniker.kind };
+		const data: MonikerData = { scheme: moniker.scheme, identifier: moniker.identifier, kind: moniker.kind };
 		this.monikerDatas.set(moniker.id, data);
 	}
 
@@ -841,7 +841,7 @@ export class BlobStore extends Store implements DataProvider {
 	// }
 
 	private handleItemEdge(edge: item): void {
-		let property: ItemEdgeProperties | undefined = edge.property;
+		const property: ItemEdgeProperties | undefined = edge.property;
 		if (property === undefined) {
 			const map: Map<Id, DefinitionResultData> | Map<Id, DeclarationResultData> = assertDefined(this.declarationDatas.get(edge.outV) || this.definitionDatas.get(edge.outV));
 			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.shard);
@@ -931,12 +931,12 @@ export class BlobStore extends Store implements DataProvider {
 		const documentData = this.getEnsureDocumentData(event.data);
 		const contains = this.containsDatas.get(event.data);
 		if (contains !== undefined) {
-			for (let id of contains) {
+			for (const id of contains) {
 				const range = assertDefined(this.rangeDatas.get(id));
 				documentData.addRangeData(id, range);
 			}
 		}
-		let data = documentData.finalize();
+		const data = documentData.finalize();
 		if (this.knownHashes.has(data.hash)) {
 			this.versionInserter.do(this.version, data.hash);
 		} else {
@@ -944,33 +944,33 @@ export class BlobStore extends Store implements DataProvider {
 			this.documentInserter.do(data.hash, documentData.uri);
 			this.versionInserter.do(this.version, data.hash);
 			if (data.declarations) {
-				for (let declaration of data.declarations) {
-					for (let range in declaration.ranges) {
+				for (const declaration of data.declarations) {
+					for (const range in declaration.ranges) {
 						this.declarationInserter.do(declaration.scheme, declaration.indentifier, data.hash, range[0], range[1], range[2], range[3]);
 					}
 				}
 			}
 			if (data.definitions) {
-				for (let definition of data.definitions) {
-					for (let range of definition.ranges) {
+				for (const definition of data.definitions) {
+					for (const range of definition.ranges) {
 						this.definitionInserter.do(definition.scheme, definition.indentifier, data.hash, range[0], range[1], range[2], range[3]);
 					}
 				}
 			}
 			if (data.references) {
-				for (let reference of data.references) {
+				for (const reference of data.references) {
 					if (reference.declarations) {
-						for (let range of reference.declarations) {
+						for (const range of reference.declarations) {
 							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 0, range[0], range[1], range[2], range[3]);
 						}
 					}
 					if (reference.definitions) {
-						for (let range of reference.definitions) {
+						for (const range of reference.definitions) {
 							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 1, range[0], range[1], range[2], range[3]);
 						}
 					}
 					if (reference.references) {
-						for (let range of reference.references) {
+						for (const range of reference.references) {
 							this.referneceInserter.do(reference.scheme, reference.indentifier, data.hash, 2, range[0], range[1], range[2], range[3]);
 						}
 					}
@@ -981,7 +981,7 @@ export class BlobStore extends Store implements DataProvider {
 	}
 
 	public storeHover(moniker: MonikerData, id: Id): void {
-		let hover = this.getAndDeleteHoverData(id);
+		const hover = this.getAndDeleteHoverData(id);
 		// We have already processed the hover
 		if (hover === undefined) {
 			return;
@@ -1018,7 +1018,7 @@ export class BlobStore extends Store implements DataProvider {
 	}
 
 	private getDocumentData(id: Id): DocumentData | undefined {
-		let result: DocumentData | undefined | null = this.documentDatas.get(id);
+		const result: DocumentData | undefined | null = this.documentDatas.get(id);
 		if (result === null) {
 			throw new Error(`The document with Id ${id} has already been processed.`);
 		}
@@ -1026,7 +1026,7 @@ export class BlobStore extends Store implements DataProvider {
 	}
 
 	private getEnsureDocumentData(id: Id): DocumentData {
-		let result: DocumentData | undefined | null = this.documentDatas.get(id);
+		const result: DocumentData | undefined | null = this.documentDatas.get(id);
 		if (result === undefined) {
 			throw new Error(`No document data found for id ${id}`);
 		}

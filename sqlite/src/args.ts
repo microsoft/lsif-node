@@ -16,11 +16,11 @@ export interface Options {
 	compressOnly: boolean;
 	format: 'graph' | 'blob';
 	projectVersion?: string;
-	delete: boolean,
+	delete: boolean;
 	in?: string;
 	stdin: boolean;
 	out?: string;
-	mode: Mode
+	mode: Mode;
 	stdout: boolean;
 }
 

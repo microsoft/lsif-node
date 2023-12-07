@@ -15,5 +15,6 @@ const args = process.argv.slice(2);
 const folders = ['protocol', 'tsc', 'npm', 'sqlite', 'tooling', 'tsc-tests', 'lsif'];
 
 for (const folder of folders) {
+	console.log(`Running npm ${args.join(' ')} in ${folder}`);
 	child_process.spawnSync(`npm ${args.join(' ')}`, { cwd: path.join(root, folder), shell: true, stdio: 'inherit' });
 }

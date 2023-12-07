@@ -71,7 +71,7 @@ export abstract class Store {
 							itemEdgeCompressor: itemEdgeCompressor.id,
 							all: []
 						};
-						for (let compressor of compressors) {
+						for (const compressor of compressors) {
 							compressMetaData.compressors.all.push({
 								id: compressor.id,
 								parent: compressor.parent !== undefined ? compressor.parent.id : undefined,
@@ -96,7 +96,7 @@ export abstract class Store {
 		if (element.type === ElementTypes.vertex && element.label === VertexLabels.metaData) {
 			return JSON.stringify(element, undefined, 0);
 		}
-		let compressor = Compressor.getCompressor(element);
+		const compressor = Compressor.getCompressor(element);
 		if (compressor === undefined) {
 			throw new Error(`No compressor found for ${element.label}`);
 		}

@@ -100,6 +100,11 @@ async function runValidate(cwd, outFile) {
  * @param {string} repository
  */
 async function checkRepository(root, hub, org, repository) {
+	const offTag = path.join(root, hub, org, repository, 'off');
+	if (await exists(offTag)) {
+		return -1;
+	}
+
 	if (hub === 'github.com') {
 		const url = `https://github.com/${org}/${repository}`;
 		process.stdout.write(`====================== Checking repository ${url} ===========================\n\n`);

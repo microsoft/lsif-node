@@ -27,7 +27,7 @@ export interface SourceOptions {
 	repository?: {
 		type: string;
 		url: string;
-	}
+	};
 }
 
 // JS / TSConfig options. In the TS API this is treated

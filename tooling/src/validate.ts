@@ -112,7 +112,7 @@ export class ValidateCommand extends Command {
 		let cardinalityCorrect: boolean = true;
 		let isOpen: boolean = true;
 		let isClosed: boolean = false;
-		let freeRanges: Id[] = [];
+		const freeRanges: Id[] = [];
 
 		if (valid) {
 			const referencedVertices: [VertexLabels | undefined, VertexLabels | undefined][] = [];

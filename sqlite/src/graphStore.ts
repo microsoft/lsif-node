@@ -34,7 +34,7 @@ export class GraphStore extends Store {
 	private monikerInserter: Inserter;
 
 	private source: Source | undefined;
-	private pendingDocumentInserts: Map<Id, { uri: string, hash: string }>;
+	private pendingDocumentInserts: Map<Id, { uri: string; hash: string }>;
 	private pendingRangeInserts: Map<Id, Range>;
 
 	public constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, private mode: Mode) {
@@ -43,13 +43,13 @@ export class GraphStore extends Store {
 		this.pendingRangeInserts = new Map();
 		if (mode === 'import' && fs.existsSync(filename)) {
 			this.db = new Sqlite(filename);
-			const format = this.db.prepare('Select * from format f').get().format;
+			const format = (this.db.prepare('Select * from format f').get() as any).format;
 			if (format !== 'graph') {
 				this.db.close();
 				throw new Error(`Can only import an additional dump into a graph DB. Format was ${format}`);
 			}
-			const maxVertices: Id | undefined = this.db.prepare('Select Max([id]) as max from vertices').get().max;
-			const maxEdges: Id | undefined = this.db.prepare('Select Max([id]) as max from edges').get().max;
+			const maxVertices: Id | undefined = (this.db.prepare('Select Max([id]) as max from vertices').get() as any).max;
+			const maxEdges: Id | undefined = (this.db.prepare('Select Max([id]) as max from edges').get() as any).max;
 			if (typeof maxVertices === 'number' && typeof maxEdges === 'number') {
 				const delta = Math.max(maxVertices, maxEdges);
 				this.setIdTransformer((value: Id) => {
@@ -197,7 +197,7 @@ export class GraphStore extends Store {
 			const value = this.compress(vertex);
 			this.db.exec(`Insert Into meta (id, value) Values (${vertex.id}, '${value}')`);
 		} else {
-			const stored: MetaData = JSON.parse(this.db.prepare(`Select id, value from meta`).get().value);
+			const stored: MetaData = JSON.parse((this.db.prepare(`Select id, value from meta`).get() as any).value);
 			if (vertex.version !== stored.version || vertex.positionEncoding !== stored.positionEncoding) {
 				this.db.close();
 				throw new Error(`Index can't be merged into DB. Version, position encoding or project root differs.`);
@@ -286,7 +286,7 @@ export class GraphStore extends Store {
 		} else if (Edge.is1N(edge)) {
 			const id = this.transformId(edge.id);
 			const outV = this.transformId(edge.outV);
-			for (let inV of edge.inVs) {
+			for (const inV of edge.inVs) {
 				this.edgeInserter.do(id, label, outV, this.transformId(inV));
 			}
 		}
@@ -297,7 +297,7 @@ export class GraphStore extends Store {
 		const id = this.transformId(contains.id);
 		const outV = this.transformId(contains.outV);
 
-		for (let element of contains.inVs) {
+		for (const element of contains.inVs) {
 			const inV = this.transformId(element);
 			const document = this.pendingDocumentInserts.get(inV);
 			const range = this.pendingRangeInserts.get(inV);
@@ -320,7 +320,7 @@ export class GraphStore extends Store {
 		const id = this.transformId(item.id);
 		const outV = this.transformId(item.outV);
 		const shard = this.transformId(item.shard);
-		for (let element of item.inVs) {
+		for (const element of item.inVs) {
 			const inV = this.transformId(element);
 			if (item.property !== undefined) {
 				this.itemInserter.do(id, outV, inV, shard, itemPropertyShortForms.get(item.property));

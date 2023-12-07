@@ -31,7 +31,7 @@ export interface RunOptions {
 	out?: string;
 	stdout: boolean;
 	format: 'graph' | 'blob';
-	mode: Mode
+	mode: Mode;
 }
 
 async function execute(options: RunOptions): Promise<void> {

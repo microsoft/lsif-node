@@ -209,7 +209,7 @@ class ExportLinker {
 			} else {
 				npmIdentifier = NpmMoniker.create(this.packageJson.name, monikerPath, tscMoniker.name);
 			}
-			let npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
+			const npmMoniker = this.queue.createMoniker(NpmMoniker.scheme, npmIdentifier, UniquenessLevel.scheme, moniker.kind);
 			this.queue.createPackageInformationEdge(npmMoniker.id, this.packageInformation!.id);
 			this.queue.createAttachEdge(npmMoniker.id, moniker.id);
 		}
@@ -228,7 +228,7 @@ class ExportLinker {
 		}
 	}
 
-	private getMonikerPath(projectRoot: string, tscMoniker: TscMoniker & { path: string; }): string {
+	private getMonikerPath(projectRoot: string, tscMoniker: TscMoniker & { path: string }): string {
 		const fullPath = path.posix.join(projectRoot, tscMoniker.path);
 		if (paths.isParent(this.pathPrefix, fullPath)) {
 			return path.posix.relative(this.pathPrefix, fullPath);
@@ -239,7 +239,7 @@ class ExportLinker {
 
 class ImportLinker {
 
-	private packageData: Map<string,  { packageInfo: PackageInformation, packageJson: PackageJson } | null>;
+	private packageData: Map<string,  { packageInfo: PackageInformation; packageJson: PackageJson } | null>;
 
 	constructor(private source: SourceInfo, private queue: AttachQueue) {
 		this.packageData = new Map();
@@ -377,7 +377,7 @@ export async function run(options: Options): Promise<void> {
 	const rd = readline.createInterface(input);
 	rd.on('line', (line) => {
 		emit(line);
-		let element: Edge | Vertex = JSON.parse(line);
+		const element: Edge | Vertex = JSON.parse(line);
 		lastId = element.id;
 		if (needsInitialization) {
 			queue.initialize(element.id);
@@ -417,5 +417,5 @@ export function main(): Promise<void> {
 }
 
 if (require.main === module) {
-	main();
+	main().catch(console.error);
 }

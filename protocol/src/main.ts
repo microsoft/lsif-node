@@ -9,6 +9,6 @@ export { lsp };
 export * from './protocol';
 
 export const Version = function () {
-	let packageJson = require('../package.json');
+	const packageJson = require('../package.json');
 	return packageJson.version;
 }();

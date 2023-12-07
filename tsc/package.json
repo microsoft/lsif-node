@@ -20,12 +20,12 @@
 		"latest-version": "^7.0.0",
 		"lsif-protocol": "0.6.0-next.7",
 		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.8.4-lsif.1/lsif-typescript-4.8.4-lsif.1.tgz",
-		"uuid": "^9.0.0",
-		"vscode-uri": "^3.0.7",
-		"yargs": "^17.6.2"
+		"uuid": "^9.0.1",
+		"vscode-uri": "^3.0.8",
+		"yargs": "^17.7.2"
 	},
 	"devDependencies": {
-		"@types/uuid": "^9.0.0"
+		"@types/uuid": "^9.0.7"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",

@@ -42,7 +42,7 @@ export interface CompressorProperty {
 	name: string | number | symbol;
 	index: number;
 	shortForm: [string, string | number][] | undefined;
-	compressionKind: CompressionKind,
+	compressionKind: CompressionKind;
 }
 
 export namespace CompressorProperty {
@@ -72,7 +72,7 @@ export namespace CompressorOptions {
 	});
 
 	export function is(value: Partial<CompressorOptions>): value is CompressorOptions {
-		let candidate: CompressorOptions = value as CompressorOptions;
+		const candidate: CompressorOptions = value as CompressorOptions;
 		return candidate !== undefined && typeof candidate.mode === 'string';
 	}
 
@@ -114,11 +114,11 @@ export abstract class Compressor<T> {
 	}
 
 	public static allCompressors(): Compressor<any>[] {
-		let result = this.compressors.slice(0);
-		for (let elem of this.vertexCompressors.values()) {
+		const result = this.compressors.slice(0);
+		for (const elem of this.vertexCompressors.values()) {
 			result.push(elem);
 		}
-		for (let elem of this.edgeCompressors.values()) {
+		for (const elem of this.edgeCompressors.values()) {
 			result.push(elem);
 		}
 		return result;
@@ -144,7 +144,7 @@ export abstract class Compressor<T> {
 export interface GenericCompressorProperty<T, P = void> {
 	name: keyof T;
 	index: number;
-	compressionKind: CompressionKind,
+	compressionKind: CompressionKind;
 	shortForm: Map<string, string | number> | undefined;
 	compressor: Compressor<any> | ((value: any) => Compressor<any> | undefined) | undefined;
 }
@@ -201,7 +201,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 	}
 
 	public compress(element: T, options: CompressorOptions, level: number = 0): CompressValue {
-		let result: CompressArray = this._parent !== undefined ? this._parent.compress(element, options, level + 1) as CompressArray: [];
+		const result: CompressArray = this._parent !== undefined ? this._parent.compress(element, options, level + 1) as CompressArray: [];
 		if (level === 0) {
 			result.unshift(options.mode === 'store' ? this._id : -1);
 		}
@@ -231,8 +231,8 @@ export class GenericCompressor<T> extends Compressor<T> {
 			return value(prop);
 		}
 
-		for (let item of this._properties) {
-			let value = element[item.name];
+		for (const item of this._properties) {
+			const value = element[item.name];
 			if (value === undefined || value === null) {
 				recordUndefined();
 				continue;
@@ -267,6 +267,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					result.push(value as unknown as CompressValue);
 					break;
 				case CompressionKind.scalar:
+					// eslint-disable-next-line no-case-declarations
 					let convertedScalar: any = value;
 					if (item.shortForm !== undefined && Is.string(value)) {
 						const short = item.shortForm.get(value);
@@ -278,6 +279,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					result.push(convertedScalar as CompressValue);
 					break;
 				case CompressionKind.literal:
+					// eslint-disable-next-line no-case-declarations
 					const c1 = getCompressor(item.compressor, value, true);
 					pushUndefined();
 					result.push(c1.compress(value, options));
@@ -286,6 +288,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					if (!Array.isArray(value)) {
 						throw new Error('Type mismatch. Compressor property declares array but value is not an array');
 					}
+					// eslint-disable-next-line no-case-declarations
 					const convertedArray: any[] = [];
 					for (const element of value) {
 						const c2 = getCompressor(item.compressor, element, false);
@@ -299,6 +302,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 					result.push(convertedArray);
 					break;
 				case CompressionKind.any:
+					// eslint-disable-next-line no-case-declarations
 					const handleValue = (value: any): any => {
 						const compressor = getCompressor(item.compressor, value, false);
 						if (compressor !== undefined) {
@@ -310,6 +314,7 @@ export class GenericCompressor<T> extends Compressor<T> {
 						}
 						throw new Error(`Any compression kind can't infer conversion for property ${String(item.name)}`);
 					};
+					// eslint-disable-next-line no-case-declarations
 					let convertedAny: any;
 					if (Array.isArray(value)) {
 						convertedAny = [];
@@ -330,12 +335,12 @@ export class GenericCompressor<T> extends Compressor<T> {
 	}
 
 	public metaData(): CompressorProperty[] {
-		let result: CompressorProperty[] = [];
-		for (let item of this._properties) {
+		const result: CompressorProperty[] = [];
+		for (const item of this._properties) {
 			let shortForm: [string, string | number][] | undefined = undefined;
 			if (item.shortForm !== undefined) {
 				shortForm = [];
-				for (let entry of item.shortForm.entries()) {
+				for (const entry of item.shortForm.entries()) {
 					shortForm.push(entry);
 				}
 			}
@@ -548,7 +553,7 @@ class RangeCompressor extends Compressor<Range> {
 	}
 
 	public compress(element: Range, options: CompressorOptions): CompressValue {
-		let result = vertexCompressor.compress(element, options, 1) as CompressArray;
+		const result = vertexCompressor.compress(element, options, 1) as CompressArray;
 		result.unshift(options.mode === 'store' ? this._id : -1);
 		result.push(element.start.line, element.start.character, element.end.line, element.end.character);
 		if (element.tag) {
@@ -754,7 +759,7 @@ const typeDefinitionResultCompressor = new GenericCompressor<TypeDefinitionResul
 ]);
 Compressor.registerVertexCompressor(VertexLabels.typeDefinitionResult, typeDefinitionResultCompressor);
 
-const markedStringCompressor = new GenericCompressor<{language: string; value: string;}>(undefined, Compressor.nextId(), (next) => [
+const markedStringCompressor = new GenericCompressor<{language: string; value: string}>(undefined, Compressor.nextId(), (next) => [
 	GenericCompressorProperty.scalar('language', next()),
 	GenericCompressorProperty.scalar('value', next())
 ]);

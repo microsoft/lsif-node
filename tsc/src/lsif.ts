@@ -56,8 +56,8 @@ namespace Converter {
 	}
 
 	export function asRange(this: void, file: ts.SourceFile, offset: number, length: number): lsp.Range {
-		let start = file.getLineAndCharacterOfPosition(offset);
-		let end = file.getLineAndCharacterOfPosition(offset + length);
+		const start = file.getLineAndCharacterOfPosition(offset);
+		const end = file.getLineAndCharacterOfPosition(offset + length);
 		return {
 			start: { line: start.line, character: start.character },
 			end: { line: end.line, character: end.character }
@@ -71,7 +71,7 @@ namespace Converter {
 		} else {
 			start = file.getLineAndCharacterOfPosition(node.getStart(file, includeJsDocComment));
 		}
-		let end = file.getLineAndCharacterOfPosition(node.getEnd());
+		const end = file.getLineAndCharacterOfPosition(node.getEnd());
 		return {
 			start: { line: start.line, character: start.character },
 			end: { line: end.line, character: end.character }
@@ -79,8 +79,8 @@ namespace Converter {
 	}
 
 	export function rangeFromTextSpan(this: void, file: ts.SourceFile, textSpan: ts.TextSpan): lsp.Range {
-		let start = file.getLineAndCharacterOfPosition(textSpan.start);
-		let end = file.getLineAndCharacterOfPosition(textSpan.start + textSpan.length);
+		const start = file.getLineAndCharacterOfPosition(textSpan.start);
+		const end = file.getLineAndCharacterOfPosition(textSpan.start + textSpan.length);
 		return {
 			start: { line: start.line, character: start.character },
 			end: { line: end.line, character: end.character }
@@ -88,9 +88,9 @@ namespace Converter {
 	}
 
 	export function asFoldingRange(this: void, file: ts.SourceFile, span: ts.OutliningSpan): lsp.FoldingRange {
-		let kind = getFoldingRangeKind(span);
-		let start = file.getLineAndCharacterOfPosition(span.textSpan.start);
-		let end = file.getLineAndCharacterOfPosition(span.textSpan.start + span.textSpan.length);
+		const kind = getFoldingRangeKind(span);
+		const start = file.getLineAndCharacterOfPosition(span.textSpan.start);
+		const end = file.getLineAndCharacterOfPosition(span.textSpan.start + span.textSpan.length);
 		return {
 			kind,
 			startLine: start.line,
@@ -131,7 +131,7 @@ namespace Converter {
 	}
 
 	export function asHover(this: void, _file: ts.SourceFile, value: ts.QuickInfo): lsp.Hover {
-		let content: lsp.MarkedString[] = [];
+		const content: lsp.MarkedString[] = [];
 		if (value.displayParts !== undefined) {
 			content.push({ language: 'typescript', value: displayPartsToString(value.displayParts)});
 		}
@@ -230,7 +230,7 @@ class ProjectData extends LSIFData<EmitterContext> {
 			this.documents = [];
 		}
 		if (this.diagnostics.length > 0) {
-			let dr = this.vertex.diagnosticResult(this.diagnostics);
+			const dr = this.vertex.diagnosticResult(this.diagnostics);
 			this.emit(dr);
 			this.emit(this.edge.diagnostic(this.project, dr));
 		}
@@ -347,7 +347,7 @@ class DocumentData extends LSIFData<EmitterContext> {
 			this.emit(this.edge.contains(this.document, this.ranges));
 		}
 		if (this.diagnostics !== DocumentData.EMPTY_ARRAY) {
-			let dr = this.vertex.diagnosticResult(this.diagnostics);
+			const dr = this.vertex.diagnosticResult(this.diagnostics);
 			this.emit(dr);
 			this.emit(this.edge.diagnostic(this.document, dr));
 		}
@@ -408,7 +408,7 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 		if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
 			return undefined;
 		}
-		for (let definitionRange of this.definitionRanges) {
+		for (const definitionRange of this.definitionRanges) {
 			if (definitionRange.start.line === range.start.line && definitionRange.start.character === range.start.character &&
 				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character)
 			{
@@ -964,7 +964,7 @@ class MethodSymbolData extends StandardSymbolData {
 		// We take the first source file to cluster this. We might want to find a source
 		// file that has already changed to make the diff minimal.
 		if (this.rootSymbolData !== undefined) {
-			for (let root of this.rootSymbolData) {
+			for (const root of this.rootSymbolData) {
 				super.addReference(this.shard!, root.getOrCreateReferenceResult());
 				const moniker = root.getMostUniqueMoniker();
 				if (moniker !== undefined && moniker.scheme !== 'local') {
@@ -978,7 +978,7 @@ class MethodSymbolData extends StandardSymbolData {
 	public addDefinition(shard: Shard, definition: DefinitionRange): void {
 		super.addDefinition(shard, definition, this.rootSymbolData === undefined);
 		if (this.rootSymbolData !== undefined) {
-			for (let base of this.rootSymbolData) {
+			for (const base of this.rootSymbolData) {
 				base.getOrCreatePartition(shard).addReference(definition, ItemEdgeProperties.definitions);
 			}
 		}
@@ -989,7 +989,7 @@ class MethodSymbolData extends StandardSymbolData {
 			if (reference.label === 'range') {
 				this.emit(this.edge.next(reference, this.resultSet));
 			}
-			for (let root of this.rootSymbolData) {
+			for (const root of this.rootSymbolData) {
 				root.getOrCreatePartition(shard).addReference(reference as any, property as any);
 			}
 		} else {
@@ -1011,7 +1011,7 @@ class SymbolDataWithRoots extends StandardSymbolData {
 
 	public begin(): void {
 		super.begin();
-		for (let element of this.elements) {
+		for (const element of this.elements) {
 			const moniker = element.getMostUniqueMoniker();
 			super.addReference(this.shard!, element.getOrCreateReferenceResult());
 			if (moniker !== undefined && moniker.scheme !== 'local') {
@@ -1032,7 +1032,7 @@ class SymbolDataWithRoots extends StandardSymbolData {
 		if (reference.label === 'range') {
 			this.emit(this.edge.next(reference, this.resultSet));
 		}
-		for (let element of this.elements) {
+		for (const element of this.elements) {
 			element.getOrCreatePartition(shard).addReference(reference as any, property as any);
 		}
 	}
@@ -1729,21 +1729,21 @@ class Symbols {
 	}
 
 	private computeBaseSymbolsForClass(symbol: ts.Symbol): ts.Symbol[] | undefined {
-		let result: ts.Symbol[] = [];
-		let declarations = symbol.getDeclarations();
+		const result: ts.Symbol[] = [];
+		const declarations = symbol.getDeclarations();
 		if (declarations === undefined) {
 			return undefined;
 		}
-		let typeChecker = this.typeChecker;
-		for (let declaration of declarations) {
+		const typeChecker = this.typeChecker;
+		for (const declaration of declarations) {
 			if (ts.isClassDeclaration(declaration)) {
-				let heritageClauses = declaration.heritageClauses;
+				const heritageClauses = declaration.heritageClauses;
 				if (heritageClauses) {
-					for (let heritageClause of heritageClauses) {
-						for (let type of heritageClause.types) {
-							let tsType = typeChecker.getTypeAtLocation(type.expression);
+					for (const heritageClause of heritageClauses) {
+						for (const type of heritageClause.types) {
+							const tsType = typeChecker.getTypeAtLocation(type.expression);
 							if (tsType !== undefined) {
-								let baseSymbol = tsType.getSymbol();
+								const baseSymbol = tsType.getSymbol();
 								if (baseSymbol !== undefined && baseSymbol !== symbol) {
 									result.push(baseSymbol);
 								}
@@ -1757,15 +1757,15 @@ class Symbols {
 	}
 
 	private computeBaseSymbolsForInterface(symbol: ts.Symbol): ts.Symbol[] | undefined {
-		let result: ts.Symbol[] = [];
-		let tsType = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
+		const result: ts.Symbol[] = [];
+		const tsType = this.typeChecker.getDeclaredTypeOfSymbol(symbol);
 		if (tsType === undefined) {
 			return undefined;
 		}
-		let baseTypes = tsType.getBaseTypes();
+		const baseTypes = tsType.getBaseTypes();
 		if (baseTypes !== undefined) {
-			for (let base of baseTypes) {
-				let symbol = base.getSymbol();
+			for (const base of baseTypes) {
+				const symbol = base.getSymbol();
 				if (symbol) {
 					result.push(symbol);
 				}
@@ -1859,7 +1859,7 @@ class Symbols {
 		}
 		let moduleCount: number = 0;
 		let globalCount: number = 0;
-		for (let sourceFile of sourceFiles) {
+		for (const sourceFile of sourceFiles) {
 			// files that represent a module do have a resolve symbol.
 			if (this.getSymbolAtLocation(sourceFile) !== undefined) {
 				moduleCount++;
@@ -2043,7 +2043,7 @@ abstract class SymbolDataFactory {
 
 	public getIdentifierInformation(symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
 		if (tss.Node.isNamedDeclaration(declaration)) {
-			let name = declaration.name;
+			const name = declaration.name;
 			return [name, name.getText()];
 		}
 		if (Symbols.isValueModule(symbol) && ts.isSourceFile(declaration)) {
@@ -2166,7 +2166,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 		}
 		if (Symbols.isTransient(symbol)) {
 			// For the moniker we need to find out the ands and ors. Not sure how to do this.
-			let monikerIds: Set<string> = new Set();
+			const monikerIds: Set<string> = new Set();
 			for (const symbolData of symbolDataItems) {
 				const moniker = symbolData.getMostUniqueMoniker();
 				if (moniker === undefined) {
@@ -2612,7 +2612,7 @@ class TSProject {
 		this.typeChecker = typeChecker;
 
 
-		let dependentOutDirs = [];
+		const dependentOutDirs = [];
 		for (const info of references) {
 			dependentOutDirs.push(info.outDir);
 		}
@@ -2824,7 +2824,7 @@ class TSProject {
 				return false;
 			}
 			const fileName = sourceFile.fileName;
-			for (let outDir of dependentOutDirs) {
+			for (const outDir of dependentOutDirs) {
 				if (fileName.startsWith(outDir)) {
 					return true;
 				}
@@ -2907,7 +2907,7 @@ class TSProject {
 		}
 
 		let hover: lsp.Hover | undefined;
-		for (let declaration of declarations) {
+		for (const declaration of declarations) {
 			const sourceFile = declaration.getSourceFile();
 			const [identifierNode, identifierText] = factory.getIdentifierInformation(symbol, declaration);
 			if (identifierNode !== undefined && identifierText !== undefined) {
@@ -3028,7 +3028,7 @@ class TSProject {
 		// 	at Object.getQuickInfoAtPosition (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\node_modules\typescript\lib\typescript.js:122471:34)
 		// 	at Visitor.getHover (C:\Users\dirkb\Projects\mseng\VSCode\lsif-node\tsc\lib\lsif.js:1498:46)
 		try {
-			let quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
+			const quickInfo = this.languageService.getQuickInfoAtPosition(node, sourceFile);
 			if (quickInfo === undefined) {
 				return undefined;
 			}
@@ -3454,8 +3454,8 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 		if (key.endOfChain) {
 			return undefined;
 		}
-		let sKey = this.makeKey(key);
-		let result = this.store.get(sKey);
+		const sKey = this.makeKey(key);
+		const result = this.store.get(sKey);
 		//process.stdout.write(result === undefined ? '0' : '1');
 		return result;
 	}
@@ -3463,13 +3463,13 @@ export class FullSymbolChainCache implements ts.SymbolChainCache {
 		if (key.endOfChain) {
 			return;
 		}
-		let sKey = this.makeKey(key);
+		const sKey = this.makeKey(key);
 		this.store.set(sKey, value);
 	}
 
 	private makeKey(key: ts.SymbolChainCacheKey): string {
-		let symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
-		let declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
+		const symbolKey = tss.Symbol.createKey(this.typeChecker, key.symbol);
+		const declaration = key.enclosingDeclaration ? `${key.enclosingDeclaration.pos}|${key.enclosingDeclaration.end}` : '';
 		return `${symbolKey}|${declaration}|${key.flags}|${key.meaning}|${!!key.yieldModuleSymbol}`;
 	}
 }
@@ -3498,7 +3498,7 @@ class Visitor {
 
 	public async visitProgram(): Promise<ProjectInfo> {
 		const program = this.tsProject.getProgram();
-		let sourceFiles = program.getSourceFiles();
+		const sourceFiles = program.getSourceFiles();
 		if (sourceFiles.length > 256) {
 			this.tsProject.setSymbolChainCache(new SimpleSymbolChainCache());
 		}
@@ -3786,7 +3786,7 @@ class Visitor {
 	}
 
 	private visitDeclaration(node: tss.Node.Declaration, isContainer: boolean): void {
-		let recordDocumentSymbol: boolean = this.currentRecordDocumentSymbol && isContainer;
+		const recordDocumentSymbol: boolean = this.currentRecordDocumentSymbol && isContainer;
 		let didRecord: boolean = recordDocumentSymbol;
 		if (recordDocumentSymbol) {
 			didRecord = this.addDocumentSymbol(node);
@@ -3796,7 +3796,7 @@ class Visitor {
 	}
 
 	private endVisitDeclaration(_node: tss.Node.Declaration): void {
-		let didRecord = this.recordDocumentSymbol.pop();
+		const didRecord = this.recordDocumentSymbol.pop();
 		if (didRecord) {
 			this.symbolContainer.pop();
 		}
@@ -4053,8 +4053,8 @@ class Visitor {
 }
 
 export async function lsif(emitter: EmitterContext, languageService: ts.LanguageService, dataManager: DataManager, importMonikers: ImportMonikers, exportMonikers: ExportMonikers | undefined, dependsOn: ProjectInfo[], options: Options): Promise<ProjectInfo | number> {
-	let visitor = new Visitor(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, options);
-	let result = await visitor.visitProgram();
+	const visitor = new Visitor(emitter, languageService, dataManager, importMonikers, exportMonikers, dependsOn, options);
+	const result = await visitor.visitProgram();
 	await visitor.endVisitProgram();
 	return result;
 }

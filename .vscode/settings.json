@@ -14,10 +14,11 @@
 		"./tsc",
 		"./npm",
 		"./sqlite",
-		"./util"
+		"./tooling",
+		"./lsif"
 	],
 	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": true
+		"source.fixAll.eslint": "explicit"
 	},
 	"eslint.trace.server": "off",
 	"cSpell.words": [

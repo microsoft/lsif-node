@@ -1,6 +1,6 @@
 # lsif-npm
 
-_Languag Server Index Format tool for npm_
+_Language Server Index Format tool for npm_
 
 ### Requirements
 
@@ -8,7 +8,7 @@ _Languag Server Index Format tool for npm_
 
 ### About
 
-This tool supports rewriting monikers from the tsc scheme to the npm scheme.
+This tool rewrites monikers from the tsc scheme to the npm scheme.
 
 See also the [Language Server Index Format Specification](https://github.com/Microsoft/language-server-protocol/blob/master/indexFormat/specification.md)
 
