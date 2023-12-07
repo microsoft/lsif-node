@@ -1,7 +1,9 @@
+#!/usr/bin/env node
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+"use strict";
 
 const cp = require('child_process');
 const path = require('path');
@@ -15,11 +17,11 @@ function updateNextTag() {
 	var packageJSON = JSON.parse(fs.readFileSync('package.json').toString());
 	var name = packageJSON.name;
 	var version = packageJSON.version;
-	if (version.indexOf('next') !== -1) {
+	if (version.indexOf('next') !== -1 || version.indexOf('dev') !== -1) {
 		return;
 	}
 
-	opts = {};
+	var opts = {};
 	opts.stdio = 'inherit';
 
 	console.log(name + ": set 'next' tag to latest version");

@@ -2,20 +2,15 @@
 	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 	},
+	"files": [
+	],
 	"references": [
+		{ "path": "./protocol/tsconfig.json" },
+		{ "path": "./tooling/tsconfig.json" },
 		{ "path": "./tsc/tsconfig.json" },
+		{ "path": "./tsc-tests/tsconfig.json" },
 		{ "path": "./npm/tsconfig.json" },
 		{ "path": "./sqlite/tsconfig.json" },
-		{ "path": "./util/tsconfig.json" }
-	],
-	"exclude": [
-		"node_modules",
-		"samples",
-		"protocol",
-		"npm",
-		"tsc",
-		"sqlite",
-		"util",
-		"build"
+		{ "path": "./lsif/tsconfig.json" }
 	]
 }

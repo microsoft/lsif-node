@@ -5,6 +5,27 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"request": "launch",
+			"type": "node",
+			"name": "test:lsif",
+			"program": "${workspaceRoot}/node_modules/mocha/bin/_mocha",
+			"stopOnEntry": false,
+			"args": [
+				"--timeout", "999999",
+				"-g", "Union\\ type\\ \\(2\\)"
+
+			],
+			"cwd": "${workspaceRoot}/tsc-tests",
+			"runtimeExecutable": null,
+			"runtimeArgs": [
+			],
+			"env": { },
+			"sourceMaps": true,
+			"outFiles": ["${workspaceRoot}/tsc/lib/**/*.js"],
+			"preLaunchTask": "npm: watch",
+			"smartStep": false
+		},
+		{
 			"type": "node",
 			"request": "launch",
 			"name": "JS Sample",
@@ -28,10 +49,26 @@
 			"cwd": "${workspaceFolder}/samples/typescript",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
+				"--config", "lsif.json"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "TS Sample Global",
+			"cwd": "${workspaceFolder}/samples/typescript-global",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line",
-				 "--installTypings",
-				 "--out", "test.lsif"
+				 "--noContents",
+				 "--stdout"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
@@ -56,6 +93,96 @@
 			"outputCapture": "std",
 			"outFiles": [
 				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "TS Cascade P1",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "./p1/tsconfig.json",
+				 "--group", ".",
+				 "--outputFormat", "line",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "TS Cascade P2",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "./p2/tsconfig.json",
+				 "--group", ".",
+				 "--outputFormat", "line",
+				 "--stdout"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "LSIF Repository",
+			"cwd": "${workspaceFolder}",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "--config", "./.lsifrc.json"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Create Cascade DB",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
+			"program": "${workspaceFolder}/sqlite/lib/main.js",
+			"args": [
+				 "--in", "p1.lsif",
+				 "--out", "cascade.db",
+				 "--mode", "create"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/sqlite/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Merge Cascade DBs",
+			"cwd": "${workspaceFolder}/samples/ts-cascade",
+			"program": "${workspaceFolder}/sqlite/lib/main.js",
+			"args": [
+				 "--in", "p2.lsif",
+				 "--out", "cascade.db",
+				 "--mode", "import"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/sqlite/lib/**/*.js"
 			]
 		},
 		{
@@ -111,13 +238,32 @@
 		{
 			"type": "node",
 			"request": "launch",
-			"name": "LSP JSONRPC",
-			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
+			"name": "LSP Full",
+			"cwd": "${workspaceFolder}/../../LanguageServer/Node",
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"args": [
 				 "-p", "tsconfig.json",
 				 "--outputFormat", "line",
-				 "--stdout"
+				 "--out", "lsp.lsif"
+			],
+			"preLaunchTask": "npm: watch",
+			"sourceMaps": true,
+			"outputCapture": "std",
+			"outFiles": [
+				"${workspaceFolder}/tsc/lib/**/*.js"
+			]
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "LSP JSONRPC",
+			"cwd": "${workspaceFolder}/../../LanguageServer/Node/jsonrpc",
+			"program": "${workspaceFolder}/tsc/lib/main.js",
+			"args": [
+				 "-p", "./tsconfig.json",
+				 "--noContents",
+				 "--outputFormat", "line",
+				 "--out", "jsonrpc.lsif"
 			],
 			"preLaunchTask": "npm: watch",
 			"sourceMaps": true,
@@ -221,10 +367,8 @@
 			"program": "${workspaceFolder}/tsc/lib/main.js",
 			"cwd": "${workspaceFolder}/../vscode",
 			"args": [
-				"--max_old_space_size=4095",
+				"--max_old_space_size=8192",
 				"-p", "./src/tsconfig.json",
-				"--projectRoot", "./",
-				"--outputFormat", "line",
 				"--out", "vscode.lsif"
 			],
 			"preLaunchTask": "npm: watch",

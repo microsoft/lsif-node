@@ -1,0 +1,6 @@
+{
+    "project": "./tsconfig.all.json",
+    "out": "sg.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

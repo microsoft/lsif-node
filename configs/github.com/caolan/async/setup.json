@@ -1,0 +1,9 @@
+{
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	],
+	"tags": [
+		{ "type": "semver",  "pattern": "v((?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))", "kind": "release" },
+		{ "type": "semver",  "pattern": "v(?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:rc|beta|alpha)\\.(?:0|[1-9]\\d*)", "kind": "pre-release" }
+	]
+}

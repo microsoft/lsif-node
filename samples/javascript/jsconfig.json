@@ -5,8 +5,10 @@
 		"checkJs": true,
 		"allowSyntheticDefaultImports": true,
 		"skipLibCheck": true,
-		"noEmit": true,
-		"allowJs": true
+		"noEmit": true
+	},
+	"typeAcquisition": {
+		"enable": true
 	},
 	"include": [
 		"./use.js"

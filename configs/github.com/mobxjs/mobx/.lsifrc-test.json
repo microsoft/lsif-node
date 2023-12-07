@@ -1,0 +1,6 @@
+{
+	"project": "tsconfig.json",
+	"out": "mobx.lsif",
+	"source": "./package.json",
+	"package": "./package.json"
+}

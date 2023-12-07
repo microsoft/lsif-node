@@ -1,0 +1,21 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+        "sourceMap": true,
+		"declaration": true,
+		"composite": true,
+		"rootDir": "./src",
+		"outDir": "./lib",
+		"tsBuildInfoFile":"./lib/compile.tsbuildInfo",
+	},
+	"include": [
+		"src/**/*.ts"
+	],
+	"references": [
+		{ "path": "../protocol/tsconfig.json"},
+		{ "path": "../tsc/tsconfig.json"},
+		{ "path": "../tooling/tsconfig.json"}
+	]
+}

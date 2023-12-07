@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from 'lsif-protocol';
-import { Writer } from '../utils/writer';
+import { Writer } from '../common/writer';
 
 interface GraphSonProperty {
 	id: Id;
@@ -241,7 +241,7 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 				if (element.label === 'item') {
 					properties = { };
 					if (element.property !== undefined) {
-						properties.property = [ { id: idGenerator(), value: element.property } ]
+						properties.property = [ { id: idGenerator(), value: element.property } ];
 					}
 				}
 
@@ -286,10 +286,14 @@ export const create: Create = (writer: Writer, idGenerator: () => Id): Emitter =
 				inData.push(inEdge);
 			}
 		},
-		end: () => {
+		flush: () => {
+			return writer.flush();
+		},
+		end: (): Promise<number> => {
 			for (let vertex of vertices.values()) {
 				writer.writeln(JSON.stringify(vertex, undefined, 0));
 			}
+			return writer.close();
 		}
-	}
-}
+	};
+};

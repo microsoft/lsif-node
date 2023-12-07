@@ -6,6 +6,7 @@
 import { promisify } from 'util';
 import * as path from 'path';
 import * as _fs from 'fs';
+import * as cp from 'child_process';
 
 namespace fs {
 	export const exist = promisify(_fs.exists);
@@ -14,17 +15,12 @@ namespace fs {
 	export const Stats = _fs.Stats;
 }
 
+namespace pcp {
+	export const exec = promisify(cp.exec);
+}
+
 interface Dictionary<T> {
 	[key: string]: T
-}
-
-interface CommandCallback {
-	(err?: Error, result?: any, result2?: any, result3?: any, result4?: any): void;
-}
-
-interface ViewSignature {
-	(args: string[], callback: CommandCallback): void;
-	(args: string[], silent: boolean, callback: CommandCallback): void;
 }
 
 interface PackageJson {
@@ -35,7 +31,7 @@ interface PackageJson {
 function stripComments(content: string): string {
 	const regexp = /("(?:[^\\"]*(?:\\.)?)*")|('(?:[^\\']*(?:\\.)?)*')|(\/\*(?:\r?\n|.)*?\*\/)|(\/{2,}.*?(?:(?:\r?\n)|$))/g;
 
-	return content.replace(regexp, function (match, m1, m2, m3, m4) {
+	return content.replace(regexp, function (match, _m1, _m2, m3, m4) {
 		// Only one of m1, m2, m3, m4 matches
 		if (m3) {
 			// A block comment. Replace with nothing
@@ -106,7 +102,6 @@ export class TypingsInstaller {
 				if (typings.length === 0) {
 					return;
 				}
-				await this.loadNpm(packageFile);
 				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
 				this.handledTsConfig.add(key);
 				return;
@@ -136,7 +131,6 @@ export class TypingsInstaller {
 				if (typings.length === 0) {
 					continue;
 				}
-				await this.loadNpm(packageFile);
 				await this.doInstallTypingsFromNpm(await this.validateTypingsOnNpm(typings));
 				this.handledPackages.add(packageFile);
 			}
@@ -174,9 +168,6 @@ export class TypingsInstaller {
 			}
 		}
 
-		if (toInstall.length === 0) {
-			return [];
-		}
 		return toInstall;
 	}
 
@@ -208,36 +199,15 @@ export class TypingsInstaller {
 		return result;
 	}
 
-	private async loadNpm(packageFile: string): Promise<void> {
-		const prefix = path.dirname(packageFile);
-		let npm = await import('npm');
-		await new Promise((resolve, reject) => {
-			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix }, (error, config) => {
-				if (error) {
-					reject(error);
-				} else {
-					resolve(config);
-				}
-			});
-		});
-	}
-
 	private async validateTypingsOnNpm(typings: string[]): Promise<string[]> {
 		if (typings.length === 0) {
 			return typings;
 		}
+		const latestVersion = (await import('latest-version')).default;
 		const promises: Promise<string | undefined>[] = [];
-		let npm = await import('npm');
 		for (let typing of typings) {
 			try {
-				promises.push(new Promise<string | undefined>((resolve, reject) => {
-					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
-						if (error) {
-							resolve(undefined);
-						}
-						resolve(typing);
-					});
-				}));
+				promises.push(latestVersion(typing).then(() => typing, (_error) => undefined));
 			} catch (error) {
 				// typing doesn't exist. Ignore the error
 			}
@@ -256,14 +226,8 @@ export class TypingsInstaller {
 		if (typings.length === 0) {
 			return;
 		}
-		let npm = await import('npm');
-		return new Promise((resolve, reject) => {
-			npm.commands.install(typings, (error, result) => {
-				if (error) {
-					reject(error);
-				}
-				resolve(result);
-			});
-		});
+		// Need to think about command length. Might be a limit.
+		const command = `npm install --no-save ${typings.join(' ')}`;
+		await pcp.exec(command);
 	}
 }

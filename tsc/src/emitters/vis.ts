@@ -8,7 +8,7 @@ import { URI } from 'vscode-uri';
 
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge, VertexLabels } from 'lsif-protocol';
-import { Writer } from '../utils/writer';
+import { Writer } from '../common/writer';
 
 interface VisNode {
 	id: number;
@@ -82,7 +82,7 @@ export const create: Create = (writer: Writer): Emitter => {
 				let node: VisNode = {
 					id: element.id as number,
 					label: label
-				}
+				};
 				data.nodes.push(node);
 			} else if (element.type === 'edge') {
 				if (Edge.is11(element)) {
@@ -102,8 +102,12 @@ export const create: Create = (writer: Writer): Emitter => {
 				}
 			}
 		},
+		flush: () => {
+			return writer.flush();
+		},
 		end: () => {
 			writer.write(JSON.stringify(data, undefined, 4));
+			return writer.close();
 		}
-	}
-}
+	};
+};

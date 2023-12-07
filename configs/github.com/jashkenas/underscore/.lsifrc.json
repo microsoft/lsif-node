@@ -1,0 +1,20 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+			"karma.conf.js",
+			"karma.conf-sauce.js",
+			"rollup-common.js",
+			"rollup-config.js",
+			"rollup-config2.js",
+			"modules",
+            "test",
+            "test-treeshake"
+        ]
+    },
+    "out": "underscore.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

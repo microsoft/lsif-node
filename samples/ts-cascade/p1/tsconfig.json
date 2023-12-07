@@ -1,0 +1,10 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"outDir": "lib",
+		"declaration": true
+	},
+	"include": [
+		"./p1Main.ts"
+	]
+}

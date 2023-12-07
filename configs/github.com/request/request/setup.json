@@ -1,0 +1,8 @@
+{
+	"init": [
+		{ "command": "npm", "args": ["install", "--force"] }
+	],
+	"tags": [
+		{ "type": "semver", "pattern": "v((?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))", "kind": "release" }
+	]
+}

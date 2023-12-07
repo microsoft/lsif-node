@@ -1,0 +1,15 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "index.js",
+            "lib",
+            "test"
+        ]
+    },
+    "out": "express.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

@@ -1,0 +1,29 @@
+{
+	"name": "lsif-tsc-tests",
+	"private": true,
+	"description": "Tests for the LSIF TSC tool",
+	"version": "0.5.1",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Microsoft/lsif-node/issues"
+	},
+	"dependencies": {
+		"vscode-uri": "^3.0.2"
+	},
+	"devDependencies": {
+		"@types/mocha": "^8.2.0"
+	},
+	"scripts": {
+		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
+		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
+		"clean": "node ../node_modules/rimraf/bin.js lib",
+		"clean:all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
+		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
+		"test": "node ../node_modules/mocha/bin/_mocha"
+	}
+}

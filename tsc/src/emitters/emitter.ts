@@ -3,12 +3,13 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import { Vertex, Edge, Id } from 'lsif-protocol';
-import { Writer } from '../utils/writer';
+import { Writer } from '../common/writer';
 
 export interface Emitter {
 	start(): void;
 	emit(element: Vertex | Edge): void;
-	end(): void;
+	flush(): Promise<void>;
+	end(): Promise<number>;
 }
 
 export interface Create {

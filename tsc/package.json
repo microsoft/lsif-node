@@ -1,15 +1,15 @@
 {
 	"name": "lsif-tsc",
 	"description": "Tool to create an LSIF dump for TypeScript projects.",
-	"version": "0.4.10",
+	"version": "0.6.0-next.21",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Microsoft/lsif-typescript.git"
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Microsoft/lsif-typescript/issues"
+		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
 	"main": "lib/main.js",
 	"typings": "lib/main.d.ts",
@@ -17,25 +17,25 @@
 		"lsif-tsc": "./bin/lsif-tsc"
 	},
 	"dependencies": {
-		"lsif-protocol": "0.4.3",
-		"minimist": "^1.2.0",
-		"npm": "^6.10.3",
-		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/release%2Flisf%2F3.5.2/typescript-3.5.2-lsif.tgz",
-		"uuid": "^3.3.2",
-		"vscode-uri": "^2.0.2"
+		"latest-version": "^7.0.0",
+		"lsif-protocol": "0.6.0-next.7",
+		"typescript": "https://github.com/dbaeumer/TypeScript/releases/download/4.8.4-lsif.1/lsif-typescript-4.8.4-lsif.1.tgz",
+		"uuid": "^9.0.0",
+		"vscode-uri": "^3.0.7",
+		"yargs": "^17.6.2"
 	},
 	"devDependencies": {
-		"@types/minimist": "^1.2.0",
-		"@types/uuid": "^3.4.4",
-		"@types/npm": "^2.0.30"
+		"@types/uuid": "^9.0.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
 		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
-		"watch": "node ../build/bin/tsc -b ./tsconfig.json -w",
+		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
 		"clean:all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
-		"prepublishOnly": "npm run clean && npm run compile:publish",
+		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
+		"test": "cd ../tsc-tests && npm run test",
+		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint && npm run test",
 		"postpublish": "node ../build/bin/post-publish.js",
 		"postinstall": ""
 	}

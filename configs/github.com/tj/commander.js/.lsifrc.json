@@ -1,0 +1,16 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "index.js",
+            "typings",
+            "examples",
+            "tests"
+        ]
+    },
+    "out": "commander.js.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

@@ -20,6 +20,7 @@ import {
 
 import { Compressor, foldingRangeCompressor, CompressorOptions, diagnosticCompressor } from './compress';
 import { Inserter } from './inserter';
+import { Store } from './store';
 
 function assertDefined<T>(value: T | undefined | null): T {
 	if (value === undefined || value === null) {
@@ -270,7 +271,7 @@ class DocumentData {
 		this.addReferencedData(id, resultSet);
 	}
 
-	private addReferencedData(id: Id, item: RangeData | ResultSetData): void {
+	private addReferencedData(_id: Id, item: RangeData | ResultSetData): void {
 		let moniker: MonikerData | undefined;
 		if (item.moniker !== undefined) {
 			moniker = assertDefined(this.provider.getMonikerData(item.moniker));
@@ -461,7 +462,7 @@ class DocumentData {
 	}
 }
 
-export class BlobStore implements DataProvider {
+export class BlobStore extends Store implements DataProvider {
 
 	private forceDelete: boolean;
 	private version: string;
@@ -496,7 +497,8 @@ export class BlobStore implements DataProvider {
 
 	private containsDatas: Map<Id, Id[]>;
 
-	constructor(filename: string, version: string, forceDelete: boolean = false) {
+	constructor(input: NodeJS.ReadStream | fs.ReadStream, filename: string, version: string, forceDelete: boolean = false) {
+		super(input);
 		this.forceDelete = forceDelete;
 		this.version = version;
 		this.knownHashes = new Set();
@@ -842,19 +844,19 @@ export class BlobStore implements DataProvider {
 		let property: ItemEdgeProperties | undefined = edge.property;
 		if (property === undefined) {
 			const map: Map<Id, DefinitionResultData> | Map<Id, DeclarationResultData> = assertDefined(this.declarationDatas.get(edge.outV) || this.definitionDatas.get(edge.outV));
-			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.document);
+			let data: DefinitionResultData | DeclarationResultData | undefined = map.get(edge.shard);
 			if (data === undefined) {
 				data = { values: edge.inVs.slice() };
-				map.set(edge.document, data);
+				map.set(edge.shard, data);
 			} else {
 				data.values.push(...edge.inVs);
 			}
 		} else {
 			const map: Map<Id, ReferenceResultData> = assertDefined(this.referenceDatas.get(edge.outV));
-			let data: ReferenceResultData | undefined = map.get(edge.document);
+			let data: ReferenceResultData | undefined = map.get(edge.shard);
 			if (data === undefined) {
 				data = {};
-				map.set(edge.document, data);
+				map.set(edge.shard, data);
 			}
 			switch (property) {
 				case ItemEdgeProperties.declarations:

@@ -1,0 +1,23 @@
+{
+	// The root TypeScript project to index
+	"project": "./tsconfig.json",
+	// The name of the output file
+	"out": "lsif.lsif",
+	// A mapping describing which packages are published to npm and what TS project files is used
+	// to generate the package code.
+	"publishedPackages": [
+		{ "package": "./protocol/package.json", "project": "./protocol/tsconfig.json" },
+		{ "package": "./tsc/package.json", "project": "./tsc/tsconfig.json" },
+		{ "package": "./npm/package.json", "project": "./npm/tsconfig.json" },
+		{ "package": "./sqlite/package.json", "project": "./sqlite/tsconfig.json" },
+		{ "package": "./tooling/package.json", "project": "./tooling/tsconfig.json" },
+		{ "package": "./lsif/package.json", "project": "./lsif/tsconfig.json" }
+	],
+	// Get the source info from the package.json file
+	"source": "./package.json",
+	// The catalog information
+	"catalogInfo": {
+    	"uri": "lsif-cat://microsoft.com/azure/devdiv/vscode/lsif-node",
+        "name": "LSIF indexer tooling"
+    }
+}

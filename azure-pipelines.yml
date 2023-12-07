@@ -1,30 +1,29 @@
 trigger:
-- master
+  batch: true
+  branches:
+    include:
+    - '*'
 
-pool:
-  vmImage: 'Ubuntu-16.04'
+pr:
+- main
+- release/*
 
-steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '10.15.1'
-  displayName: 'Use Node.js 10.15.1'
+jobs:
+- job: Linux
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - template: build/azure-pipelines/linux/build.yml
 
-- script: |
-    npm ci
-  displayName: 'Install dependencies'
+- job: Windows
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - template: build/azure-pipelines/win32/build.yml
 
-- script: |
-    npm run lint
-    npm run compile
-  displayName: 'Compile client'
+- job: Indexing
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - template: build/azure-pipelines/index/build.yml
 
-- script: |
-    npm run test
-  displayName: 'Run unit tests'
-
-- task: PublishTestResults@2
-  inputs:
-    testResultsFormat: 'JUnit'
-    testResultsFiles: 'util/junit.xml'
-    testRunTitle: 'Run unit tests'

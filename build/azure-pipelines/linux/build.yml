@@ -1,0 +1,25 @@
+steps:
+- task: NodeTool@0
+  inputs:
+    versionSpec: '16.14.2'
+  displayName: 'Use Node.js 16.14.2'
+
+- script: |
+    npm ci
+  displayName: 'Install dependencies'
+
+- script: |
+    npm run symlink
+    npm run lint
+    npm run compile
+  displayName: 'Compile client'
+
+- script: |
+    npm run test
+  displayName: 'Run unit tests'
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: 'util/junit.xml'
+    testRunTitle: 'Run unit tests'

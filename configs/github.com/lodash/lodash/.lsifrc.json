@@ -1,0 +1,14 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+            "*.js",
+            "test/*.js"
+        ]
+    },
+    "out": "lodash.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

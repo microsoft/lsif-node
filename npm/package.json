@@ -1,15 +1,15 @@
 {
 	"name": "lsif-npm",
 	"description": "A tools to rewrite Typescript LSIF monikers into npm monikers",
-	"version": "0.4.5",
+	"version": "0.6.0-next.8",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Microsoft/vscode-typescript-sip.git"
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
 	},
 	"bugs": {
-		"url": "https://github.com/Microsoft/lsif-typescript/issues"
+		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
 	"main": "lib/main.js",
 	"typings": "lib/main.d.ts",
@@ -17,14 +17,13 @@
 		"lsif-npm": "./bin/lsif-npm"
 	},
 	"dependencies": {
-		"minimist": "^1.2.0",
-		"uuid": "^3.3.2",
-		"lsif-protocol": "0.4.3",
-		"lsif-tsc": "0.4.9"
+		"lsif-protocol": "0.6.0-next.7",
+		"uuid": "^9.0.0",
+		"vscode-uri": "^3.0.6",
+		"yargs": "^17.6.0"
 	},
 	"devDependencies": {
-		"@types/minimist": "^1.2.0",
-		"@types/uuid": "^3.4.4"
+		"@types/uuid": "^8.3.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
@@ -32,7 +31,8 @@
 		"watch": "node ../build/bin/tsc -b ./tsconfig.json -w",
 		"clean": "node ../node_modules/rimraf/bin.js lib",
 		"clean-all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
-		"prepublishOnly": "npm run clean && npm run compile:publish",
+		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
+		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
 		"postpublish": "node ../build/bin/post-publish.js"
 	}
 }

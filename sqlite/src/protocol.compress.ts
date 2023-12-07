@@ -7,6 +7,8 @@
 import * as protocol from 'lsif-protocol';
 
 export enum CompressionKind {
+	id = 'id',
+	ids = 'ids',
 	scalar = 'scalar',
 	literal = 'literal',
 	array = 'array',

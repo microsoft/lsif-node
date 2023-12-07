@@ -9,14 +9,25 @@
 		"latex"
 	],
 	"eslint.enable": true,
-	"eslint.validate": [
-		{ "language": "typescript", "autoFix": true }
-	],
 	"eslint.workingDirectories": [
-		{ "directory": "./protocol", "changeProcessCWD": true },
-		{ "directory": "./tsc", "changeProcessCWD": true },
-		{ "directory": "./npm", "changeProcessCWD": true },
-		{ "directory": "./sqlite", "changeProcessCWD": true },
-		{ "directory": "./util", "changeProcessCWD": true }
-	]
+		"./protocol",
+		"./tsc",
+		"./npm",
+		"./sqlite",
+		"./util"
+	],
+	"editor.codeActionsOnSave": {
+		"source.fixAll.eslint": true
+	},
+	"eslint.trace.server": "off",
+	"cSpell.words": [
+		"LSIF",
+		"extendz",
+		"loglevel",
+		"npmignore",
+		"postpublish",
+		"uinteger"
+	],
+	"typescript.tsdk": "./node_modules/typescript/lib",
+	"task.allowAutomaticTasks": "on"
 }

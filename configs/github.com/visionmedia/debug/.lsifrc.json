@@ -1,0 +1,15 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+			"karma.conf.js",
+			"test.js",
+            "src"
+        ]
+    },
+    "out": "debug.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}

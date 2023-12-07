@@ -1,0 +1,8 @@
+{
+	"init": [
+		{ "command": "yarn", "args": ["install"] }
+	],
+	"tags": [
+		{ "type": "semver", "pattern": "(?:mobx|mobx-react|mobx-react-lite|mobx-undecorate)@((?:[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))", "kind": "release" }
+	]
+}

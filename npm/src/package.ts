@@ -4,9 +4,19 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
-import * as Is from 'lsif-tsc/lib/utils/is';
-import * as paths from 'lsif-tsc/lib/utils/paths';
+import * as paths from './paths';
+
+namespace Is {
+	export function string(value: any): value is string {
+		return typeof value === 'string' || value instanceof String;
+	}
+
+	export function number(value: any): value is number {
+		return typeof value === 'number' || value instanceof Number;
+	}
+}
 
 class PackageJson {
 	static read(filename: string): PackageJson | undefined {
@@ -22,6 +32,7 @@ class PackageJson {
 		return undefined;
 	}
 
+	public $fileName: string;
 	public $location: string;
 
 	public name: string;
@@ -31,20 +42,21 @@ class PackageJson {
 	public repository?: {
 		type: string;
 		url: string;
-	}
+	};
 
-	private constructor(location: string, json: any) {
-		this.$location = location;
+	private constructor(fileName: string, json: any) {
+		this.$fileName = paths.normalizeSeparator(fileName);
+		this.$location = path.posix.dirname(this.$fileName);
 		this.name = json.name;
 		this.version = json.version;
 		this.repository = json.repository;
 		if (Is.string(json.main)) {
-			this.main = paths.normalizeSeparator(paths.removeExtension(json.main));
+			this.main = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.main)));
 		} else {
 			this.main= 'index';
 		}
 		if (Is.string(json.typings)) {
-			this.typings = paths.normalizeSeparator(paths.removeExtension(json.typings));
+			this.typings = path.posix.normalize(paths.normalizeSeparator(paths.removeExtension(json.typings)));
 		} else {
 			this.typings = 'index';
 		}

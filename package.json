@@ -1,44 +1,43 @@
 {
 	"name": "lsif-node",
 	"private": true,
-	"version": "0.4.0",
+	"version": "0.6.0",
 	"description": "",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Microsoft/language-server-index-format.git"
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
 	},
 	"author": "MS",
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/Microsoft/language-server-index-format/issues"
+		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"homepage": "https://github.com/Microsoft/language-server-index-format#readme",
+	"homepage": "https://microsoft.github.io/language-server-protocol/overviews/lsif/overview/",
 	"devDependencies": {
-		"@types/node": "^10.14.3",
-		"@types/shelljs": "^0.8.5",
-		"typescript": "3.5.x",
-		"eslint": "^6.2.2",
-		"@typescript-eslint/parser": "^2.0.0",
-		"shelljs": "^0.8.3",
-		"rimraf": "^2.6.3"
+		"@types/node": "^16.11.43",
+		"@types/shelljs": "^0.8.11",
+		"@types/uuid": "^8.3.4",
+		"@types/yargs": "^17.0.13",
+		"@typescript-eslint/eslint-plugin": "^5.40.1",
+		"@typescript-eslint/parser": "^5.40.1",
+		"eslint": "^8.26.0",
+		"mocha": "^10.1.0",
+		"rimraf": "^3.0.2",
+		"shelljs": "^0.8.5",
+		"typescript": "^4.8.4",
+		"uuid": "^9.0.0"
 	},
 	"scripts": {
-		"postinstall": "cd protocol && npm install && cd ../tsc && npm install && cd ../npm && npm install && cd ../sqlite && npm install && cd ../util && npm install && cd .. && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
+		"postinstall": "node ./build/bin/all.js install && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",
 		"symlink": "node ./build/bin/symlink.js",
 		"compile": "tsc -b ./tsconfig.json",
-		"compile:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json",
-		"watch": "tsc -b ./tsconfig.json -w",
-		"watch:build": "cd build/azure-pipelines/tasks && tsc -p ./tsconfig.json -w",
-		"lint": "npm run lint:protocol && npm run lint:tsc && npm run lint:npm && npm run lint:sqlite",
-		"lint:protocol": "eslint --config ./protocol/.eslintrc.json ./protocol/src/*.ts",
-		"lint:tsc": "eslint --config ./tsc/.eslintrc.json ./tsc/src/*.ts",
-		"lint:npm": "eslint --config ./npm/.eslintrc.json ./npm/src/*.ts",
-		"lint:sqlite": "eslint --config ./sqlite/.eslintrc.json ./sqlite/src/*.ts",
-		"lint:util": "eslint --config ./util/.eslintrc.json ./util/src/*.ts",
-		"clean": "cd protocol && npm run clean && cd ../tsc && npm run clean && cd ../npm && npm run clean && cd ..",
-		"lsif-ts": "cd samples/typescript && node ../../tsc/lib/main.js -p ./tsconfig.json  --outputFormat=line --stdout",
-		"lsif-ts-ref": "cd samples/typescript-ref && node ../../tsc/lib/main.js -p ./client/tsconfig.json --projectRoot . --outputFormat=line",
-		"lsif-js": "cd samples/javascript && node ../../tsc/lib/main.js -p ./jsconfig.json --outputFormat=line",
-		"test": "cd util && npm run test:ci && cd .."
+		"watch": "tsc -b ./tsconfig.watch.json -w",
+		"lint": "node ./build/bin/all.js run lint",
+		"clean": "node ./build/bin/all.js run clean",
+		"test": "cd tsc && npm run test && cd ..",
+		"test:configs": "node ./build/bin/testConfigs.js ./configs",
+		"cleanAll": "git clean -xfd . && npm install && npm run symlink && npm run compile && npm run test",
+		"audit:all": "node ./build/bin/all.js audit",
+		"audit:all:fix": "node ./build/bin/all.js audit fix"
 	}
 }

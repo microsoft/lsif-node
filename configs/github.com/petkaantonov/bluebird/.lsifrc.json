@@ -1,0 +1,16 @@
+{
+    "project": {
+        "compilerOptions": {
+            "rootDir": "./"
+        },
+        "include": [
+			"src",
+            "benchmark",
+            "test",
+			"tools"
+        ]
+    },
+    "out": "bluebird.lsif",
+    "package": "./package.json",
+    "source": "./package.json"
+}
