@@ -5,7 +5,7 @@ schedules:
   displayName: Daily midnight test repositories validation
   branches:
     include:
-    - '*'
+    - main
 
 pool:
   vmImage: 'ubuntu-20.04'
