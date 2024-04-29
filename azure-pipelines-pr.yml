@@ -1,8 +1,6 @@
-trigger:
-  batch: true
-  branches:
-    include:
-    - '*'
+pr:
+- main
+- release/*
 
 resources:
   repositories:
@@ -12,7 +10,7 @@ resources:
       ref: refs/tags/release
 
 extends:
-  template: v1/1ES.Official.PipelineTemplate.yml@1esPipelines
+  template: v1/1ES.Unofficial.PipelineTemplate.yml@1esPipelines
   parameters:
     sdl:
       sourceAnalysisPool:
@@ -20,9 +18,9 @@ extends:
         image: windows-latest
         os: windows
       tsa:
-        enabled: true
+        enabled: false
     stages:
-      - stage: Build
+      - stage: Test
         jobs:
         - job: Linux
           pool:
@@ -39,11 +37,3 @@ extends:
             os: windows
           steps:
           - template: build/azure-pipelines/win32/build.yml@self
-
-        - job: Indexing
-          pool:
-            name: Azure-Pipelines-1ESPT-ExDShared
-            image: windows-latest
-            os: windows
-          steps:
-          - template: build/azure-pipelines/index/build.yml@self
