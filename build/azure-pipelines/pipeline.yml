@@ -51,11 +51,11 @@ extends:
         testSteps:
           - template: /build/azure-pipelines/templates/test-steps.yml@self
             parameters:
-              package: lsif-protocol
+              package: protocol
         buildSteps:
           - template: /build/azure-pipelines/templates/build-steps.yml@self
             parameters:
-              package: lsif-protocol
+              package: protocol
         ghTagPrefix: release/lsifProtocol/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
