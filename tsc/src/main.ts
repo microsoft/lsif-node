@@ -19,7 +19,7 @@ import * as uuid from 'uuid';
 import * as crypto from 'crypto';
 import * as os from 'os';
 
-import * as yargs from 'yargs';
+import yargs from 'yargs';
 import { URI } from 'vscode-uri';
 import * as ts from 'typescript';
 

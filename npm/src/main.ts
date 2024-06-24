@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 
-import * as yargs from 'yargs';
+import yargs from 'yargs';
 import * as uuid from 'uuid';
 import { URI } from 'vscode-uri';
 

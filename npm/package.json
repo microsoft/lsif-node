@@ -18,12 +18,12 @@
 	},
 	"dependencies": {
 		"lsif-protocol": "0.6.0-next.7",
-		"uuid": "^9.0.1",
+		"uuid": "^10.0.0",
 		"vscode-uri": "^3.0.8",
 		"yargs": "^17.7.2"
 	},
 	"devDependencies": {
-		"@types/uuid": "^9.0.7"
+		"@types/uuid": "^10.0.0"
 	},
 	"scripts": {
 		"compile": "node ../build/bin/tsc -b ./tsconfig.json",

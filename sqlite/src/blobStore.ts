@@ -5,7 +5,7 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
-import * as Sqlite from 'better-sqlite3';
+import Sqlite from 'better-sqlite3';
 
 import * as uuid from 'uuid';
 
