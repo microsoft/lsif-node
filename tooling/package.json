@@ -21,12 +21,12 @@
 		"yargs": "^17.7.2"
 	},
 	"scripts": {
-		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
+		"compile": "tsc -b ./tsconfig.json",
 		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
-		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
-		"clean": "node ../node_modules/rimraf/bin.js lib",
-		"clean:all": "node ../build/bin/tsc -b ./tsconfig.json --clean",
-		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
+		"watch": "tsc -b ./tsconfig.watch.json -w",
+		"clean": "rimraf lib",
+		"clean:all": "tsc -b ./tsconfig.json --clean",
+		"lint": "eslint ./src/*.ts",
 		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
 		"postpublish": "node ../build/bin/post-publish.js",
 		"postinstall": ""

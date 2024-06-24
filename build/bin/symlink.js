@@ -67,14 +67,6 @@ try {
 		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
 	}
 
-	// Setup symlinks for util
-	{
-		const util = path.join(root, 'util', 'node_modules');
-		fs.mkdirSync(util, { recursive: true });
-		process.chdir(util);
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-	}
-
 	// Setup symlinks for lsif commands
 	{
 		const lsif = path.join(root, 'lsif', 'node_modules')
