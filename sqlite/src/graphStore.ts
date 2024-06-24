@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import * as Sqlite from 'better-sqlite3';
+import Sqlite from 'better-sqlite3';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, Project, MetaData, EdgeLabels, contains,

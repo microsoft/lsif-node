@@ -5,7 +5,7 @@
 import * as fs from 'fs';
 import { Edge, Vertex, ElementTypes } from 'lsif-protocol';
 
-import * as yargs from 'yargs';
+import yargs from 'yargs';
 import { DiagnosticReporter } from './command';
 import { ValidateCommand } from './validate';
 import { Options, builder } from './args';
