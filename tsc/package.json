@@ -29,7 +29,7 @@
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
-		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
+		"compile:publish": "tsc -p./tsconfig.publish.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"clean": "rimraf lib",
 		"clean:all": "tsc -b ./tsconfig.json --clean",
