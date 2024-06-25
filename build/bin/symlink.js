@@ -67,6 +67,14 @@ try {
 		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
 	}
 
+	// Setup links for language-service
+	{
+		const sqlite = path.join(root, 'language-service', 'node_modules');
+		fs.mkdirSync(sqlite, { recursive: true });
+		process.chdir(sqlite);
+		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
+	}
+
 	// Setup symlinks for lsif commands
 	{
 		const lsif = path.join(root, 'lsif', 'node_modules')

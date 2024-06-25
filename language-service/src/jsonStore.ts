@@ -9,11 +9,11 @@ import * as readline from 'readline';
 import { URI } from 'vscode-uri';
 import * as SemVer from 'semver';
 
-import * as lsp from 'vscode-languageserver-protocol';
+import * as lsp from 'vscode-languageserver-types';
 import {
 	Id, Vertex, Project, Document, Range, DiagnosticResult, DocumentSymbolResult, FoldingRangeResult, DocumentLinkResult, DefinitionResult,
-	TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult, Edge, RangeBasedDocumentSymbol, DeclarationResult, ResultSet,
-	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, moniker, MonikerKind
+	TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult, Edge, RangeBasedDocumentSymbol, DeclarationResult,
+	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, MonikerKind
 } from 'lsif-protocol';
 
 import { DocumentInfo } from './files';
@@ -82,8 +82,7 @@ export class JsonStore extends Database {
 
 	private version: string | undefined;
 	private workspaceRoot!: URI;
-	private activeGroup: Id | undefined;
-	private activeProject: Id | undefined;
+	protected activeProject: Id | undefined;
 
 	private vertices: Vertices;
 	private indices: Indices;
@@ -697,15 +696,6 @@ export class JsonStore extends Database {
 			}
 		}
 		return result.length > 0 ? result : undefined;
-	}
-
-	private asLocation(value: Range | lsp.Location): lsp.Location {
-		if (lsp.Location.is(value)) {
-			return value;
-		} else {
-			let document = this.in.contains.get(value.id)!;
-			return lsp.Location.create(this.fromDatabase((document as Document).uri), this.asRange(value));
-		}
 	}
 
 	private static containsPosition(range: lsp.Range, position: lsp.Position): boolean {
