@@ -12,7 +12,7 @@ import * as ts from 'typescript';
 import * as tss from './typescripts';
 
 import {
-	lsp, Vertex, Edge, Project, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
+	types, Vertex, Edge, Project, Document, ReferenceResult, RangeTagTypes, RangeBasedDocumentSymbol,
 	ResultSet, DefinitionRange, DefinitionResult, MonikerKind, ItemEdgeProperties,
 	Range, EventKind, TypeDefinitionResult, Moniker, VertexLabels, UniquenessLevel, EventScope, Id
 } from 'lsif-protocol';
@@ -29,9 +29,9 @@ import { ImportMonikers } from './npm/importMonikers';
 namespace Converter {
 
 	const DiagnosticCategory = ts.DiagnosticCategory;
-	const DiagnosticSeverity = lsp.DiagnosticSeverity;
+	const DiagnosticSeverity = types.DiagnosticSeverity;
 
-	export function asDiagnostic(this: void, value: ts.DiagnosticWithLocation): lsp.Diagnostic {
+	export function asDiagnostic(this: void, value: ts.DiagnosticWithLocation): types.Diagnostic {
 		return {
 			severity: asDiagnosticSeverity(value.category),
 			code: value.code,
@@ -40,7 +40,7 @@ namespace Converter {
 		};
 	}
 
-	export function asDiagnosticSeverity(this: void, value: ts.DiagnosticCategory): lsp.DiagnosticSeverity {
+	export function asDiagnosticSeverity(this: void, value: ts.DiagnosticCategory): types.DiagnosticSeverity {
 		switch (value) {
 			case DiagnosticCategory.Message:
 				return DiagnosticSeverity.Information;
@@ -51,11 +51,11 @@ namespace Converter {
 			case DiagnosticCategory.Error:
 				return DiagnosticSeverity.Error;
 			default:
-				return lsp.DiagnosticSeverity.Error;
+				return types.DiagnosticSeverity.Error;
 		}
 	}
 
-	export function asRange(this: void, file: ts.SourceFile, offset: number, length: number): lsp.Range {
+	export function asRange(this: void, file: ts.SourceFile, offset: number, length: number): types.Range {
 		const start = file.getLineAndCharacterOfPosition(offset);
 		const end = file.getLineAndCharacterOfPosition(offset + length);
 		return {
@@ -64,7 +64,7 @@ namespace Converter {
 		};
 	}
 
-	export function rangeFromNode(this: void, file: ts.SourceFile, node: ts.Node, includeJsDocComment?: boolean): lsp.Range {
+	export function rangeFromNode(this: void, file: ts.SourceFile, node: ts.Node, includeJsDocComment?: boolean): types.Range {
 		let start: ts.LineAndCharacter;
 		if (file === node) {
 			start = { line: 0, character: 0 };
@@ -78,7 +78,7 @@ namespace Converter {
 		};
 	}
 
-	export function rangeFromTextSpan(this: void, file: ts.SourceFile, textSpan: ts.TextSpan): lsp.Range {
+	export function rangeFromTextSpan(this: void, file: ts.SourceFile, textSpan: ts.TextSpan): types.Range {
 		const start = file.getLineAndCharacterOfPosition(textSpan.start);
 		const end = file.getLineAndCharacterOfPosition(textSpan.start + textSpan.length);
 		return {
@@ -87,7 +87,7 @@ namespace Converter {
 		};
 	}
 
-	export function asFoldingRange(this: void, file: ts.SourceFile, span: ts.OutliningSpan): lsp.FoldingRange {
+	export function asFoldingRange(this: void, file: ts.SourceFile, span: ts.OutliningSpan): types.FoldingRange {
 		const kind = getFoldingRangeKind(span);
 		const start = file.getLineAndCharacterOfPosition(span.textSpan.start);
 		const end = file.getLineAndCharacterOfPosition(span.textSpan.start + span.textSpan.length);
@@ -97,41 +97,41 @@ namespace Converter {
 			startCharacter: start.character,
 			endLine: end.line,
 			endCharacter: end.character
-		} as lsp.FoldingRange;
+		} as types.FoldingRange;
 	}
 
-	function getFoldingRangeKind(span: ts.OutliningSpan): lsp.FoldingRangeKind | undefined {
+	function getFoldingRangeKind(span: ts.OutliningSpan): types.FoldingRangeKind | undefined {
 		switch (span.kind) {
 			case 'comment':
-				return lsp.FoldingRangeKind.Comment;
+				return types.FoldingRangeKind.Comment;
 			case 'region':
-				return lsp.FoldingRangeKind.Region;
+				return types.FoldingRangeKind.Region;
 			case 'imports':
-				return lsp.FoldingRangeKind.Imports;
+				return types.FoldingRangeKind.Imports;
 			case 'code':
 			default:
 				return undefined;
 		}
 	}
 
-	const symbolKindMap: Map<number, lsp.SymbolKind> = new Map<number, lsp.SymbolKind>([
-		[ts.SyntaxKind.ClassDeclaration, lsp.SymbolKind.Class],
-		[ts.SyntaxKind.InterfaceDeclaration, lsp.SymbolKind.Interface],
-		[ts.SyntaxKind.TypeParameter, lsp.SymbolKind.TypeParameter],
-		[ts.SyntaxKind.MethodDeclaration, lsp.SymbolKind.Method],
-		[ts.SyntaxKind.FunctionDeclaration, lsp.SymbolKind.Function]
+	const symbolKindMap: Map<number, types.SymbolKind> = new Map<number, types.SymbolKind>([
+		[ts.SyntaxKind.ClassDeclaration, types.SymbolKind.Class],
+		[ts.SyntaxKind.InterfaceDeclaration, types.SymbolKind.Interface],
+		[ts.SyntaxKind.TypeParameter, types.SymbolKind.TypeParameter],
+		[ts.SyntaxKind.MethodDeclaration, types.SymbolKind.Method],
+		[ts.SyntaxKind.FunctionDeclaration, types.SymbolKind.Function]
 	]);
 
-	export function asSymbolKind(this: void, node: ts.Node): lsp.SymbolKind {
-		let result: lsp.SymbolKind | undefined = symbolKindMap.get(node.kind);
+	export function asSymbolKind(this: void, node: ts.Node): types.SymbolKind {
+		let result: types.SymbolKind | undefined = symbolKindMap.get(node.kind);
 		if (result === undefined) {
-			result = lsp.SymbolKind.Property;
+			result = types.SymbolKind.Property;
 		}
 		return result;
 	}
 
-	export function asHover(this: void, _file: ts.SourceFile, value: ts.QuickInfo): lsp.Hover {
-		const content: lsp.MarkedString[] = [];
+	export function asHover(this: void, _file: ts.SourceFile, value: ts.QuickInfo): types.Hover {
+		const content: types.MarkedString[] = [];
 		if (value.displayParts !== undefined) {
 			content.push({ language: 'typescript', value: displayPartsToString(value.displayParts)});
 		}
@@ -150,8 +150,8 @@ namespace Converter {
 		return '';
 	}
 
-	export function asLocation(file: ts.SourceFile, definition: ts.DefinitionInfo): lsp.Location {
-		return { uri: URI.file(definition.fileName).toString(true), range: rangeFromTextSpan(file , definition.textSpan) } as lsp.Location;
+	export function asLocation(file: ts.SourceFile, definition: ts.DefinitionInfo): types.Location {
+		return { uri: URI.file(definition.fileName).toString(true), range: rangeFromTextSpan(file , definition.textSpan) } as types.Location;
 	}
 }
 
@@ -199,7 +199,7 @@ abstract class LSIFData<T extends EmitterContext> {
 class ProjectData extends LSIFData<EmitterContext> {
 
 	private documents: Document[];
-	private diagnostics: lsp.Diagnostic[];
+	private diagnostics: types.Diagnostic[];
 
 	public constructor(emitter: EmitterContext, public readonly project: Project) {
 		super(emitter);
@@ -220,7 +220,7 @@ class ProjectData extends LSIFData<EmitterContext> {
 		}
 	}
 
-	public addDiagnostic(diagnostic: lsp.Diagnostic): void {
+	public addDiagnostic(diagnostic: types.Diagnostic): void {
 		this.diagnostics.push(diagnostic);
 	}
 
@@ -252,8 +252,8 @@ class DocumentData extends LSIFData<EmitterContext> {
 	private readonly recorded: Set<string>;
 	private ranges: Range[];
 	private rangesEmitted: boolean;
-	private diagnostics: lsp.Diagnostic[];
-	private foldingRanges: lsp.FoldingRange[];
+	private diagnostics: types.Diagnostic[];
+	private foldingRanges: types.FoldingRange[];
 	private documentSymbols: RangeBasedDocumentSymbol[];
 
 	public constructor(projectId: ProjectId, emitter: EmitterContext, document: Document, moduleSystem: ModuleSystemKind, monikerPath: string | undefined, external: boolean, next: DocumentData | undefined) {
@@ -318,12 +318,12 @@ class DocumentData extends LSIFData<EmitterContext> {
 		return true;
 	}
 
-	public addDiagnostics(diagnostics: lsp.Diagnostic[]): void {
+	public addDiagnostics(diagnostics: types.Diagnostic[]): void {
 		this.checkClosed();
 		this.diagnostics = diagnostics;
 	}
 
-	public addFoldingRanges(foldingRanges: lsp.FoldingRange[]): void {
+	public addFoldingRanges(foldingRanges: types.FoldingRange[]): void {
 		this.checkClosed();
 		this.foldingRanges = foldingRanges;
 	}
@@ -404,7 +404,7 @@ class SymbolDataPartition extends LSIFData<EmitterContext> {
 		}
 	}
 
-	public findDefinition(range: lsp.Range): DefinitionRange | undefined {
+	public findDefinition(range: types.Range): DefinitionRange | undefined {
 		if (this.definitionRanges === SymbolDataPartition.EMPTY_ARRAY) {
 			return undefined;
 		}
@@ -624,7 +624,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 		}
 	}
 
-	public addHover(hover: lsp.Hover) {
+	public addHover(hover: types.Hover) {
 		const hr = this.vertex.hoverResult(hover);
 		this.emit(hr);
 		this.emit(this.edge.hover(this.resultSet, hr));
@@ -689,7 +689,7 @@ abstract class SymbolData extends LSIFData<SymbolDataContext> {
 	public abstract getOrCreateDefinitionResult(): DefinitionResult;
 
 	public abstract addDefinition(shard: Shard, definition: DefinitionRange): void;
-	public abstract findDefinition(shard: Shard, range: lsp.Range): DefinitionRange | undefined;
+	public abstract findDefinition(shard: Shard, range: types.Range): DefinitionRange | undefined;
 
 	public abstract getOrCreateReferenceResult(): ReferenceResult;
 
@@ -727,7 +727,7 @@ class StandardSymbolData extends SymbolData {
 		this.getOrCreatePartition(shard).addDefinition(definition, recordAsReference);
 	}
 
-	public findDefinition(shard: Shard, range: lsp.Range): DefinitionRange | undefined {
+	public findDefinition(shard: Shard, range: types.Range): DefinitionRange | undefined {
 		const partition = this.getPartition(shard);
 		if (partition === undefined) {
 			return undefined;
@@ -903,7 +903,7 @@ class AliasSymbolData extends StandardSymbolData {
 		this.aliased.getOrCreatePartition(shard).addReference(definition, ItemEdgeProperties.references);
 	}
 
-	public findDefinition(shard: Shard, _range: lsp.Range): DefinitionRange | undefined {
+	public findDefinition(shard: Shard, _range: types.Range): DefinitionRange | undefined {
 		this.checkInitialized(shard);
 		// Aliased symbols don't record own definitions. Find definition is only used
 		// for document outline. Since aliases aren't outlined we return undefined. If
@@ -2906,7 +2906,7 @@ class TSProject {
 			return result;
 		}
 
-		let hover: lsp.Hover | undefined;
+		let hover: types.Hover | undefined;
 		for (const declaration of declarations) {
 			const sourceFile = declaration.getSourceFile();
 			const [identifierNode, identifierText] = factory.getIdentifierInformation(symbol, declaration);
@@ -3011,7 +3011,7 @@ class TSProject {
 		return undefined;
 	}
 
-	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): lsp.Hover | undefined {
+	private getHover(node: ts.DeclarationName, sourceFile?: ts.SourceFile): types.Hover | undefined {
 		if (sourceFile === undefined) {
 			sourceFile = node.getSourceFile();
 		}
@@ -3641,7 +3641,7 @@ class Visitor {
 		const program = this.tsProject.getProgram();
 		const documentData = this.currentDocumentData;
 		// Diagnostics
-		const diagnostics: lsp.Diagnostic[] = [];
+		const diagnostics: types.Diagnostic[] = [];
 		const syntactic = program.getSyntacticDiagnostics(sourceFile);
 		for (const element of syntactic) {
 			diagnostics.push(Converter.asDiagnostic(element));
@@ -3659,7 +3659,7 @@ class Visitor {
 		// Folding ranges
 		const spans = this.languageService.getOutliningSpans(sourceFile as any);
 		if (ts.textSpanEnd.length > 0) {
-			const foldingRanges: lsp.FoldingRange[] = [];
+			const foldingRanges: types.FoldingRange[] = [];
 			for (const span of spans) {
 				foldingRanges.push(Converter.asFoldingRange(sourceFile,span));
 			}

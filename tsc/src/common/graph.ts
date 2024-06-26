@@ -7,7 +7,7 @@
 import { URI } from 'vscode-uri';
 
 import {
-	lsp, Id, Vertex, E, Edge,
+	types, Id, Vertex, E, Edge,
 	Project, Document, HoverResult, ReferenceResult,
 	contains, textDocument_definition, textDocument_references, textDocument_diagnostic, textDocument_hover, item, DiagnosticResult,
 	Range, RangeTag, DeclarationRange, ReferenceRange, DocumentSymbolResult, textDocument_documentSymbol, ReferenceTag, DeclarationTag,
@@ -155,11 +155,11 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public range(range: lsp.Range, tag: UnknownTag): Range;
-	public range(range: lsp.Range, tag: DeclarationTag): DeclarationRange;
-	public range(range: lsp.Range, tag: DefinitionTag): DefinitionRange;
-	public range(range: lsp.Range, tag: ReferenceTag): ReferenceRange;
-	public range(range: lsp.Range, tag?: RangeTag): Range {
+	public range(range: types.Range, tag: UnknownTag): Range;
+	public range(range: types.Range, tag: DeclarationTag): DeclarationRange;
+	public range(range: types.Range, tag: DefinitionTag): DefinitionRange;
+	public range(range: types.Range, tag: ReferenceTag): ReferenceRange;
+	public range(range: types.Range, tag?: RangeTag): Range {
 		const result: Range = {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -173,7 +173,7 @@ export class VertexBuilder {
 		return result;
 	}
 
-	public location(range: lsp.Range): Location {
+	public location(range: types.Range): Location {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -182,7 +182,7 @@ export class VertexBuilder {
 		};
 	}
 
-	public documentSymbolResult(values: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]): DocumentSymbolResult {
+	public documentSymbolResult(values: types.DocumentSymbol[] | RangeBasedDocumentSymbol[]): DocumentSymbolResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -191,7 +191,7 @@ export class VertexBuilder {
 		};
 	}
 
-	public diagnosticResult(values: lsp.Diagnostic[]): DiagnosticResult {
+	public diagnosticResult(values: types.Diagnostic[]): DiagnosticResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -200,7 +200,7 @@ export class VertexBuilder {
 		};
 	}
 
-	public foldingRangeResult(values: lsp.FoldingRange[]): FoldingRangeResult {
+	public foldingRangeResult(values: types.FoldingRange[]): FoldingRangeResult {
 		return {
 			id: this.nextId(),
 			type: ElementTypes.vertex,
@@ -209,10 +209,10 @@ export class VertexBuilder {
 		};
 	}
 
-	public hoverResult(value: lsp.Hover): HoverResult;
-	public hoverResult(contents: lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[]): HoverResult;
-	public hoverResult(value: lsp.Hover | lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[]): HoverResult {
-		if (lsp.Hover.is(value)) {
+	public hoverResult(value: types.Hover): HoverResult;
+	public hoverResult(contents: types.MarkupContent | types.MarkedString | types.MarkedString[]): HoverResult;
+	public hoverResult(value: types.Hover | types.MarkupContent | types.MarkedString | types.MarkedString[]): HoverResult {
+		if (types.Hover.is(value)) {
 			return {
 				id: this.nextId(),
 				type: ElementTypes.vertex,
@@ -228,7 +228,7 @@ export class VertexBuilder {
 				type: ElementTypes.vertex,
 				label: VertexLabels.hoverResult,
 				result: {
-					contents: value as (lsp.MarkupContent | lsp.MarkedString | lsp.MarkedString[])
+					contents: value as (types.MarkupContent | types.MarkedString | types.MarkedString[])
 				}
 			};
 		}
