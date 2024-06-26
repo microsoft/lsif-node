@@ -1,7 +1,7 @@
 {
 	"name": "@vscode/lsif-protocol",
 	"description": "Typescript implementation of the LSIF protocol",
-	"version": "0.6.0-next.7",
+	"version": "0.6.0-next.8",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -18,13 +18,12 @@
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
-		"compile:publish": "tsc -p ./tsconfig.publish.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"clean": "rimraf lib",
 		"lint": "eslint ./src/*.ts",
 		"prepublishOnly": "echo \"⛔ Can only publish from a secure pipeline ⛔\" && node ../build/npm/fail",
 		"prepack": "npm run all:publish",
-		"postpublish": "node ../build/bin/post-publish.js",
-		"all:publish": "git clean -xfd . && npm run clean && npm install && npm run compile:publish && npm run lint"
+		"all:publish": "git clean -xfd . && npm run clean && npm install && npm run compile:publish && npm run lint",
+		"compile:publish": "tsc -p ./tsconfig.publish.json"
 	}
 }
