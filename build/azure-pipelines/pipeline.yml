@@ -31,6 +31,10 @@ parameters:
     displayName: 🚀 Publish LSIF Protocol
     type: boolean
     default: false
+  - name: publishLanguageService
+    displayName: 🚀 Publish LSIF Language Service
+    type: boolean
+    default: false
 
 extends:
   template: azure-pipelines/npm-package/pipeline.yml@templates
@@ -51,14 +55,41 @@ extends:
         testSteps:
           - template: /build/azure-pipelines/templates/test-steps.yml@self
             parameters:
-              package: protocol
+              package: '@vscode/lsif-protocol'
         buildSteps:
           - template: /build/azure-pipelines/templates/build-steps.yml@self
             parameters:
-              package: protocol
-        ghTagPrefix: release/lsifProtocol/
+              package: '@vscode/lsif-protocol'
+        ghTagPrefix: release/protocol/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
         preReleaseTagAddToLatest: true
         publishPackage: ${{ parameters.publishLsifProtocol }}
         workingDirectory: $(Build.SourcesDirectory)/protocol
+
+      - name: languageService
+        generateNotice: true
+        testPlatforms:
+          - name: Linux
+            nodeVersions:
+              - 20.9.0
+          - name: MacOS
+            nodeVersions:
+              - 20.9.0
+          - name: Windows
+            nodeVersions:
+              - 20.9.0
+        testSteps:
+          - template: /build/azure-pipelines/templates/test-steps.yml@self
+            parameters:
+              package: '@vscode/lsif-language-service'
+        buildSteps:
+          - template: /build/azure-pipelines/templates/build-steps.yml@self
+            parameters:
+              package: '@vscode/lsif-language-service'
+        ghTagPrefix: release/language-service/
+        tag: ${{ parameters.quality }}
+        preReleaseTag: next
+        preReleaseTagAddToLatest: true
+        publishPackage: ${{ parameters.publishLanguageService }}
+        workingDirectory: $(Build.SourcesDirectory)/language-service

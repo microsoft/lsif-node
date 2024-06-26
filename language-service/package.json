@@ -17,7 +17,7 @@
 	"dependencies": {
 		"vscode-uri": "^3.0.8",
 		"semver": "^7.6.2",
-		"lsif-protocol": "0.6.0-next.7",
+		"@vscode/lsif-protocol": "0.6.0-next.8",
 		"vscode-languageserver-types": "^3.17.5"
 	},
 	"devDependencies": {
@@ -26,14 +26,14 @@
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
-		"compile:publish": "tsc -p./tsconfig.publish.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",
 		"clean": "rimraf lib",
 		"clean:all": "tsc -b ./tsconfig.json --clean",
 		"lint": "eslint ./src/*.ts",
 		"test": "mocha",
-		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
-		"postpublish": "node ../build/bin/post-publish.js",
-		"postinstall": ""
+		"prepublishOnly": "echo \"⛔ Can only publish from a secure pipeline ⛔\" && node ../build/npm/fail",
+		"prepack": "npm run all:publish",
+		"all:publish": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
+		"compile:publish": "tsc -p ./tsconfig.publish.json"
 	}
 }
