@@ -4,6 +4,9 @@
 ###############################################################################################
 parameters:
 - name: package
+  type: string
+- name: workingDirectory
+  type: string
 
 steps:
   - script: npm install --root-only
