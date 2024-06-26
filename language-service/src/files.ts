@@ -68,7 +68,7 @@ export class FileSystem {
 
 	private workspaceRoot: string;
 	private workspaceRootWithSlash: string;
-	private filesOutsideWorkspaceRoot: Map<string, { id: Id, hash: string | undefined }>;
+	private filesOutsideWorkspaceRoot: Map<string, { id: Id; hash: string | undefined }>;
 	private root: Directory;
 
 	constructor(workspaceRoot: string, documents: DocumentInfo[]) {
@@ -81,16 +81,16 @@ export class FileSystem {
 		}
 		this.root = Directory.create('');
 		this.filesOutsideWorkspaceRoot = new Map();
-		for (let info of documents) {
+		for (const info of documents) {
 			// Do not show file outside the workspaceRoot.
 			if (!info.uri.startsWith(this.workspaceRootWithSlash)) {
 				this.filesOutsideWorkspaceRoot.set(info.uri, info);
 				continue;
 			}
-			let p = info.uri.substring(workspaceRoot.length);
-			let dirname = path.posix.dirname(p);
-			let basename = path.posix.basename(p);
-			let entry = this.lookup(dirname, true);
+			const p = info.uri.substring(workspaceRoot.length);
+			const dirname = path.posix.dirname(p);
+			const basename = path.posix.basename(p);
+			const entry = this.lookup(dirname, true);
 			if (entry && entry.type === FileType.Directory) {
 				entry.children.set(basename, File.create(basename, info.id, info.hash));
 			}
@@ -101,47 +101,47 @@ export class FileSystem {
 		if (this.filesOutsideWorkspaceRoot.has(uri)) {
 			return { type: FileType.File, ctime, mtime, size: 0 };
 		}
-		let isRoot = this.workspaceRoot === uri;
+		const isRoot = this.workspaceRoot === uri;
 		if (!uri.startsWith(this.workspaceRootWithSlash) && !isRoot) {
 			return null;
 		}
-		let p = isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length);
-		let entry = this.lookup(p, false);
+		const p = isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length);
+		const entry = this.lookup(p, false);
 		return entry ? entry : null;
 	}
 
 	public readDirectory(uri: string): [string, FileType][] {
-		let isRoot = this.workspaceRoot === uri;
+		const isRoot = this.workspaceRoot === uri;
 		if (!uri.startsWith(this.workspaceRootWithSlash) && !isRoot) {
 			return [];
 		}
-		let p = isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length);
-		let entry = this.lookup(p, false);
+		const p = isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length);
+		const entry = this.lookup(p, false);
 		if (entry === undefined || entry.type !== FileType.Directory) {
 			return [];
 		}
-		let result: [string, FileType][] = [];
-		for (let child of entry.children.values()) {
+		const result: [string, FileType][] = [];
+		for (const child of entry.children.values()) {
 			result.push([child.name, child.type]);
 		}
 		return result;
 	}
 
-	public getFileInfo(uri: string): { id: Id, hash: string | undefined } | undefined {
-		let result = this.filesOutsideWorkspaceRoot.get(uri);
+	public getFileInfo(uri: string): { id: Id; hash: string | undefined } | undefined {
+		const result = this.filesOutsideWorkspaceRoot.get(uri);
 		if (result !== undefined) {
 			return result;
 		}
-		let isRoot = this.workspaceRoot === uri;
+		const isRoot = this.workspaceRoot === uri;
 		if (!uri.startsWith(this.workspaceRootWithSlash) && !isRoot) {
 			return undefined;
 		}
-		let entry = this.lookup(isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length));
+		const entry = this.lookup(isRoot ? '' : uri.substring(this.workspaceRootWithSlash.length));
 		return entry && entry.type === FileType.File ? entry : undefined;
 	}
 
 	private lookup(uri: string, create: boolean = false): Entry | undefined {
-		let parts = uri.split('/');
+		const parts = uri.split('/');
 		let entry: Entry = this.root;
 		for (const part of parts) {
 			if (!part || part === '.') {
