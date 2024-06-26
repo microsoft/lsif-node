@@ -17,7 +17,7 @@
 	"dependencies": {
 		"vscode-uri": "^3.0.8",
 		"semver": "^7.6.2",
-		"@vscode/lsif-protocol": "0.6.0-next.8",
+		"lsif-protocol": "0.6.0-next.7",
 		"vscode-languageserver-types": "^3.17.5"
 	},
 	"devDependencies": {
