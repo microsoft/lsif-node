@@ -127,7 +127,7 @@ export class JsonStore extends Database {
 		};
 	}
 
-	public load(file: string, transformerFactory: (workspaceRoot: string) => UriTransformer): Promise<void> {
+	public load(file: string, transformerFactory?: (workspaceRoot: string) => UriTransformer): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
 			const input: fs.ReadStream = fs.createReadStream(file, { encoding: 'utf8'});
 			input.on('error', reject);
@@ -165,10 +165,10 @@ export class JsonStore extends Database {
 						reject(new Error(`No valid semantic version string. The version is: ${this.version}`));
 						return;
 					}
-					const range: SemVer.Range = new SemVer.Range('>0.5.99 <=0.6.0-next.4');
+					const range: SemVer.Range = new SemVer.Range('>0.5.99 <=0.6.0-next.7');
 					range.includePrerelease = true;
 					if (!SemVer.satisfies(semVer, range)) {
-						reject(new Error(`Requires version range >0.5.99 <=0.6.0-next.4 but received: ${this.version}`));
+						reject(new Error(`Requires version range >0.5.99 <=0.6.0-next.7 but received: ${this.version}`));
 						return;
 					}
 				}

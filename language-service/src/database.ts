@@ -26,7 +26,7 @@ export abstract class Database {
 	protected constructor() {
 	}
 
-	protected initialize(transformerFactory: (workspaceRoot: string) => UriTransformer): void {
+	protected initialize(transformerFactory?: (workspaceRoot: string) => UriTransformer): void {
 		const workspaceRoot = this.getWorkspaceRoot().toString(true);
 		this.uriTransformer = transformerFactory ? transformerFactory(workspaceRoot) : noopTransformer;
 		this.fileSystem = new FileSystem(workspaceRoot, this.getDocumentInfos());
