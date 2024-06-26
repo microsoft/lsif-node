@@ -14,7 +14,7 @@
 	"main": "lib/main.js",
 	"typings": "lib/main.d.ts",
 	"dependencies": {
-		"vscode-languageserver-protocol": "^3.17.5"
+		"vscode-languageserver-types": "^3.17.5"
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",

@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as lsp from 'vscode-languageserver-protocol';
+import * as types from 'vscode-languageserver-types';
 
 namespace Is {
 	export function boolean(value: any): value is boolean {
@@ -31,11 +31,11 @@ namespace Is {
 		return typeof value === 'number' || value instanceof Number;
 	}
 
-	export function symbolKind(value: any): value is lsp.SymbolKind {
+	export function symbolKind(value: any): value is types.SymbolKind {
 		return typeof value === 'number' || value instanceof Number;
 	}
 
-	export function symbolTag(value: any): value is lsp.SymbolTag {
+	export function symbolTag(value: any): value is types.SymbolTag {
 		return typeof value === 'number' || value instanceof Number;
 	}
 }
@@ -512,12 +512,12 @@ export interface DeclarationTag {
 	/**
 	 * The symbol kind.
 	 */
-	kind: lsp.SymbolKind;
+	kind: types.SymbolKind;
 
 	/**
 	 * Additional tags for the definition.
 	 */
-	tags?: lsp.SymbolTag[];
+	tags?: types.SymbolTag[];
 
 	/**
 	 * Indicates if this symbol is deprecated.
@@ -530,7 +530,7 @@ export interface DeclarationTag {
 	 * The full range of the declaration not including leading/trailing whitespace but everything else, e.g comments and code.
 	 * The range must be included in fullRange.
 	 */
-	fullRange: lsp.Range;
+	fullRange: types.Range;
 
 	/**
 	 * Optional detail information for the declaration.
@@ -545,7 +545,7 @@ export namespace DeclarationTag {
 		kind: new Property(Is.symbolKind),
 		tags: new Property(Is.symbolTag, PropertyFlags.optional),
 		deprecated: new BooleanProperty(PropertyFlags.optional),
-		fullRange: new Property(lsp.Range.is),
+		fullRange: new Property(types.Range.is),
 		detail: new StringProperty(PropertyFlags.optional)
 	});
 	export function is(value: any): value is DeclarationTag {
@@ -570,12 +570,12 @@ export interface DefinitionTag {
 	/**
 	 * The symbol kind.
 	 */
-	kind: lsp.SymbolKind;
+	kind: types.SymbolKind;
 
 	/**
 	 * Additional tags for the definition.
 	 */
-	tags?: lsp.SymbolTag[];
+	tags?: types.SymbolTag[];
 
 	/**
 	 * Indicates if this symbol is deprecated.
@@ -588,7 +588,7 @@ export interface DefinitionTag {
 	 * The full range of the definition not including leading/trailing whitespace but everything else, e.g comments and code.
 	 * The range must be included in fullRange.
 	 */
-	fullRange: lsp.Range;
+	fullRange: types.Range;
 
 	/**
 	 * Optional detail information for the definition.
@@ -603,7 +603,7 @@ export namespace DefinitionTag {
 		kind: new Property(Is.symbolKind),
 		tags: new Property(Is.symbolTag, PropertyFlags.optional),
 		deprecated: new BooleanProperty(PropertyFlags.optional),
-		fullRange: new Property(lsp.Range.is),
+		fullRange: new Property(types.Range.is),
 		detail: new StringProperty(PropertyFlags.optional)
 	});
 	export function is(value: any): value is DefinitionTag {
@@ -693,7 +693,7 @@ export namespace RangeTag {
 /**
  * A vertex representing a range inside a document.
  */
-export interface Range extends V, lsp.Range {
+export interface Range extends V, types.Range {
 
 	label: VertexLabels.range;
 
@@ -707,8 +707,8 @@ export namespace Range {
 	export const descriptor = new VertexDescriptor<Required<Range>>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.range),
 		tag: RangeTag.property(PropertyFlags.optional),
-		start: new Property(lsp.Position.is),
-		end: new Property(lsp.Position.is)
+		start: new Property(types.Position.is),
+		end: new Property(types.Position.is)
 	}));
 	export function is(value: any): value is Range {
 		return descriptor.validate(value);
@@ -794,13 +794,13 @@ export interface Location extends V {
 	/**
 	 * The location's range
 	 */
-	range: lsp.Range;
+	range: types.Range;
 }
 
 export namespace Location {
 	export const descriptor = new VertexDescriptor<Required<Location>>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.location),
-		range: new Property<lsp.Range>(value => lsp.Range.is(value))
+		range: new Property<types.Range>(value => types.Range.is(value))
 	}));
 	export function is(value: any): value is Location {
 		return descriptor.validate(value);
@@ -1300,13 +1300,13 @@ export interface DocumentSymbolResult extends V {
 
 	label: VertexLabels.documentSymbolResult;
 
-	result: lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[];
+	result: types.DocumentSymbol[] | RangeBasedDocumentSymbol[];
 }
 
 export namespace DocumentSymbolResult {
 	export const descriptor = new VertexDescriptor<DocumentSymbolResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.documentSymbolResult),
-		result: new Property<lsp.DocumentSymbol[] | RangeBasedDocumentSymbol[]>(value => {
+		result: new Property<types.DocumentSymbol[] | RangeBasedDocumentSymbol[]>(value => {
 			if (!Array.isArray(value)) {
 				return false;
 			}
@@ -1316,7 +1316,7 @@ export namespace DocumentSymbolResult {
 			const first = value[0];
 			const validator = (first as RangeBasedDocumentSymbol).id !== undefined
 				? RangeBasedDocumentSymbol.is
-				: lsp.DocumentSymbol.is;
+				: types.DocumentSymbol.is;
 			for (const item of value) {
 				if (!validator(item)) {
 					return false;
@@ -1343,13 +1343,13 @@ export interface DiagnosticResult extends V {
 	/**
 	 * The diagnostics.
 	 */
-	result: lsp.Diagnostic[];
+	result: types.Diagnostic[];
 }
 
 export namespace DiagnosticResult {
 	export const descriptor = new VertexDescriptor<DiagnosticResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.diagnosticResult),
-		result: new ArrayProperty(lsp.Diagnostic.is)
+		result: new ArrayProperty(types.Diagnostic.is)
 	}));
 	export function is(value: any): value is DiagnosticResult {
 		return descriptor.validate(value);
@@ -1369,13 +1369,13 @@ export interface FoldingRangeResult extends V {
 	/**
 	 * The actual folding ranges.
 	 */
-	result: lsp.FoldingRange[];
+	result: types.FoldingRange[];
 }
 
 export namespace FoldingRangeResult {
 	export const descriptor = new VertexDescriptor<FoldingRangeResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.foldingRangeResult),
-		result: new ArrayProperty(lsp.FoldingRange.is)
+		result: new ArrayProperty(types.FoldingRange.is)
 	}));
 	export function is(value: any): value is FoldingRangeResult {
 		return descriptor.validate(value);
@@ -1395,13 +1395,13 @@ export interface DocumentLinkResult extends V {
 	/**
 	 * The actual document links.
 	 */
-	result: lsp.DocumentLink[];
+	result: types.DocumentLink[];
 }
 
 export namespace DocumentLinkResult {
 	export const descriptor = new VertexDescriptor<DocumentLinkResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.documentLinkResult),
-		result: new ArrayProperty(lsp.DocumentLink.is)
+		result: new ArrayProperty(types.DocumentLink.is)
 	}));
 	export function is(value: any): value is DocumentLinkResult {
 		return descriptor.validate(value);
@@ -1518,13 +1518,13 @@ export interface HoverResult extends V {
 	/**
 	 * The hover result. This is the normal LSP hover result.
 	 */
-	result: lsp.Hover;
+	result: types.Hover;
 }
 
 export namespace HoverResult {
 	export const descriptor = new VertexDescriptor<HoverResult>(Object.assign({}, V.descriptor.description, {
 		label: VertexLabels.property(VertexLabels.hoverResult),
-		result: new Property<lsp.Hover>(lsp.Hover.is)
+		result: new Property<types.Hover>(types.Hover.is)
 	}));
 	export function is(value: any): value is HoverResult {
 		return descriptor.validate(value);
