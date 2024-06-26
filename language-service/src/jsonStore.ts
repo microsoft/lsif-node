@@ -32,11 +32,11 @@ interface Vertices {
 
 type ItemTarget =
 	Range |
-	{ type: ItemEdgeProperties.declarations; range: Range; } |
-	{ type: ItemEdgeProperties.definitions; range: Range; } |
-	{ type: ItemEdgeProperties.references; range: Range; } |
-	{ type: ItemEdgeProperties.referenceResults; result: ReferenceResult; } |
-	{ type: ItemEdgeProperties.referenceLinks; result: Moniker; };
+	{ type: ItemEdgeProperties.declarations; range: Range } |
+	{ type: ItemEdgeProperties.definitions; range: Range } |
+	{ type: ItemEdgeProperties.references; range: Range } |
+	{ type: ItemEdgeProperties.referenceResults; result: ReferenceResult } |
+	{ type: ItemEdgeProperties.referenceLinks; result: Moniker };
 
 interface Out {
 	contains: Map<Id, Document[] | Range[]>;
@@ -63,12 +63,12 @@ interface In {
 interface Indices {
 	monikers: Map<string, Moniker[]>;
 	contents: Map<string, string>;
-	documents: Map<string, { hash: string, documents: Document[] }>;
+	documents: Map<string, { hash: string; documents: Document[] }>;
 }
 
 interface ResultPath<T> {
-	path: { vertex: Id, moniker: Moniker | undefined }[];
-	result: { value: T, moniker: Moniker | undefined } | undefined;
+	path: { vertex: Id; moniker: Moniker | undefined }[];
+	result: { value: T; moniker: Moniker | undefined } | undefined;
 }
 
 namespace Locations {
@@ -253,7 +253,7 @@ export class JsonStore extends Database {
 		if (Edge.is11(edge)) {
 			this.doProcessEdge(edge.label, edge.outV, edge.inV, property);
 		} else if (Edge.is1N(edge)) {
-			for (let inV of edge.inVs) {
+			for (const inV of edge.inVs) {
 				this.doProcessEdge(edge.label, edge.outV, inV, property);
 			}
 		}
@@ -269,6 +269,7 @@ export class JsonStore extends Database {
 			throw new Error(`No vertex found for Id ${inV}`);
 		}
 		let values: any[] | undefined;
+		let itemTarget: ItemTarget | undefined;
 		switch (label) {
 			case EdgeLabels.contains:
 				values = this.out.contains.get(from.id);
@@ -282,7 +283,6 @@ export class JsonStore extends Database {
 				break;
 			case EdgeLabels.item:
 				values = this.out.item.get(from.id);
-				let itemTarget: ItemTarget | undefined;
 				if (property !== undefined) {
 					switch (property) {
 						case ItemEdgeProperties.references:
@@ -360,7 +360,7 @@ export class JsonStore extends Database {
 		return result;
 	}
 
-	protected findFile(uri: string): { id: Id; hash: string; } | undefined {
+	protected findFile(uri: string): { id: Id; hash: string } | undefined {
 		const result = this.indices.documents.get(uri);
 		if (result === undefined) {
 			return undefined;
@@ -368,7 +368,7 @@ export class JsonStore extends Database {
 		return { id: result.documents[0].id, hash: result.hash };
 	}
 
-	protected fileContent(info: { id: Id, hash: string }): string | undefined {
+	protected fileContent(info: { id: Id; hash: string }): string | undefined {
 		return this.indices.contents.get(info.hash);
 	}
 
@@ -384,8 +384,8 @@ export class JsonStore extends Database {
 		if (foldingRangeResult === undefined) {
 			return undefined;
 		}
-		let result: lsp.FoldingRange[] = [];
-		for (let item of foldingRangeResult.result) {
+		const result: lsp.FoldingRange[] = [];
+		for (const item of foldingRangeResult.result) {
 			result.push(Object.assign(Object.create(null), item));
 		}
 		return result;
@@ -399,19 +399,19 @@ export class JsonStore extends Database {
 		// Take the id of the first document with that content. We assume that
 		// all documents with the same content have the same document symbols.
 		const id = value.documents[0].id;
-		let documentSymbolResult = this.out.documentSymbol.get(id);
+		const documentSymbolResult = this.out.documentSymbol.get(id);
 		if (documentSymbolResult === undefined || documentSymbolResult.result.length === 0) {
 			return undefined;
 		}
-		let first = documentSymbolResult.result[0];
-		let result: lsp.DocumentSymbol[] = [];
+		const first = documentSymbolResult.result[0];
+		const result: lsp.DocumentSymbol[] = [];
 		if (lsp.DocumentSymbol.is(first)) {
-			for (let item of documentSymbolResult.result) {
+			for (const item of documentSymbolResult.result) {
 				result.push(Object.assign(Object.create(null), item));
 			}
 		} else {
-			for (let item of (documentSymbolResult.result as RangeBasedDocumentSymbol[])) {
-				let converted = this.toDocumentSymbol(item);
+			for (const item of (documentSymbolResult.result as RangeBasedDocumentSymbol[])) {
+				const converted = this.toDocumentSymbol(item);
 				if (converted !== undefined) {
 					result.push(converted);
 				}
@@ -421,19 +421,19 @@ export class JsonStore extends Database {
 	}
 
 	private toDocumentSymbol(value: RangeBasedDocumentSymbol): lsp.DocumentSymbol | undefined {
-		let range = this.vertices.ranges.get(value.id)!;
-		let tag = range.tag;
+		const range = this.vertices.ranges.get(value.id)!;
+		const tag = range.tag;
 		if (tag === undefined || !(tag.type === 'declaration' || tag.type === 'definition')) {
 			return undefined;
 		}
-		let result: lsp.DocumentSymbol = lsp.DocumentSymbol.create(
+		const result: lsp.DocumentSymbol = lsp.DocumentSymbol.create(
 			tag.text, tag.detail || '', tag.kind,
 			tag.fullRange, this.asRange(range)
 		);
 		if (value.children && value.children.length > 0) {
 			result.children = [];
-			for (let child of value.children) {
-				let converted = this.toDocumentSymbol(child);
+			for (const child of value.children) {
+				const converted = this.toDocumentSymbol(child);
 				if (converted !== undefined) {
 					result.children.push(converted);
 				}
@@ -456,7 +456,7 @@ export class JsonStore extends Database {
 			return undefined;
 		}
 
-		let hoverRange = hoverResult.result.range !== undefined ? hoverResult.result.range : range;
+		const hoverRange = hoverResult.result.range !== undefined ? hoverResult.result.range : range;
 		return {
 			contents: hoverResult.result.contents,
 			range: hoverRange
@@ -530,7 +530,7 @@ export class JsonStore extends Database {
 	}
 
 	public references(uri: string, position: lsp.Position, context: lsp.ReferenceContext): lsp.Location[] | undefined {
-		let ranges = this.findRangesFromPosition(this.toDatabase(uri), position);
+		const ranges = this.findRangesFromPosition(this.toDatabase(uri), position);
 		if (ranges === undefined) {
 			return undefined;
 		}
@@ -619,7 +619,7 @@ export class JsonStore extends Database {
 		if (targets === undefined) {
 			return undefined;
 		}
-		for (let target of targets) {
+		for (const target of targets) {
 			if (target.type === ItemEdgeProperties.declarations && context.includeDeclaration) {
 				this.addLocation(locations, target.range, dedupLocations);
 			} else if (target.type === ItemEdgeProperties.definitions && context.includeDeclaration) {
@@ -653,7 +653,7 @@ export class JsonStore extends Database {
 		if (lsp.Location.is(value)) {
 			location = value;
 		} else {
-			let document = this.in.contains.get(value.id)!;
+			const document = this.in.contains.get(value.id)!;
 			location = lsp.Location.create(this.fromDatabase((document as Document).uri), this.asRange(value));
 		}
 		const key = Locations.makeKey(location);
@@ -668,16 +668,16 @@ export class JsonStore extends Database {
 		if (value === undefined) {
 			return undefined;
 		}
-		let result: Range[] = [];
+		const result: Range[] = [];
 		for (const document of value.documents) {
 			const id = document.id;
-			let contains = this.out.contains.get(id);
+			const contains = this.out.contains.get(id);
 			if (contains === undefined || contains.length === 0) {
 				return undefined;
 			}
 
 			let candidate: Range | undefined;
-			for (let item of contains) {
+			for (const item of contains) {
 				if (item.label !== VertexLabels.range) {
 					continue;
 				}

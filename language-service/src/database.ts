@@ -41,12 +41,12 @@ export abstract class Database {
 	protected abstract getDocumentInfos(): DocumentInfo[];
 
 	public stat(uri: string): FileStat | null {
-		let transformed = this.uriTransformer.toDatabase(uri);
-		let result = this.fileSystem.stat(transformed);
+		const transformed = this.uriTransformer.toDatabase(uri);
+		const result = this.fileSystem.stat(transformed);
 		if (result !== null) {
 			return result;
 		}
-		let id = this.findFile(transformed);
+		const id = this.findFile(transformed);
 		if (id === undefined) {
 			return null;
 		}
@@ -58,7 +58,7 @@ export abstract class Database {
 	}
 
 	public readFileContent(uri: string): string | null {
-		let transformed = this.uriTransformer.toDatabase(uri);
+		const transformed = this.uriTransformer.toDatabase(uri);
 		let info = this.fileSystem.getFileInfo(transformed);
 		if (info === undefined) {
 			info = this.findFile(transformed);
@@ -66,16 +66,16 @@ export abstract class Database {
 		if (info === undefined) {
 			return null;
 		}
-		let result = this.fileContent(info);
+		const result = this.fileContent(info);
 		if (result === undefined) {
 			return null;
 		}
 		return result;
 	}
 
-	protected abstract findFile(uri: string):{ id: Id; hash: string | undefined; } | undefined;
+	protected abstract findFile(uri: string):{ id: Id; hash: string | undefined } | undefined;
 
-	protected abstract fileContent( info: { id: Id; hash: string | undefined; } ) : string | undefined;
+	protected abstract fileContent( info: { id: Id; hash: string | undefined } ) : string | undefined;
 
 	public abstract foldingRanges(uri: string): lsp.FoldingRange[] | undefined;
 
@@ -90,7 +90,7 @@ export abstract class Database {
 	public abstract references(uri: string, position: lsp.Position, context: lsp.ReferenceContext): lsp.Location[] | undefined;
 
 	protected asDocumentSymbol(range: Range): lsp.DocumentSymbol | undefined {
-		let tag = range.tag;
+		const tag = range.tag;
 		if (tag === undefined || !(tag.type === 'declaration' || tag.type === 'definition')) {
 			return undefined;
 		}
