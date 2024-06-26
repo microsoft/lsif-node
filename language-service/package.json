@@ -1,0 +1,39 @@
+{
+	"name": "@vscode/lsif-language-service",
+	"description": "LSIF based language services",
+	"private": true,
+	"version": "0.1.0",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Microsoft/lsif-node/issues"
+	},
+	"main": "lib/main.js",
+	"typings": "lib/main.d.ts",
+	"dependencies": {
+		"vscode-uri": "^3.0.8",
+		"semver": "^7.6.2",
+		"lsif-protocol": "0.6.0-next.7",
+		"vscode-languageserver-types": "^3.17.5"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.7",
+		"@types/mocha": "^10.0.7"
+	},
+	"scripts": {
+		"compile": "tsc -b ./tsconfig.json",
+		"compile:publish": "tsc -p./tsconfig.publish.json",
+		"watch": "tsc -b ./tsconfig.watch.json -w",
+		"clean": "rimraf lib",
+		"clean:all": "tsc -b ./tsconfig.json --clean",
+		"lint": "eslint ./src/*.ts",
+		"test": "mocha",
+		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
+		"postpublish": "node ../build/bin/post-publish.js",
+		"postinstall": ""
+	}
+}

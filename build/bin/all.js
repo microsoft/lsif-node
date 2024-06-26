@@ -20,7 +20,7 @@ if (args[0] === 'install' && process.env['npm_config_root_only'] === 'true') {
 }
 
 
-const folders = ['protocol', 'tsc', 'npm', 'sqlite', 'tooling', 'tsc-tests', 'lsif'];
+const folders = ['protocol', 'tsc', 'npm', 'sqlite', 'tooling', 'tsc-tests', 'lsif', 'language-service'];
 
 for (const folder of folders) {
 	console.log(`Running npm ${args.join(' ')} in ${folder}`);

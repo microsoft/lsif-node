@@ -11,6 +11,7 @@
 		{ "path": "./tsc-tests/tsconfig.json" },
 		{ "path": "./npm/tsconfig.json" },
 		{ "path": "./sqlite/tsconfig.json" },
-		{ "path": "./lsif/tsconfig.json" }
+		{ "path": "./lsif/tsconfig.json" },
+		{ "path": "./language-service/tsconfig.json"}
 	]
 }
