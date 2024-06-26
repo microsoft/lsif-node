@@ -56,10 +56,12 @@ extends:
           - template: /build/azure-pipelines/templates/test-steps.yml@self
             parameters:
               package: '@vscode/lsif-protocol'
+              workingDirectory: protocol
         buildSteps:
           - template: /build/azure-pipelines/templates/build-steps.yml@self
             parameters:
               package: '@vscode/lsif-protocol'
+              workingDirectory: protocol
         ghTagPrefix: release/protocol/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
@@ -83,10 +85,12 @@ extends:
           - template: /build/azure-pipelines/templates/test-steps.yml@self
             parameters:
               package: '@vscode/lsif-language-service'
+              workingDirectory: language-service
         buildSteps:
           - template: /build/azure-pipelines/templates/build-steps.yml@self
             parameters:
               package: '@vscode/lsif-language-service'
+              workingDirectory: language-service
         ghTagPrefix: release/language-service/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
