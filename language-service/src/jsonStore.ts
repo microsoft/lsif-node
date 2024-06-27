@@ -14,7 +14,7 @@ import {
 	TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult, Edge, RangeBasedDocumentSymbol, DeclarationResult,
 	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, MonikerKind,
 	types
-} from 'lsif-protocol';
+} from '@vscode/lsif-protocol';
 
 import { DocumentInfo } from './files';
 import { Database, UriTransformer } from './database';
