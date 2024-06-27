@@ -9,11 +9,11 @@ import * as readline from 'readline';
 import { URI } from 'vscode-uri';
 import * as SemVer from 'semver';
 
-import * as lsp from 'vscode-languageserver-types';
 import {
 	Id, Vertex, Project, Document, Range, DiagnosticResult, DocumentSymbolResult, FoldingRangeResult, DocumentLinkResult, DefinitionResult,
 	TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult, Edge, RangeBasedDocumentSymbol, DeclarationResult,
-	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, MonikerKind
+	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, MonikerKind,
+	types
 } from 'lsif-protocol';
 
 import { DocumentInfo } from './files';
@@ -72,7 +72,7 @@ interface ResultPath<T> {
 }
 
 namespace Locations {
-	export function makeKey(location: lsp.Location): string {
+	export function makeKey(location: types.Location): string {
 		const range = location.range;
 		return crypto.createHash('md5').update(JSON.stringify({ d: location.uri, sl: range.start.line, sc: range.start.character, el: range.end.line, ec: range.end.character }, undefined, 0)).digest('base64');
 	}
@@ -372,7 +372,7 @@ export class JsonStore extends Database {
 		return this.indices.contents.get(info.hash);
 	}
 
-	public foldingRanges(uri: string): lsp.FoldingRange[] | undefined {
+	public foldingRanges(uri: string): types.FoldingRange[] | undefined {
 		const value = this.indices.documents.get(this.toDatabase(uri));
 		if (value === undefined) {
 			return undefined;
@@ -384,14 +384,14 @@ export class JsonStore extends Database {
 		if (foldingRangeResult === undefined) {
 			return undefined;
 		}
-		const result: lsp.FoldingRange[] = [];
+		const result: types.FoldingRange[] = [];
 		for (const item of foldingRangeResult.result) {
 			result.push(Object.assign(Object.create(null), item));
 		}
 		return result;
 	}
 
-	public documentSymbols(uri: string): lsp.DocumentSymbol[] | undefined {
+	public documentSymbols(uri: string): types.DocumentSymbol[] | undefined {
 		const value = this.indices.documents.get(this.toDatabase(uri));
 		if (value === undefined) {
 			return undefined;
@@ -404,8 +404,8 @@ export class JsonStore extends Database {
 			return undefined;
 		}
 		const first = documentSymbolResult.result[0];
-		const result: lsp.DocumentSymbol[] = [];
-		if (lsp.DocumentSymbol.is(first)) {
+		const result: types.DocumentSymbol[] = [];
+		if (types.DocumentSymbol.is(first)) {
 			for (const item of documentSymbolResult.result) {
 				result.push(Object.assign(Object.create(null), item));
 			}
@@ -420,13 +420,13 @@ export class JsonStore extends Database {
 		return result;
 	}
 
-	private toDocumentSymbol(value: RangeBasedDocumentSymbol): lsp.DocumentSymbol | undefined {
+	private toDocumentSymbol(value: RangeBasedDocumentSymbol): types.DocumentSymbol | undefined {
 		const range = this.vertices.ranges.get(value.id)!;
 		const tag = range.tag;
 		if (tag === undefined || !(tag.type === 'declaration' || tag.type === 'definition')) {
 			return undefined;
 		}
-		const result: lsp.DocumentSymbol = lsp.DocumentSymbol.create(
+		const result: types.DocumentSymbol = types.DocumentSymbol.create(
 			tag.text, tag.detail || '', tag.kind,
 			tag.fullRange, this.asRange(range)
 		);
@@ -442,7 +442,7 @@ export class JsonStore extends Database {
 		return result;
 	}
 
-	public hover(uri: string, position: lsp.Position): lsp.Hover | undefined {
+	public hover(uri: string, position: types.Position): types.Hover | undefined {
 		const ranges = this.findRangesFromPosition(this.toDatabase(uri), position);
 		if (ranges === undefined) {
 			return undefined;
@@ -463,21 +463,21 @@ export class JsonStore extends Database {
 		};
 	}
 
-	public declarations(uri: string, position: lsp.Position): lsp.Location | lsp.Location[] | undefined {
+	public declarations(uri: string, position: types.Position): types.Location | types.Location[] | undefined {
 		return this.findTargets(uri, position, this.out.declaration);
 	}
 
-	public definitions(uri: string, position: lsp.Position): lsp.Location | lsp.Location[] | undefined {
+	public definitions(uri: string, position: types.Position): types.Location | types.Location[] | undefined {
 		return this.findTargets(uri, position, this.out.definition);
 	}
 
-	private findTargets<T extends (DefinitionResult | DeclarationResult)>(uri: string, position: lsp.Position, edges: Map<Id, T>): lsp.Location | lsp.Location[] | undefined {
+	private findTargets<T extends (DefinitionResult | DeclarationResult)>(uri: string, position: types.Position, edges: Map<Id, T>): types.Location | types.Location[] | undefined {
 		const ranges = this.findRangesFromPosition(this.toDatabase(uri), position);
 		if (ranges === undefined) {
 			return undefined;
 		}
 
-		const resolveTargets = (result: lsp.Location[], dedupLocations: Set<string>, targetResult: T): void => {
+		const resolveTargets = (result: types.Location[], dedupLocations: Set<string>, targetResult: T): void => {
 			const ranges = this.item(targetResult);
 			if (ranges === undefined) {
 				return undefined;
@@ -487,7 +487,7 @@ export class JsonStore extends Database {
 			}
 		};
 
-		const _findTargets = (result: lsp.Location[], dedupLocations: Set<string>, dedupMonikers: Set<string>, range: Range): void => {
+		const _findTargets = (result: types.Location[], dedupLocations: Set<string>, dedupMonikers: Set<string>, range: Range): void => {
 			const resultPath = this.getResultPath(range.id, edges);
 			if (resultPath.result === undefined) {
 				return undefined;
@@ -520,7 +520,7 @@ export class JsonStore extends Database {
 			}
 		};
 
-		const result: lsp.Location[] = [];
+		const result: types.Location[] = [];
 		const dedupLocations: Set<string> = new Set();
 		const dedupMonikers: Set<string> = new Set();
 		for (const range of ranges) {
@@ -529,13 +529,13 @@ export class JsonStore extends Database {
 		return result;
 	}
 
-	public references(uri: string, position: lsp.Position, context: lsp.ReferenceContext): lsp.Location[] | undefined {
+	public references(uri: string, position: types.Position, context: types.ReferenceContext): types.Location[] | undefined {
 		const ranges = this.findRangesFromPosition(this.toDatabase(uri), position);
 		if (ranges === undefined) {
 			return undefined;
 		}
 
-		const findReferences = (result: lsp.Location[], dedupLocations: Set<string>, dedupMonikers: Set<string>, range: Range): void => {
+		const findReferences = (result: types.Location[], dedupLocations: Set<string>, dedupMonikers: Set<string>, range: Range): void => {
 			const resultPath = this.getResultPath(range.id, this.out.references);
 			if (resultPath.result === undefined) {
 				return;
@@ -569,7 +569,7 @@ export class JsonStore extends Database {
 			}
 		};
 
-		const result: lsp.Location[] = [];
+		const result: types.Location[] = [];
 		const dedupLocations: Set<string> = new Set();
 		const dedupMonikers: Set<string> = new Set();
 		for (const range of ranges) {
@@ -614,7 +614,7 @@ export class JsonStore extends Database {
 		return this.in.moniker.get(moniker.id);
 	}
 
-	private resolveReferenceResult(locations: lsp.Location[], dedupLocations: Set<string>, monikers: Moniker[], referenceResult: ReferenceResult, context: lsp.ReferenceContext): void {
+	private resolveReferenceResult(locations: types.Location[], dedupLocations: Set<string>, monikers: Moniker[], referenceResult: ReferenceResult, context: types.ReferenceContext): void {
 		const targets = this.item(referenceResult);
 		if (targets === undefined) {
 			return undefined;
@@ -648,13 +648,13 @@ export class JsonStore extends Database {
 		}
 	}
 
-	private addLocation(result: lsp.Location[], value: Range | lsp.Location, dedup: Set<string>): void {
-		let location: lsp.Location;
-		if (lsp.Location.is(value)) {
+	private addLocation(result: types.Location[], value: Range | types.Location, dedup: Set<string>): void {
+		let location: types.Location;
+		if (types.Location.is(value)) {
 			location = value;
 		} else {
 			const document = this.in.contains.get(value.id)!;
-			location = lsp.Location.create(this.fromDatabase((document as Document).uri), this.asRange(value));
+			location = types.Location.create(this.fromDatabase((document as Document).uri), this.asRange(value));
 		}
 		const key = Locations.makeKey(location);
 		if (!dedup.has(key)) {
@@ -663,7 +663,7 @@ export class JsonStore extends Database {
 		}
 	}
 
-	private findRangesFromPosition(file: string, position: lsp.Position): Range[] | undefined {
+	private findRangesFromPosition(file: string, position: types.Position): Range[] | undefined {
 		const value = this.indices.documents.get(file);
 		if (value === undefined) {
 			return undefined;
@@ -698,7 +698,7 @@ export class JsonStore extends Database {
 		return result.length > 0 ? result : undefined;
 	}
 
-	private static containsPosition(range: lsp.Range, position: lsp.Position): boolean {
+	private static containsPosition(range: types.Range, position: types.Position): boolean {
 		if (position.line < range.start.line || position.line > range.end.line) {
 			return false;
 		}
@@ -714,7 +714,7 @@ export class JsonStore extends Database {
 	/**
 	 * Test if `otherRange` is in `range`. If the ranges are equal, will return true.
 	 */
-	public static containsRange(range: lsp.Range, otherRange: lsp.Range): boolean {
+	public static containsRange(range: types.Range, otherRange: types.Range): boolean {
 		if (otherRange.start.line < range.start.line || otherRange.end.line < range.start.line) {
 			return false;
 		}

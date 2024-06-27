@@ -11,8 +11,15 @@
 	"bugs": {
 		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
+	"engines": {
+		"node": ">=20.9.0"
+	},
+	"exports": {
+		".": {
+			"types": "./lib/main.d.ts",
+			"default": "./lib/main.js"
+		}
+	},
 	"dependencies": {
 		"vscode-languageserver-types": "^3.17.5"
 	},
