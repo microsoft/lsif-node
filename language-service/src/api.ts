@@ -7,5 +7,5 @@ import { UriTransformer, Database, noopTransformer } from './database';
 import { JsonStore  } from './jsonStore';
 import { FileType, DocumentInfo, FileStat } from './files';
 
-export * from 'lsif-protocol';
+export * from '@vscode/lsif-protocol';
 export { UriTransformer, noopTransformer, Database, JsonStore, FileType, DocumentInfo, FileStat };

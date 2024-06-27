@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as path from 'path';
 
-import { Id } from 'lsif-protocol';
+import { Id } from '@vscode/lsif-protocol';
 
 const ctime = Date.now();
 const mtime = Date.now();

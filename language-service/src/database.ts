@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import { URI } from 'vscode-uri';
-import { Range, Id, types } from 'lsif-protocol';
+import { Range, Id, types } from '@vscode/lsif-protocol';
 
 import { FileType, FileSystem, DocumentInfo, FileStat } from './files';
 
