@@ -12,13 +12,19 @@
 	"bugs": {
 		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
+	"engines": {
+		"node": ">=20.9.0"
+	},
+	"exports": {
+		".": {
+			"types": "./lib/api.d.ts",
+			"default": "./lib/api.js"
+		}
+	},
 	"dependencies": {
 		"vscode-uri": "^3.0.8",
 		"semver": "^7.6.2",
-		"lsif-protocol": "0.6.0-next.7",
-		"vscode-languageserver-types": "^3.17.5"
+		"lsif-protocol": "0.6.0-next.7"
 	},
 	"devDependencies": {
 		"@types/semver": "^7.5.7",

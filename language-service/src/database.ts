@@ -3,8 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import { URI } from 'vscode-uri';
-import * as lsp from 'vscode-languageserver-types';
-import { Range, Id } from 'lsif-protocol';
+import { Range, Id, types } from 'lsif-protocol';
 
 import { FileType, FileSystem, DocumentInfo, FileStat } from './files';
 
@@ -73,34 +72,34 @@ export abstract class Database {
 		return result;
 	}
 
-	protected abstract findFile(uri: string):{ id: Id; hash: string | undefined } | undefined;
+	protected abstract findFile(uri: string): { id: Id; hash: string | undefined } | undefined;
 
 	protected abstract fileContent( info: { id: Id; hash: string | undefined } ) : string | undefined;
 
-	public abstract foldingRanges(uri: string): lsp.FoldingRange[] | undefined;
+	public abstract foldingRanges(uri: string): types.FoldingRange[] | undefined;
 
-	public abstract documentSymbols(uri: string): lsp.DocumentSymbol[] | undefined;
+	public abstract documentSymbols(uri: string): types.DocumentSymbol[] | undefined;
 
-	public abstract hover(uri: string, position: lsp.Position): lsp.Hover | undefined;
+	public abstract hover(uri: string, position: types.Position): types.Hover | undefined;
 
-	public abstract declarations(uri: string, position: lsp.Position): lsp.Location | lsp.Location[] | undefined;
+	public abstract declarations(uri: string, position: types.Position): types.Location | types.Location[] | undefined;
 
-	public abstract definitions(uri: string, position: lsp.Position): lsp.Location | lsp.Location[] | undefined;
+	public abstract definitions(uri: string, position: types.Position): types.Location | types.Location[] | undefined;
 
-	public abstract references(uri: string, position: lsp.Position, context: lsp.ReferenceContext): lsp.Location[] | undefined;
+	public abstract references(uri: string, position: types.Position, context: types.ReferenceContext): types.Location[] | undefined;
 
-	protected asDocumentSymbol(range: Range): lsp.DocumentSymbol | undefined {
+	protected asDocumentSymbol(range: Range): types.DocumentSymbol | undefined {
 		const tag = range.tag;
 		if (tag === undefined || !(tag.type === 'declaration' || tag.type === 'definition')) {
 			return undefined;
 		}
-		return lsp.DocumentSymbol.create(
+		return types.DocumentSymbol.create(
 			tag.text, tag.detail || '', tag.kind,
 			tag.fullRange, this.asRange(range)
 		);
 	}
 
-	protected asRange(value: Range): lsp.Range {
+	protected asRange(value: Range): types.Range {
 		return {
 			start: {
 				line: value.start.line,
