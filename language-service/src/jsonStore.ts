@@ -13,7 +13,7 @@ import {
 	Id, Vertex, Project, Document, Range, DiagnosticResult, DocumentSymbolResult, FoldingRangeResult, DocumentLinkResult, DefinitionResult,
 	TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult, Edge, RangeBasedDocumentSymbol, DeclarationResult,
 	ElementTypes, VertexLabels, EdgeLabels, ItemEdgeProperties, EventScope, EventKind, ProjectEvent, Moniker as PMoniker, MonikerKind,
-	types
+	types, type MetaData
 } from '@vscode/lsif-protocol';
 
 import { DocumentInfo } from './files';
@@ -165,10 +165,10 @@ export class JsonStore extends Database {
 						reject(new Error(`No valid semantic version string. The version is: ${this.version}`));
 						return;
 					}
-					const range: SemVer.Range = new SemVer.Range('>0.5.99 <=0.6.0-next.7');
+					const range: SemVer.Range = new SemVer.Range('>=0.5.0 <=0.6.0-next.7');
 					range.includePrerelease = true;
 					if (!SemVer.satisfies(semVer, range)) {
-						reject(new Error(`Requires version range >0.5.99 <=0.6.0-next.7 but received: ${this.version}`));
+						reject(new Error(`Requires version range >=0.5.0 <=0.6.0-next.7 but received: ${this.version}`));
 						return;
 					}
 				}
@@ -187,10 +187,16 @@ export class JsonStore extends Database {
 	}
 
 	private processVertex(vertex: Vertex): void {
+		interface LegacyMetaData extends MetaData {
+			projectRoot?: string;
+		}
 		this.vertices.all.set(vertex.id, vertex);
 		switch(vertex.label) {
 			case VertexLabels.metaData:
 				this.version = vertex.version;
+				if (this.workspaceRoot === undefined && (vertex as LegacyMetaData).projectRoot !== undefined) {
+					this.workspaceRoot = URI.parse((vertex as LegacyMetaData).projectRoot!);
+				}
 				break;
 			case VertexLabels.source:
 				this.workspaceRoot = URI.parse(vertex.workspaceRoot);
