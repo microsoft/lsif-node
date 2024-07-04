@@ -1,7 +1,7 @@
 {
 	"name": "@vscode/lsif-language-service",
 	"description": "LSIF based language services",
-	"version": "0.1.0-pre.2",
+	"version": "0.1.0-pre.3",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
