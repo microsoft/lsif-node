@@ -41,7 +41,7 @@ suite('Rust dump', async () => {
 		assert.strictEqual(store.getWorkspaceRoot().toString(true), 'file:///c:/fixtures/fix-test-failure/case9');
 		const documents = store.getDocumentInfos();
 		assert.strictEqual(documents.length, 2);
-		assert.strictEqual(documents[0].uri.toString(), 'file:///c:/fixtures/fix-test-failure/case9/src/lib.rs');
-		assert.strictEqual(documents[1].uri.toString(), 'file:///c:/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust/library/core/src/macros/mod.rs');
+		assert.strictEqual(documents[0].uri, 'file:///c:/fixtures/fix-test-failure/case9/src/lib.rs');
+		assert.strictEqual(documents[1].uri, 'file:///c:/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust/library/core/src/macros/mod.rs');
 	});
 });
