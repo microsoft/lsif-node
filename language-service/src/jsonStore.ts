@@ -235,6 +235,8 @@ export class JsonStore extends Database {
 	}
 
 	private doProcessDocument(document: Document): void {
+		// Normalize the document uri to the format used in VS Code.
+		document.uri = URI.parse(document.uri).toString(true);
 		const contents = document.contents !== undefined ? document.contents : 'No content provided.';
 		this.vertices.documents.set(document.id, document);
 		const hash = crypto.createHash('md5').update(contents).digest('base64');
