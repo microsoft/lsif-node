@@ -1,7 +1,7 @@
 {
 	"name": "@vscode/lsif-language-service",
 	"description": "LSIF based language services",
-	"version": "0.1.0-pre.3",
+	"version": "0.1.0-pre.4",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -25,7 +25,7 @@
 	"dependencies": {
 		"vscode-uri": "^3.0.8",
 		"semver": "^7.6.2",
-		"@vscode/lsif-protocol": "0.6.0-next.8"
+		"@vscode/lsif-protocol": "0.6.0-next.9"
 	},
 	"devDependencies": {
 		"@types/semver": "^7.5.7",
