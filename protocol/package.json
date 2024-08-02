@@ -1,7 +1,7 @@
 {
 	"name": "@vscode/lsif-protocol",
 	"description": "Typescript implementation of the LSIF protocol",
-	"version": "0.6.0-next.8",
+	"version": "0.6.0-next.9",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -14,6 +14,7 @@
 	"engines": {
 		"node": ">=20.9.0"
 	},
+	"main": "./lib/main.js",
 	"exports": {
 		".": {
 			"types": "./lib/main.d.ts",
