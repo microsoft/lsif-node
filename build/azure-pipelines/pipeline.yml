@@ -70,6 +70,7 @@ extends:
         workingDirectory: $(Build.SourcesDirectory)/protocol
 
       - name: languageService
+        dependsOn: lsifProtocol
         generateNotice: true
         testPlatforms:
           - name: Linux
