@@ -65,7 +65,6 @@ extends:
         ghTagPrefix: release/protocol/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
-        preReleaseTagAddToLatest: true
         publishPackage: ${{ parameters.publishLsifProtocol }}
         workingDirectory: $(Build.SourcesDirectory)/protocol
 
@@ -94,6 +93,5 @@ extends:
         ghTagPrefix: release/language-service/
         tag: ${{ parameters.quality }}
         preReleaseTag: next
-        preReleaseTagAddToLatest: true
         publishPackage: ${{ parameters.publishLanguageService }}
         workingDirectory: $(Build.SourcesDirectory)/language-service
