@@ -11,6 +11,7 @@
 		{ "path": "./tsc-tests/tsconfig.watch.json" },
 		{ "path": "./npm/tsconfig.watch.json" },
 		{ "path": "./sqlite/tsconfig.watch.json" },
-		{ "path": "./lsif/tsconfig.watch.json" }
+		{ "path": "./lsif/tsconfig.watch.json" },
+		{ "path": "./language-service/tsconfig.json"}
 	]
 }

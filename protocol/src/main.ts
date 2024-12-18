@@ -3,8 +3,8 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as lsp from 'vscode-languageserver-protocol';
-export { lsp };
+import * as types from 'vscode-languageserver-types';
+export { types };
 
 export * from './protocol';
 

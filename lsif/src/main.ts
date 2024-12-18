@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import * as yargs from 'yargs';
+import yargs from 'yargs';
 
 import * as tsc from 'lsif-tsc/lib/args';
 import * as npm from 'lsif-npm/lib/args';

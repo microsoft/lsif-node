@@ -1,0 +1,46 @@
+{
+	"name": "@vscode/lsif-language-service",
+	"description": "LSIF based language services",
+	"version": "0.1.0-pre.4",
+	"author": "Microsoft Corporation",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Microsoft/lsif-node.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Microsoft/lsif-node/issues"
+	},
+	"engines": {
+		"node": ">=20.9.0"
+	},
+	"main": "./lib/api.js",
+	"typings": "./lib/api.d.ts",
+	"exports": {
+		".": {
+			"types": "./lib/api.d.ts",
+			"default": "./lib/api.js"
+		}
+	},
+	"dependencies": {
+		"vscode-uri": "^3.0.8",
+		"semver": "^7.6.2",
+		"@vscode/lsif-protocol": "0.6.0-next.9"
+	},
+	"devDependencies": {
+		"@types/semver": "^7.5.7",
+		"@types/mocha": "^10.0.7"
+	},
+	"scripts": {
+		"compile": "tsc -b ./tsconfig.json",
+		"watch": "tsc -b ./tsconfig.watch.json -w",
+		"clean": "rimraf lib",
+		"clean:all": "tsc -b ./tsconfig.json --clean",
+		"lint": "eslint ./src/*.ts",
+		"test": "mocha",
+		"prepublishOnly": "echo \"⛔ Can only publish from a secure pipeline ⛔\" && node ../build/npm/fail",
+		"prepack": "npm run all:publish",
+		"all:publish": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
+		"compile:publish": "tsc -p ./tsconfig.publish.json"
+	}
+}

@@ -14,18 +14,18 @@
 	},
 	"homepage": "https://microsoft.github.io/language-server-protocol/overviews/lsif/overview/",
 	"devDependencies": {
-		"@types/node": "18.11.9",
+		"@types/node": "20.9.0",
 		"@types/shelljs": "^0.8.15",
-		"@types/uuid": "^9.0.7",
+		"@types/uuid": "^10.0.0",
 		"@types/yargs": "^17.0.32",
-		"@typescript-eslint/eslint-plugin": "^6.13.2",
-		"@typescript-eslint/parser": "^6.13.2",
-		"eslint": "^8.55.0",
-		"mocha": "^10.2.0",
-		"rimraf": "^5.0.5",
+		"@typescript-eslint/eslint-plugin": "^7.13.1",
+		"@typescript-eslint/parser": "^7.13.1",
+		"eslint": "^8.57.0",
+		"mocha": "^10.4.0",
+		"rimraf": "^5.0.7",
 		"shelljs": "^0.8.5",
-		"typescript": "^5.3.3",
-		"uuid": "^9.0.1"
+		"typescript": "^5.5.2",
+		"uuid": "^10.0.0"
 	},
 	"scripts": {
 		"postinstall": "node ./build/bin/all.js install && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",

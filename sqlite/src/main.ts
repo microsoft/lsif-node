@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import * as fs from 'fs';
 
-import * as yargs from 'yargs';
+import yargs from 'yargs';
 
 import { Options, Mode, builder } from './args';
 import {GraphStore } from './graphStore';

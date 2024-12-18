@@ -1,14 +1,17 @@
 {
 	"compilerOptions": {
-		"module": "commonjs",
-		"target": "es2020",
+		"module": "node16",
+		"moduleResolution": "Node16",
+		"target": "es2022",
         "noImplicitAny": true,
 		"noImplicitReturns": true,
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
+		"declaration": true,
+		"declarationMap": true,
 		"strict": true,
 		"lib": [
-			"es2020"
+			"es2022"
 		]
 	}
 }

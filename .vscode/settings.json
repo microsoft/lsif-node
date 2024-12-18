@@ -15,7 +15,8 @@
 		"./npm",
 		"./sqlite",
 		"./tooling",
-		"./lsif"
+		"./lsif",
+		"./language-service"
 	],
 	"editor.codeActionsOnSave": {
 		"source.fixAll.eslint": "explicit"

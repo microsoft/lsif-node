@@ -1,7 +1,7 @@
 {
-	"name": "lsif-protocol",
+	"name": "@vscode/lsif-protocol",
 	"description": "Typescript implementation of the LSIF protocol",
-	"version": "0.6.0-next.7",
+	"version": "0.6.0-next.9",
 	"author": "Microsoft Corporation",
 	"license": "MIT",
 	"repository": {
@@ -11,18 +11,27 @@
 	"bugs": {
 		"url": "https://github.com/Microsoft/lsif-node/issues"
 	},
-	"main": "lib/main.js",
-	"typings": "lib/main.d.ts",
+	"engines": {
+		"node": ">=20.9.0"
+	},
+	"main": "./lib/main.js",
+	"exports": {
+		".": {
+			"types": "./lib/main.d.ts",
+			"default": "./lib/main.js"
+		}
+	},
 	"dependencies": {
-		"vscode-languageserver-protocol": "^3.17.5"
+		"vscode-languageserver-types": "^3.17.5"
 	},
 	"scripts": {
-		"compile": "node ../build/bin/tsc -b ./tsconfig.json",
-		"compile:publish": "node ../build/bin/tsc -p ./tsconfig.publish.json",
-		"watch": "node ../build/bin/tsc -b ./tsconfig.watch.json -w",
-		"clean": "node ../node_modules/rimraf/bin.js lib",
-		"lint": "node ../node_modules/eslint/bin/eslint.js ./src/*.ts",
-		"prepublishOnly": "git clean -xfd . && npm run clean && npm install && npm run compile:publish && npm run lint",
-		"postpublish": "node ../build/bin/post-publish.js"
+		"compile": "tsc -b ./tsconfig.json",
+		"watch": "tsc -b ./tsconfig.watch.json -w",
+		"clean": "rimraf lib",
+		"lint": "eslint ./src/*.ts",
+		"prepublishOnly": "echo \"⛔ Can only publish from a secure pipeline ⛔\" && node ../build/npm/fail",
+		"prepack": "npm run all:publish",
+		"all:publish": "git clean -xfd . && npm run clean && npm install && npm run compile:publish && npm run lint",
+		"compile:publish": "tsc -p ./tsconfig.publish.json"
 	}
 }
