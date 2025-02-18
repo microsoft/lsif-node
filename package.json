@@ -21,7 +21,7 @@
 		"@typescript-eslint/eslint-plugin": "^7.13.1",
 		"@typescript-eslint/parser": "^7.13.1",
 		"eslint": "^8.57.0",
-		"mocha": "^10.4.0",
+		"mocha": "^10.8.2",
 		"rimraf": "^5.0.7",
 		"shelljs": "^0.8.5",
 		"typescript": "^5.5.2",
