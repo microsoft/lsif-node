@@ -22,7 +22,7 @@
 		"@typescript-eslint/parser": "^7.13.1",
 		"eslint": "^8.57.0",
 		"mocha": "^10.8.2",
-		"rimraf": "^5.0.7",
+		"rimraf": "^6.1.2",
 		"shelljs": "^0.8.5",
 		"typescript": "^5.5.2",
 		"uuid": "^10.0.0"
