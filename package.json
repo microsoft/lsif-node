@@ -14,7 +14,7 @@
 	},
 	"homepage": "https://microsoft.github.io/language-server-protocol/overviews/lsif/overview/",
 	"devDependencies": {
-		"@types/node": "20.9.0",
+		"@types/node": "22.9.0",
 		"@types/shelljs": "^0.8.15",
 		"@types/uuid": "^10.0.0",
 		"@types/yargs": "^17.0.32",
