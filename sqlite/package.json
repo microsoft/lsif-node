@@ -27,7 +27,7 @@
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.6.10",
 		"@types/uuid": "^10.0.0",
-		"@types/node": "22.9.0"
+		"@types/node": "22.19.15"
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
