@@ -9,7 +9,7 @@ import Sqlite from 'better-sqlite3';
 
 import * as uuid from 'uuid';
 
-import * as lsp from 'vscode-languageserver-protocol';
+import * as lsp from 'vscode-languageserver-types';
 
 import {
 	Edge, Vertex, ElementTypes, VertexLabels, Document, Range, EdgeLabels, contains, Event, EventScope, EventKind, Id, DocumentEvent, FoldingRangeResult,
