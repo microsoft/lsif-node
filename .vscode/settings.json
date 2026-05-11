@@ -1,5 +1,6 @@
 {
-	"typescript.tsc.autoDetect": "off",
+	"js/ts.tsc.autoDetect": "off",
+	"js/ts.tsdk.path": "./node_modules/typescript/lib",
 	"npm.autoDetect": "on",
 	"spellright.language": [
 		"en"
@@ -30,6 +31,5 @@
 		"postpublish",
 		"uinteger"
 	],
-	"typescript.tsdk": "./node_modules/typescript/lib",
 	"task.allowAutomaticTasks": "on"
 }

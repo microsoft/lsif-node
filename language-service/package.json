@@ -28,8 +28,9 @@
 		"@vscode/lsif-protocol": "0.6.0-next.9"
 	},
 	"devDependencies": {
-		"@types/semver": "^7.5.7",
-		"@types/mocha": "^10.0.7"
+		"@types/mocha": "^10.0.7",
+		"@types/node": "22.19.15",
+		"@types/semver": "^7.5.7"
 	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",

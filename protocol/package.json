@@ -24,6 +24,9 @@
 	"dependencies": {
 		"vscode-languageserver-types": "^3.17.5"
 	},
+	"devDependencies": {
+		"@types/node": "22.19.15"
+	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
 		"watch": "tsc -b ./tsconfig.watch.json -w",

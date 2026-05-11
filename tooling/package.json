@@ -20,6 +20,9 @@
 		"lsif-protocol": "0.6.0-next.7",
 		"yargs": "^17.7.2"
 	},
+	"devDependencies": {
+		"@types/node": "22.19.15"
+	},
 	"scripts": {
 		"compile": "tsc -b ./tsconfig.json",
 		"compile:publish": "tsc -p./tsconfig.publish.json",
