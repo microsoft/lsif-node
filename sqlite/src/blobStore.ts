@@ -7,8 +7,6 @@ import * as fs from 'fs';
 
 import Sqlite from 'better-sqlite3';
 
-import * as uuid from 'uuid';
-
 import * as lsp from 'vscode-languageserver-types';
 
 import {
@@ -827,7 +825,7 @@ export class BlobStore extends Store implements DataProvider {
 		if (data.moniker !== undefined) {
 			return;
 		}
-		const monikerData: MonikerData = { scheme: '$synthetic', identifier: uuid.v4() };
+		const monikerData: MonikerData = { scheme: '$synthetic', identifier: crypto.randomUUID() };
 		data.moniker = monikerData.identifier;
 		this.monikerDatas.set(monikerData.identifier, monikerData);
 	}
