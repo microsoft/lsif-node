@@ -15,7 +15,6 @@ namespace pfs {
 }
 
 import * as path from 'path';
-import * as uuid from 'uuid';
 import * as crypto from 'crypto';
 import * as os from 'os';
 
@@ -96,7 +95,7 @@ function createIdGenerator(options: Options): () => Id {
 	switch (options.id) {
 		case 'uuid':
 			return () => {
-				return uuid.v4();
+				return crypto.randomUUID();
 			};
 		default:
 			// eslint-disable-next-line no-case-declarations

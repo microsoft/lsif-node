@@ -16,16 +16,14 @@
 	"devDependencies": {
 		"@types/node": "22.19.15",
 		"@types/shelljs": "^0.8.15",
-		"@types/uuid": "^10.0.0",
 		"@types/yargs": "^17.0.32",
 		"@typescript-eslint/eslint-plugin": "^7.13.1",
 		"@typescript-eslint/parser": "^7.13.1",
 		"eslint": "^8.57.0",
-		"mocha": "^10.8.2",
-		"rimraf": "^6.1.2",
-		"shelljs": "^0.8.5",
-		"typescript": "^5.5.2",
-		"uuid": "^10.0.0"
+		"mocha": "^11.7.5",
+		"rimraf": "^6.1.3",
+		"shelljs": "^0.10.0",
+		"typescript": "^6.0.3"
 	},
 	"scripts": {
 		"postinstall": "node ./build/bin/all.js install && npm run symlink && cd samples/typescript && npm install && cd ../javascript && npm install && cd ../..",

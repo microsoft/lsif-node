@@ -26,7 +26,7 @@ connection.onNotification('open', (params) => {
 });
 
 connection.onNotification('write', (params) => {
-	fileWriter.write(params.data, params.length);
+	void fileWriter.write(params.data, params.length);
 });
 
 connection.onRequest('flush', async () => {
@@ -58,11 +58,11 @@ export class FileWriter {
 		this.mode = 'queue';
 	}
 
-	async write(data: ArrayBuffer, length: number): Promise<void> {
+	async write(data: ArrayBufferLike, length: number): Promise<void> {
 		const buffer = Buffer.from(data);
 		this.queue.push({ data: buffer, length });
 		if (this.pendingWrite === undefined) {
-			this.deliver();
+			await this.deliver();
 		}
 	}
 
@@ -98,7 +98,7 @@ export class FileWriter {
 		await this.pendingWrite;
 		this.pendingWrite = undefined;
 		if (this.mode === 'queue') {
-			this.deliver();
+			void this.deliver();
 		}
 	}
 

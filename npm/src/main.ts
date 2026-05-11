@@ -5,9 +5,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import { randomUUID } from 'crypto';
 
 import yargs from 'yargs';
-import * as uuid from 'uuid';
 import { URI } from 'vscode-uri';
 
 import * as paths from './paths';
@@ -42,7 +42,7 @@ class AttachQueue {
 			this._idMode = 'number';
 		} else {
 			this._idGenerator =  () => {
-				return uuid.v4();
+				return randomUUID();
 			};
 			this._idMode = 'uuid';
 		}

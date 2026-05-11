@@ -8,7 +8,11 @@
 		"composite": true,
 		"rootDir": "./src",
 		"outDir": "./lib",
-		"tsBuildInfoFile":"./lib/compile.tsbuildInfo"
+		"tsBuildInfoFile":"./lib/compile.tsbuildInfo",
+		"types": [
+			"node",
+			"mocha"
+		]
 	},
 	"include": [
 		"src/**/*.ts"
