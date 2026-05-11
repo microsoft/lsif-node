@@ -26,7 +26,7 @@ connection.onNotification('open', (params) => {
 });
 
 connection.onNotification('write', (params) => {
-	fileWriter.write(params.data, params.length);
+	void fileWriter.write(params.data, params.length);
 });
 
 connection.onRequest('flush', async () => {
@@ -98,7 +98,7 @@ export class FileWriter {
 		await this.pendingWrite;
 		this.pendingWrite = undefined;
 		if (this.mode === 'queue') {
-			this.deliver();
+			void this.deliver();
 		}
 	}
 
