@@ -1159,7 +1159,7 @@ abstract class SymbolWalker {
 		}
 	}
 
-	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): Map<SymbolData, string> {
+	public walk(start: ts.Symbol | ts.Type, moduleSystem: ModuleSystemKind, path: string, mode: FlowMode = FlowMode.exported): LinkedMap<SymbolData, string> {
 		this._result.clear();
 		if (tss.Symbol.is(start)) {
 			this.walkSymbol(start, mode, false, path, 0);
@@ -1395,7 +1395,7 @@ class ExportSymbolWalker {
 		this.visitedSymbol = new Set();
 	}
 
-	public walk(symbol: ts.Symbol, path: string): Map<SymbolData, string> {
+	public walk(symbol: ts.Symbol, path: string): LinkedMap<SymbolData, string> {
 		this._result.clear();
 		this.walkSymbol(undefined, symbol, ChildKind.unknown, path, 0);
 		return this._result;
@@ -2177,7 +2177,7 @@ class SymbolDataWithRootsFactory extends SymbolDataFactory {
 				}
 			}
 			if (monikerIds.size > 0) {
-				const exportPath: string | string[] = monikerIds.size === 1
+				const exportPath: string | string[] | undefined= monikerIds.size === 1
 					? monikerIds.values().next().value
 					: Array.from(monikerIds).sort();
 				return {
@@ -3038,7 +3038,7 @@ class TSProject {
 		}
 	}
 
-	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): Map<SymbolData, string> {
+	private computeIndirectExports(start: ts.Symbol | ts.Type, exportName: string, moduleSystem: ModuleSystemKind, walkSymbolFromTopLevelType: boolean): LinkedMap<SymbolData, string> {
 		const walker = new IndirectExportWalker(this.context, this.symbols, undefined, walkSymbolFromTopLevelType, false);
 		return walker.walk(start, moduleSystem, exportName);
 	}
@@ -3049,7 +3049,7 @@ class TSProject {
 		this.emitAttachedMonikers(monikerPath, result);
 	}
 
-	private emitAttachedMonikers(monikerPath: string | undefined, exports: Map<SymbolData, string>): void {
+	private emitAttachedMonikers(monikerPath: string | undefined, exports: LinkedMap<SymbolData, string>): void {
 		for (const entry of exports) {
 			const symbolData = entry[0];
 			const identifier = tss.createMonikerIdentifier(monikerPath, entry[1]);

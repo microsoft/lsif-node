@@ -7,13 +7,13 @@ export type Notifications = {
 	method: 'open';
 	params: {
 		fileName: string;
-	}
+	};
 } | {
 	method: 'write';
 	params: {
-		data: ArrayBuffer;
+		data: ArrayBufferLike;
 		length: number;
-	}
+	};
 };
 
 export type Requests = {

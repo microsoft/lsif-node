@@ -58,11 +58,11 @@ export class FileWriter {
 		this.mode = 'queue';
 	}
 
-	async write(data: ArrayBuffer, length: number): Promise<void> {
+	async write(data: ArrayBufferLike, length: number): Promise<void> {
 		const buffer = Buffer.from(data);
 		this.queue.push({ data: buffer, length });
 		if (this.pendingWrite === undefined) {
-			this.deliver();
+			await this.deliver();
 		}
 	}
 

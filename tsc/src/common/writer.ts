@@ -26,7 +26,7 @@ export class StdoutWriter implements Writer {
 	}
 
 	write(...data: string[]): void {
-		for (let chunk of data) {
+		for (const chunk of data) {
 			__stdout.write(chunk);
 		}
 	}
@@ -36,7 +36,7 @@ export class StdoutWriter implements Writer {
 	}
 
 	writeln(...data: string[]): void {
-		for (let chunk of data) {
+		for (const chunk of data) {
 			__stdout.write(chunk);
 		}
 		__stdout.write(__eol);
@@ -58,7 +58,7 @@ export class FileWriter implements Writer {
 	private worker: Worker;
 	private connection: Connection<Requests, Notifications>;
 
-	private buffer: Buffer | undefined;
+	private buffer: Buffer<ArrayBuffer> | undefined;
 	private bytesAdded: number;
 
 	public constructor(fileName: string) {
@@ -75,7 +75,7 @@ export class FileWriter implements Writer {
 		if (data.length === 0) {
 			return;
 		}
-		for (let chunk of data) {
+		for (const chunk of data) {
 			this.writeBuffer(Buffer.from(chunk, 'utf8'));
 		}
 	}
@@ -89,7 +89,7 @@ export class FileWriter implements Writer {
 			this.writeEOL();
 			return;
 		}
-		for (let chunk of data) {
+		for (const chunk of data) {
 			this.writeBuffer(Buffer.from(chunk, 'utf8'));
 		}
 		this.writeEOL();
@@ -100,15 +100,12 @@ export class FileWriter implements Writer {
 	}
 
 	async close(): Promise<number> {
-		try {
-			this.sendBuffer(true);
-			await this.connection.sendRequest('close');
-		} finally {
-			return this.worker.terminate();
-		}
+		this.sendBuffer(true);
+		await this.connection.sendRequest('close');
+		return this.worker.terminate();
 	}
 
-	private writeBuffer(chunk: Buffer): void {
+	private writeBuffer(chunk: Buffer<ArrayBuffer>): void {
 		if (this.buffer === undefined) {
 			throw new Error('Should never happen');
 		}

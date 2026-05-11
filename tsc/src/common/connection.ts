@@ -3,7 +3,7 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 
-import { MessagePort, Worker, TransferListItem } from 'worker_threads';
+import { MessagePort, Worker, Transferable } from 'worker_threads';
 
 
 export type MessageType = {
@@ -57,8 +57,8 @@ type NotificationHandler = {
 interface Response {
 	id: number;
 	result?: any;
-	error?: any
-};
+	error?: any;
+}
 
 namespace Response {
 	export function is(value: any): value is Response {
@@ -70,7 +70,7 @@ namespace Response {
 type ResponsePromise = {
 	method: string;
 	resolve: (response: any) => void;
-	reject: (error: any) => void
+	reject: (error: any) => void;
 };
 
 type UnionToIntersection<U> =
@@ -83,7 +83,7 @@ type MethodKeys<Messages extends MessageType> = {
 type _SendRequestSignatures<Requests extends RequestType> = UnionToIntersection<{
  	[R in Requests as R['method']]: R['params'] extends null | undefined
 	 	? (method: R['method']) => Promise<R['result'] extends null | undefined ? void : R['result']>
-		: (method: R['method'], params: R['params'], ...transferList: ReadonlyArray<TransferListItem>) => Promise<R['result'] extends null | undefined ? void : R['result']>;
+		: (method: R['method'], params: R['params'], ...transferList: ReadonlyArray<Transferable>) => Promise<R['result'] extends null | undefined ? void : R['result']>;
 }[keyof MethodKeys<Requests>]>;
 
 type SendRequestSignatures<Requests extends RequestType | undefined> = [Requests] extends [RequestType] ? _SendRequestSignatures<Requests> : undefined;
@@ -99,7 +99,7 @@ type HandleRequestSignatures<Requests extends RequestType | undefined> = [Reques
 type _SendNotificationSignatures<Notifications extends NotificationType> = UnionToIntersection<{
 	[N in Notifications as N['method']]: N['params'] extends null | undefined
 		? (method: N['method']) => void
-		: (method: N['method'], params: N['params'], ...transferList: ReadonlyArray<TransferListItem>) => void;
+		: (method: N['method'], params: N['params'], ...transferList: ReadonlyArray<Transferable>) => void;
 }[keyof MethodKeys<Notifications>]>;
 
 type SendNotificationSignatures<Notifications extends NotificationType | undefined> = [Notifications] extends [NotificationType] ? _SendNotificationSignatures<Notifications> : undefined;
@@ -130,7 +130,7 @@ export class Connection<Requests extends RequestType | undefined, Notifications 
 
 	public readonly sendRequest: SendRequestSignatures<Requests> = this._sendRequest as SendRequestSignatures<Requests>;
 
-	private _sendRequest(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): Promise<any> {
+	private _sendRequest(method?: string, params?: any, transferList?: ReadonlyArray<Transferable>): Promise<any> {
 		if (method === undefined) {
 			return Promise.resolve();
 		}
@@ -156,7 +156,7 @@ export class Connection<Requests extends RequestType | undefined, Notifications 
 
 	public readonly sendNotification: SendNotificationSignatures<Notifications> = this._sendNotification as SendNotificationSignatures<Notifications>;
 
-	private _sendNotification(method?: string, params?: any, transferList?: ReadonlyArray<TransferListItem>): void {
+	private _sendNotification(method?: string, params?: any, transferList?: ReadonlyArray<Transferable>): void {
 		if (method === undefined) {
 			return;
 		}
