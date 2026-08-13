@@ -24,66 +24,12 @@ function mkLink(target, name) {
 }
 
 try {
-	// Setup symlink for tsc
-	{
-		const tsc = path.join(root, 'tsc', 'node_modules');
-		fs.mkdirSync(tsc, { recursive: true });
-		process.chdir(tsc);
-
+	// The legacy tools still import the protocol by its former unscoped name.
+	for (const folder of ['tsc', 'tooling', 'tsc-tests', 'npm', 'sqlite']) {
+		const nodeModules = path.join(root, folder, 'node_modules');
+		fs.mkdirSync(nodeModules, { recursive: true });
+		process.chdir(nodeModules);
 		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-	}
-	// Setup symlink for tooling
-	{
-		const tooling = path.join(root, 'tooling', 'node_modules');
-		fs.mkdirSync(tooling, { recursive: true });
-		process.chdir(tooling);
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-	}
-	// Setup symlink for tsc-tests
-	{
-		const tscTests = path.join(root, 'tsc-tests', 'node_modules');
-		fs.mkdirSync(tscTests, { recursive: true });
-		process.chdir(tscTests);
-
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-		mkLink(path.join('..', '..', 'tsc'), 'lsif-tsc');
-		mkLink(path.join('..', '..', 'tooling'), 'lsif-tooling');
-	}
-
-	// Setup symlink for npm
-	{
-		const npm = path.join(root, 'npm', 'node_modules');
-		fs.mkdirSync(npm, { recursive: true });
-		process.chdir(npm);
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-		mkLink(path.join('..', '..', 'tsc'), 'lsif-tsc');
-	}
-
-	// Setup links for sqlite
-	{
-		const sqlite = path.join(root, 'sqlite', 'node_modules');
-		fs.mkdirSync(sqlite, { recursive: true });
-		process.chdir(sqlite);
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-	}
-
-	// Setup links for language-service
-	{
-		const sqlite = path.join(root, 'language-service', 'node_modules');
-		fs.mkdirSync(sqlite, { recursive: true });
-		process.chdir(sqlite);
-		mkLink(path.join('..', '..', 'protocol'), 'lsif-protocol');
-	}
-
-	// Setup symlinks for lsif commands
-	{
-		const lsif = path.join(root, 'lsif', 'node_modules')
-		fs.mkdirSync(lsif, { recursive: true });
-		process.chdir(lsif);
-		mkLink(path.join('..', '..', 'tsc'), 'lsif-tsc');
-		mkLink(path.join('..', '..', 'npm'), 'lsif-npm');
-		mkLink(path.join('..', '..', 'sqlite'), 'lsif-sqlite');
-		mkLink(path.join('..', '..', 'tooling'), 'lsif-tooling');
 	}
 } finally {
 	process.chdir(current);

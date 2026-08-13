@@ -1,6 +1,5 @@
 {
 	"init": [
-		{ "command": "npm", "args": ["install"] },
-		{ "command": "npm", "args": ["run", "symlink"] }
+		{ "command": "npm", "args": ["install"] }
 	]
 }

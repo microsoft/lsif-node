@@ -150,7 +150,7 @@ suite('Global Module Tests', () => {
 				[
 					'declare const ApplicationInsights: number;',
 					'declare module \'applicationinsights\' {',
-    				'    export = ApplicationInsights;',
+					'    export = ApplicationInsights;',
 					'}'
 				].join(os.EOL)
 			]

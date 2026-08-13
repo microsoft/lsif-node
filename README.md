@@ -47,6 +47,15 @@ There is also an [extension for VS Code](https://github.com/Microsoft/vscode-lsi
 
 ![The extension](./images/extension.png)
 
+## Development
+
+The packages in this repository are npm workspaces. Run `npm install` from the repository root to install the shared dependency graph and link the local packages.
+
+Each workspace also keeps its own `package-lock.json` for isolated package and release validation. Use `npm ci --workspaces=false` from a package directory to install from that package's lockfile rather than the root workspace lockfile.
+
+- `npm run update-lockfiles` updates both the root workspace lockfile and every isolated package lockfile.
+- `npm run check:isolated-lockfiles` verifies that every package manifest matches its isolated lockfile without changing installed dependencies.
+
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

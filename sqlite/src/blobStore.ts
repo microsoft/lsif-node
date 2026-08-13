@@ -98,7 +98,9 @@ namespace Diagnostics {
 		if (result !== 0) {
 			return result;
 		}
-		result = Strings.compare(d1.message, d2.message);
+		const m1 = typeof d1.message === 'string' ? d1.message : d1.message.value;
+		const m2 = typeof d2.message === 'string' ? d2.message : d2.message.value;
+		result = Strings.compare(m1, m2);
 		if (result !== 0) {
 			return result;
 		}
