@@ -9,7 +9,7 @@ steps:
   displayName: 'Install dependencies'
 
 - script: |
-    npm run symlink
+    npm run check:isolated-lockfiles
     npm run lint
     npm run compile
   displayName: 'Compile client'

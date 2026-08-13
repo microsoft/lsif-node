@@ -30,7 +30,7 @@
 		"clean": "rimraf lib",
 		"clean:all": "tsc -b ./tsconfig.json --clean",
 		"lint": "eslint ./src/*.ts",
-		"prepublishOnly": "git clean -xfd . && npm install && npm run clean && npm run compile:publish && npm run lint",
+		"prepublishOnly": "git clean -xfd . && npm install --workspaces=false && npm run clean && npm run compile:publish && npm run lint",
 		"postpublish": "node ../build/bin/post-publish.js",
 		"postinstall": ""
 	}

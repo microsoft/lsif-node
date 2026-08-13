@@ -11,7 +11,7 @@ import {
 	Location, Project, Document, RangeBasedDocumentSymbol, DocumentSymbolResult, FoldingRangeResult, Edge, Vertex, DiagnosticResult, E, EdgeLabels,
 	ItemEdge, DocumentLinkResult, DefinitionResult, DeclarationResult, TypeDefinitionResult, HoverResult, ReferenceResult, ImplementationResult,
 	Moniker, PackageInformation, ItemEdgeProperties, E1N, E11, EventScope, EventKind, ProjectEvent, DocumentEvent, Id, Source, MonikerKind, UniquenessLevel,
-	 Capabilities, RepositoryInfo
+	Capabilities, RepositoryInfo
 } from 'lsif-protocol';
 
 namespace Is {

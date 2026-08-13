@@ -23,10 +23,6 @@ steps:
   displayName: 'Install dependencies'
 
 - script: |
-    npm run symlink
-  displayName: 'Symlink node modules'
-
-- script: |
     npm run compile
   displayName: 'Compile client'
 

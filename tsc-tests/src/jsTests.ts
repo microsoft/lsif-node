@@ -24,7 +24,7 @@ suite('JavaScript Tests', () => {
 				[
 					'module.exports = Route;',
 					'function Route(pppp) {',
-  					'	this.path = pppp;',
+					'	this.path = pppp;',
 					'}'
 				].join(os.EOL)
 			],
@@ -50,7 +50,7 @@ suite('JavaScript Tests', () => {
 				'/@test/a.js',
 				[
 					'function _Route(pppp) {',
-  					'	this.path = pppp;',
+					'	this.path = pppp;',
 					'}',
 					'module.exports = {',
 					'    Route = _Route;',
@@ -79,9 +79,9 @@ suite('JavaScript Tests', () => {
 				'/@test/a.js',
 				[
 					'/**',
- 					' * The options object parsed by Optionator.',
- 					' * @typedef {Object} ParsedCLIOptions',
- 					' * @property {boolean} cache Only check changed files',
+					' * The options object parsed by Optionator.',
+					' * @typedef {Object} ParsedCLIOptions',
+					' * @property {boolean} cache Only check changed files',
 					' */'
 				].join(os.EOL)
 			]

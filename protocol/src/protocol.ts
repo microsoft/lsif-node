@@ -880,7 +880,7 @@ export interface MetaData extends V {
 	 * Additional information a tool can store to identify some
 	 * state with the created dump
 	 */
-	 toolState?: ToolState;
+	toolState?: ToolState;
 }
 
 export namespace MetaData {
