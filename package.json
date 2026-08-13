@@ -9,7 +9,9 @@
 		"tooling",
 		"tsc-tests",
 		"lsif",
-		"language-service"
+		"language-service",
+		"samples/typescript",
+		"samples/javascript"
 	],
 	"version": "0.6.0",
 	"description": "",
@@ -39,7 +41,7 @@
 		"typescript": "^6.0.3"
 	},
 	"scripts": {
-		"postinstall": "npm run symlink && npm --prefix samples/typescript install --workspaces=false && npm --prefix samples/javascript install --workspaces=false",
+		"postinstall": "npm run symlink",
 		"symlink": "node ./build/bin/symlink.js",
 		"update-lockfiles": "npm install --package-lock-only --ignore-scripts && node ./build/bin/all.js install --package-lock-only --ignore-scripts --workspaces=false",
 		"check:isolated-lockfiles": "node ./build/bin/all.js ci --ignore-scripts --workspaces=false --dry-run",
