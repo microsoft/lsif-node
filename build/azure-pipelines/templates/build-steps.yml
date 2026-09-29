@@ -9,7 +9,7 @@ parameters:
   type: string
 
 steps:
-  - script: npm install --workspaces=false --ignore-scripts
+  - script: npm ci --workspaces=false --ignore-scripts
     workingDirectory: $(Build.SourcesDirectory)
     displayName: Install dependencies
   - bash: |
